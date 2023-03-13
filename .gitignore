@@ -1,0 +1,29 @@
+
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+**/__pycache__
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+*.pyc
+
+
+
+
+.idea/
+.vscode/
+.DS_Store
+*.gif
+*.pdf
+__pycache__
+logs_zyq/
+exp/
+feature_map/
+fly_through/
+some_tools/data/
+/wandb
+mega_nerf/torch_ngp/*
+log_357
