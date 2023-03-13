@@ -14,8 +14,11 @@ from gp_nerf.torch_ngp.activation import trunc_exp
 from gp_nerf.models.Plane_module import get_Plane_encoder
 
 
-timer = 0
-
+def fc_block(in_f, out_f):
+    return torch.nn.Sequential(
+        torch.nn.Linear(in_f, out_f),
+        torch.nn.ReLU(out_f)
+    )
 
 class NeRF(nn.Module):
     def __init__(self, pos_xyz_dim: int,  # 12   positional embedding 
@@ -38,6 +41,11 @@ class NeRF(nn.Module):
         self.num_layers_color = hparams.num_layers_color
         self.geo_feat_dim = hparams.geo_feat_dim
         
+        #semantic
+        self.enable_semantic = hparams.enable_semantic
+        if self.enable_semantic:
+            self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim, self.layer_dim // 2), nn.Linear(self.layer_dim // 2, hparams.num_semantic_classes))
+
         #hash
         base_resolution = hparams.base_resolution
         desired_resolution = hparams.desired_resolution
@@ -47,7 +55,7 @@ class NeRF(nn.Module):
         self.fg_bound = 1
         self.bg_bound = 1+hparams.contract_bg_len
         self.xyz_dim = xyz_dim
-
+        
         #plane
         self.use_scaling = hparams.use_scaling
         if self.use_scaling:
@@ -148,6 +156,10 @@ class NeRF(nn.Module):
         sigma = trunc_exp(h[..., 0])
         geo_feat = h[..., 1:]
 
+        # semantic 
+        if self.enable_semantic:
+            sem_logits = self.semantic_linear(h)
+
         # color
         d = x[:, self.xyz_dim:-1]
         d = self.encoder_dir(d)
@@ -159,7 +171,7 @@ class NeRF(nn.Module):
                 h = F.relu(h, inplace=True)
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
-        return torch.cat([color, sigma.unsqueeze(1)], -1)
+        return torch.cat([color, sigma.unsqueeze(1), sem_logits], -1)
 
     def forward_bg(self, point_type, x: torch.Tensor, sigma_only: bool = False, sigma_noise: Optional[torch.Tensor] = None,train_iterations=-1) -> torch.Tensor:
         position = x[:, :self.xyz_dim]
@@ -171,6 +183,10 @@ class NeRF(nn.Module):
                 h = F.relu(h, inplace=True)
         sigma = trunc_exp(h[..., 0])
         geo_feat = h[..., 1:]
+
+        # semantic 
+        if self.enable_semantic:
+            sem_logits = self.semantic_linear(h)
 
         # color
         d = x[:, self.xyz_dim:-1]
@@ -184,7 +200,7 @@ class NeRF(nn.Module):
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
 
-        return torch.cat([color, sigma.unsqueeze(1)], -1)
+        return torch.cat([color, sigma.unsqueeze(1), sem_logits], -1)
 
 
 class Embedding(nn.Module):

@@ -6,6 +6,13 @@ def get_opts_base():
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
     parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf， else mega-nerf')
 
+    # semantic
+    parser.add_argument('--enable_semantic', default=True, type=eval, choices=[True, False], help='')
+    parser.add_argument('--num_semantic_classes', type=int, default=8, help='')
+    parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
+    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp'], help='')
+
+
     # network setting
     parser.add_argument('--num_layers', type=int, default=2, help='change our sigma layer')
     parser.add_argument('--num_layers_color', type=int, default=3, help='change our color layer')

@@ -26,4 +26,4 @@ fly_through/
 some_tools/data/
 /wandb
 mega_nerf/torch_ngp/*
-log_357
+logs_357

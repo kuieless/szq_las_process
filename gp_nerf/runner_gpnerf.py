@@ -11,9 +11,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Tuple, List, Optional, Dict, Union
 
+
 import cv2
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F
 from PIL import Image
@@ -25,9 +27,9 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms as T
 from tqdm import tqdm
 
-from mega_nerf.datasets.filesystem_dataset import FilesystemDataset
-from mega_nerf.datasets.memory_dataset import MemoryDataset
-from mega_nerf.image_metadata import ImageMetadata
+from gp_nerf.datasets.filesystem_dataset import FilesystemDataset
+from gp_nerf.datasets.memory_dataset import MemoryDataset
+from gp_nerf.image_metadata import ImageMetadata
 from mega_nerf.metrics import psnr, ssim, lpips
 from mega_nerf.misc_utils import main_print, main_tqdm
 from mega_nerf.ray_utils import get_rays, get_ray_directions
@@ -35,6 +37,9 @@ from gp_nerf.models.model_utils import get_nerf, get_bg_nerf
 
 import wandb
 
+#semantic
+from gp_nerf.unetformer.uavid2rgb import uavid2rgb
+from gp_nerf.unetformer.metric import Evaluator
 
 def get_n_params(model):
     pp=0
@@ -50,6 +55,12 @@ def get_n_params(model):
 class Runner:
     def __init__(self, hparams: Namespace, set_experiment_path: bool = True):
         faulthandler.register(signal.SIGUSR1)
+
+        if hparams.enable_semantic:
+            CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=-1)
+            self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
+            self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
+
         if hparams.wandb_id =='None':
             self.wandb = None
             print('no using wandb')
@@ -295,11 +306,15 @@ class Runner:
                     else:
                         image_indices = None
 
-        
+                    #semantic 
+                    if self.hparams.enable_semantic:
+                        labels = item['labels'].to(self.device, non_blocking=True)
+                    else:
+                        labels = None
                     metrics, bg_nerf_rays_present = self._training_step(
                         item['rgbs'].to(self.device, non_blocking=True),
                         item['rays'].to(self.device, non_blocking=True),
-                        image_indices, train_iterations)
+                        image_indices, labels, train_iterations)
 
                     with torch.no_grad():
                         for key, val in metrics.items():
@@ -411,10 +426,11 @@ class Runner:
         if 'RANK' in os.environ:
             dist.barrier()
 
-    def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], train_iterations = -1) \
+    def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels, train_iterations = -1) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
         from gp_nerf.rendering_gpnerf import render_rays
-
+        
+        
         results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
                                                     bg_nerf=self.bg_nerf,
                                                     rays=rays,
@@ -440,22 +456,26 @@ class Runner:
 
         photo_loss = F.mse_loss(results[f'rgb_{typ}'], rgbs, reduction='mean')
         metrics['photo_loss'] = photo_loss
+        
+        if self.hparams.enable_semantic:
+            sem_logits = results[f'sem_map_{typ}']
+            # sem_label = self.logits_2_label(sem_logits)
+            semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
+            # semantic_loss = self.crossentropy_loss(sem_logits.type(torch.float).unsqueeze(-1), labels.type(torch.float).unsqueeze(-1))
+            metrics['semantic_loss'] = semantic_loss
+            metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss
 
+        else:
+            metrics['loss'] = photo_loss
 
-        metrics['loss'] = photo_loss
-
-        if self.hparams.use_cascade and typ != 'coarse':
-            coarse_loss = F.mse_loss(results['rgb_coarse'], rgbs, reduction='mean')
-            metrics['coarse_loss'] = coarse_loss
-            metrics['loss'] += coarse_loss
-
-            metrics['loss'] /= 2
         return metrics, bg_nerf_rays_present
 
     def _run_validation(self, train_index=-1) -> Dict[str, float]:
         with torch.inference_mode():
+            #semantic 
+            self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+            
             self.nerf.eval()
-
             val_metrics = defaultdict(float)
             base_tmp_path = None
             try:
@@ -484,10 +504,37 @@ class Runner:
 
                         results, _ = self.render_image(metadata_item, train_index)
                         typ = 'fine' if 'rgb_fine' in results else 'coarse'
+
+                        # semantic
+                        if self.hparams.enable_semantic:
+                            
+                            sem_logits = results[f'sem_map_{typ}']
+                            gt_label = metadata_item.load_label().float() / 255.
+                            gt_class = metadata_item.load_label_class()
+                            # for i in range(mask.shape[0]):
+                            #     self.metrics_val.add_batch(mask[i].cpu().numpy(), pre_mask[i].cpu().numpy())
+
+
+
+                            sem_label = self.logits_2_label(sem_logits)
+                            viz_result_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                             
+                            img = Runner._create_result_label(viz_rgbs, gt_label, viz_result_sem)
+                            if self.writer is not None:
+                                # gt & pred
+                                self.writer.add_image('val/{}_label'.format(i), T.ToTensor()(img), train_index)
+                                img.save(str(experiment_path_current / 'val_rgbs' / '{}_label.jpg'.format(i)))
+                                #pred
+                                self.writer.add_image('val/{}_label_pred'.format(i), T.ToTensor()(viz_result_sem), train_index)
+                                Image.fromarray((viz_result_sem).astype(np.uint8)).save(
+                                    str(experiment_path_current / 'val_rgbs' / '{}_label_pred.jpg'.format(i)))
+                        
+
+
+
                         viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
                         #add by zyq:
                         viz_result_rgbs = viz_result_rgbs.clamp(0,1)
-                        
                         eval_rgbs = viz_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
                         eval_result_rgbs = viz_result_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
 
@@ -667,6 +714,8 @@ class Runner:
                 if self.hparams.appearance_dim > 0 else None
             results = {}
 
+
+
             if 'RANK' in os.environ:
                 nerf = self.nerf.module
             else:
@@ -704,6 +753,10 @@ class Runner:
         depth_vis = Runner.visualize_scalars(torch.log(result_depths + 1e-8).view(rgbs.shape[0], rgbs.shape[1]).cpu())
         images = (rgbs * 255, result_rgbs * 255, depth_vis)
         return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
+    
+    def _create_result_label(rgbs: torch.Tensor, label_gt: torch.Tensor, label_pred: torch.Tensor) -> Image:
+        images = (rgbs * 255, label_gt * 255, label_pred)
+        return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
 
     @staticmethod
     def visualize_scalars(scalar_tensor: torch.Tensor) -> np.ndarray:
@@ -726,8 +779,13 @@ class Runner:
         train_path_candidates = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
         train_paths = [train_path_candidates[i] for i in
                        range(0, len(train_path_candidates), self.hparams.train_every)]
+        
 
         val_paths = sorted(list((dataset_path / 'val' / 'metadata').iterdir()))
+        # zyq: control the number for debug
+        # train_paths=train_paths[:100]
+        # val_paths = val_paths[:2]
+
         train_paths += val_paths
         train_paths.sort(key=lambda x: x.name)
         val_paths_set = set(val_paths)
@@ -771,9 +829,16 @@ class Runner:
             mask_path = dataset_mask
         else:
             mask_path = None
+        
+        label_path = None
+        for extension in ['.jpg', '.JPG', '.png', '.PNG']:
+            candidate = metadata_path.parent.parent / 'labels' / '{}{}'.format(metadata_path.stem, extension)
+            if candidate.exists():
+                label_path = candidate
+                break
 
         return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
-                             intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val)
+                             intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path)
 
     def _get_experiment_path(self) -> Path:
         exp_dir = Path(self.hparams.exp_name)
@@ -782,3 +847,6 @@ class Runner:
         version = 0 if len(existing_versions) == 0 else max(existing_versions) + 1
         experiment_path = exp_dir / str(version)
         return experiment_path
+
+
+    

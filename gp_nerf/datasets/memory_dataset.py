@@ -1,0 +1,91 @@
+from typing import List, Dict
+
+import torch
+from torch.utils.data import Dataset
+
+from gp_nerf.datasets.dataset_utils import get_rgb_index_mask
+from gp_nerf.image_metadata import ImageMetadata
+from mega_nerf.misc_utils import main_tqdm, main_print
+from mega_nerf.ray_utils import get_rays, get_ray_directions
+
+import numpy as np
+
+class MemoryDataset(Dataset):
+
+    def __init__(self, metadata_items: List[ImageMetadata], near: float, far: float, ray_altitude_range: List[float],
+                 center_pixels: bool, device: torch.device):
+        super(MemoryDataset, self).__init__()
+
+        rgbs = []
+        rays = []
+        indices = []
+        labels = []
+
+        main_print('Loading data')
+
+        for metadata_item in main_tqdm(metadata_items):
+            image_data = get_rgb_index_mask(metadata_item)
+
+            if image_data is None:
+                continue
+            
+            #zyq : add labels
+            image_rgbs, image_indices, image_keep_mask, label = image_data
+            label_class = torch.zeros((label.shape[0]), dtype=torch.int)
+            # label_class[np.all(label.numpy() == [128, 0, 0], axis=1), ] = 0  
+            # label_class[np.all(label.numpy() == [128, 64, 128], axis=1), ] = 1
+            # label_class[np.all(label.numpy() == [0, 128, 0], axis=1), ] = 2  
+            # label_class[np.all(label.numpy() == [128, 128, 0], axis=1), ] = 3  
+            # label_class[np.all(label.numpy() == [64, 0, 128], axis=1), ] = 4  
+            # label_class[np.all(label.numpy() == [192, 0, 192], axis=1), ] = 5  
+            # label_class[np.all(label.numpy() == [64, 0, 64], axis=1), ] = 6  
+            # label_class[np.all(label.numpy() == [0, 0, 0], axis=1), ] = 7 
+
+            label_class[(label[:,0]==128+0) * (label[:,1]==0 + 0) * (label[:,2]==0 + 0)] = 0
+            label_class[(label[:,0]==128+0) * (label[:,1]==64 + 0) * (label[:,2]==128 + 0)] = 1
+            label_class[(label[:,0]==0  +0) * (label[:,1]==128 + 0) * (label[:,2]==0 + 0)] = 2
+            label_class[(label[:,0]==128+0) * (label[:,1]==128 + 0) * (label[:,2]==0 + 0)] = 3
+            label_class[(label[:,0]==64+0) * (label[:,1]==0 + 0) * (label[:,2]==128 + 0)] = 4
+            label_class[(label[:,0]==192+0) * (label[:,1]==0 + 0) * (label[:,2]==192 + 0)] = 5
+            label_class[(label[:,0]==64+0) * (label[:,1]==0 + 0) * (label[:,2]==64 + 0)] = 6
+            label_class[(label[:,0]==0+0) * (label[:,1]==0 + 0) * (label[:,2]==0 + 0)] = 7
+
+           
+            
+
+
+            # print("image index: {}, fx: {}, fy: {}".format(metadata_item.image_index, metadata_item.intrinsics[0], metadata_item.intrinsics[1]))
+            directions = get_ray_directions(metadata_item.W,
+                                            metadata_item.H,
+                                            metadata_item.intrinsics[0],
+                                            metadata_item.intrinsics[1],
+                                            metadata_item.intrinsics[2],
+                                            metadata_item.intrinsics[3],
+                                            center_pixels,
+                                            device)
+            image_rays = get_rays(directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1,
+                                                                                                                8).cpu()
+            if image_keep_mask is not None:
+                image_rays = image_rays[image_keep_mask == True]
+
+            rgbs.append(image_rgbs.float() / 255.)
+            rays.append(image_rays)
+            indices.append(image_indices)
+            labels.append(label_class)
+        main_print('Finished loading data')
+
+        self._rgbs = torch.cat(rgbs)
+        self._rays = torch.cat(rays)
+        self._img_indices = torch.cat(indices)
+        self._labels = torch.cat(labels)
+
+    def __len__(self) -> int:
+        return self._rgbs.shape[0]
+
+    def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        return {
+            'rgbs': self._rgbs[idx],
+            'rays': self._rays[idx],
+            'img_indices': self._img_indices[idx],
+            'labels': self._labels[idx]
+        }

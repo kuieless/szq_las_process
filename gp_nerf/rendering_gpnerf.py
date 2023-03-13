@@ -9,8 +9,8 @@ from torch import nn
 from mega_nerf.spherical_harmonics import eval_sh
 from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere
 
-TO_COMPOSITE = {'rgb', 'depth'}
-INTERMEDIATE_KEYS = {'zvals_coarse', 'raw_rgb_coarse', 'raw_sigma_coarse', 'depth_real_coarse'}
+TO_COMPOSITE = {'rgb', 'depth', 'sem_map'}
+INTERMEDIATE_KEYS = {'zvals_coarse', 'raw_rgb_coarse', 'raw_sigma_coarse', 'depth_real_coarse', 'raw_sem_logits_coarse'}
 
 def render_rays(nerf: nn.Module,
                 bg_nerf: Optional[nn.Module],
@@ -292,18 +292,28 @@ def _inference(point_type,
 
     rgbs = out[..., :3]  # (N_rays, N_samples_, 3)
     sigmas = out[..., 3]  # (N_rays, N_samples_)
+    sem_logits = out[..., 4:4 + hparams.num_semantic_classes]
 
     if 'zvals_coarse' in results:
         # combine coarse and fine samples
         z_vals, ordering = torch.sort(torch.cat([z_vals, results['zvals_coarse']], -1), -1, descending=False)
         rgbs = torch.cat((
-            torch.gather(torch.cat((rgbs[..., 0], results['raw_rgb_coarse'][..., 0]), 1), 1, ordering).unsqueeze(
-                -1),
-            torch.gather(torch.cat((rgbs[..., 1], results['raw_rgb_coarse'][..., 1]), 1), 1, ordering).unsqueeze(
-                -1),
+            torch.gather(torch.cat((rgbs[..., 0], results['raw_rgb_coarse'][..., 0]), 1), 1, ordering).unsqueeze(-1),
+            torch.gather(torch.cat((rgbs[..., 1], results['raw_rgb_coarse'][..., 1]), 1), 1, ordering).unsqueeze(-1),
             torch.gather(torch.cat((rgbs[..., 2], results['raw_rgb_coarse'][..., 2]), 1), 1, ordering).unsqueeze(-1)
         ), -1)
         sigmas = torch.gather(torch.cat((sigmas, results['raw_sigma_coarse']), 1), 1, ordering)
+        sem_logits = torch.cat((
+            torch.gather(torch.cat((sem_logits[..., 0], results['raw_sem_logits_coarse'][..., 0]), 1), 1, ordering).unsqueeze(-1),
+            torch.gather(torch.cat((sem_logits[..., 1], results['raw_sem_logits_coarse'][..., 1]), 1), 1, ordering).unsqueeze(-1),
+            torch.gather(torch.cat((sem_logits[..., 2], results['raw_sem_logits_coarse'][..., 2]), 1), 1, ordering).unsqueeze(-1),
+            torch.gather(torch.cat((sem_logits[..., 3], results['raw_sem_logits_coarse'][..., 3]), 1), 1, ordering).unsqueeze(-1),
+            torch.gather(torch.cat((sem_logits[..., 4], results['raw_sem_logits_coarse'][..., 4]), 1), 1, ordering).unsqueeze(-1),
+            torch.gather(torch.cat((sem_logits[..., 5], results['raw_sem_logits_coarse'][..., 5]), 1), 1, ordering).unsqueeze(-1),
+            torch.gather(torch.cat((sem_logits[..., 6], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
+            torch.gather(torch.cat((sem_logits[..., 7], results['raw_sem_logits_coarse'][..., 7]), 1), 1, ordering).unsqueeze(-1),
+        ), -1)
+
 
         if depth_real is not None:
             depth_real = torch.gather(torch.cat((depth_real, results['depth_real_coarse']), 1), 1,
@@ -324,20 +334,24 @@ def _inference(point_type,
 
     weights = alphas * T  # (N_rays, N_samples_)
 
-
     if get_weights: # coarse = True, fine = False
         results[f'weights_{typ}'] = weights
 
     if composite_rgb: # coarse = False, fine = True
         results[f'rgb_{typ}'] = (weights.unsqueeze(-1) * rgbs).sum(dim=1)  # n1 n2 c -> n1 c
-
-
+        if hparams.enable_semantic:
+            sem_map = torch.sum(weights[..., None] * sem_logits, -2)
+            results[f'sem_map_{typ}'] = sem_map
     else:
         results[f'zvals_{typ}'] = z_vals
         results[f'raw_rgb_{typ}'] = rgbs
         results[f'raw_sigma_{typ}'] = sigmas
         if depth_real is not None:
             results[f'depth_real_{typ}'] = depth_real
+        if hparams.enable_semantic:
+            results[f'raw_sem_logits_{typ}'] = sem_logits
+        
+        
 
     with torch.no_grad():
         if get_depth or get_depth_variance:
