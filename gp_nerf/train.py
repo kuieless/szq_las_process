@@ -22,8 +22,9 @@ def _get_train_opts() -> Namespace:
 @record
 def main(hparams: Namespace) -> None:
     from gp_nerf.runner_gpnerf import Runner
+    print(f"stop_semantic_grad:{hparams.stop_semantic_grad}")
+    print(f"use_pano_lift:{hparams.use_pano_lift}")
 
-    print("run clean version, remove the bg nerf")
     hparams.bg_nerf = False
 
 

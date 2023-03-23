@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-
+import cv2
 class ImageMetadata:
     #zyq : add label_path for semantic 
     def __init__(self, image_path: Path, c2w: torch.Tensor, W: int, H: int, intrinsics: torch.Tensor, image_index: int,
@@ -28,7 +28,9 @@ class ImageMetadata:
         size = rgbs.size
 
         if size[0] != self.W or size[1] != self.H:
-            rgbs = rgbs.resize((self.W, self.H), Image.LANCZOS)
+            # rgbs = rgbs.resize((self.W, self.H), Image.LANCZOS) 
+            rgbs = rgbs.resize((self.W, self.H), Image.NEAREST) 
+
 
         return torch.ByteTensor(np.asarray(rgbs))
 
@@ -48,6 +50,7 @@ class ImageMetadata:
     
     def load_label(self) -> torch.Tensor:
         labels = Image.open(self.label_path).convert('RGB')
+        # labels = cv2.imread(str(self.label_path))
         size = labels.size
 
         if size[0] != self.W or size[1] != self.H:
@@ -57,6 +60,7 @@ class ImageMetadata:
     
     def load_label_class(self):
         labels = Image.open(self.label_path).convert('RGB')
+        # labels = cv2.imread(str(self.label_path))
         size = labels.size
 
         if size[0] != self.W or size[1] != self.H:

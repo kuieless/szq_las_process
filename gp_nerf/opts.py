@@ -4,13 +4,21 @@ import configargparse
 def get_opts_base():
 
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
+        
     parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf， else mega-nerf')
 
     # semantic
+    parser.add_argument('--load_pretrain_gpnerf', default=False, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
+    parser.add_argument('--stop_semantic_grad', default=False, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
+    parser.add_argument('--use_pano_lift', default=False, type=eval, choices=[True, False], help='activate the logits by sofrmax before volume rendering')
+
     parser.add_argument('--enable_semantic', default=True, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=8, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
     parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp'], help='')
+    parser.add_argument('--label_size', type=str, default='origin', choices=['origin', '1024'], help='')
+    parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')
+
 
 
     # network setting

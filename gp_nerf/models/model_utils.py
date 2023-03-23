@@ -23,11 +23,10 @@ def _get_nerf_inner(hparams: Namespace, appearance_count: int, layer_dim: int, x
 
 def _get_single_nerf_inner(hparams: Namespace, appearance_count: int, layer_dim: int, xyz_dim: int) -> nn.Module:
     rgb_dim = 3 * ((hparams.sh_deg + 1) ** 2) if hparams.sh_deg is not None else 3
-    if hparams.grid_encoder_type =='gpnerf':
+    if hparams.network_type =='gpnerf':
         from gp_nerf.models.gp_nerf import NeRF, ShiftedSoftplus
-    elif hparams.grid_encoder_type =='mlp':
+    elif hparams.network_type =='mlp':
         from gp_nerf.models.network_mlp import NeRF, ShiftedSoftplus
-
     return NeRF(hparams.pos_xyz_dim,
                 hparams.pos_dir_dim,
                 hparams.layers,

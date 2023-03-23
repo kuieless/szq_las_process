@@ -221,16 +221,22 @@ class Runner:
 
         if self.hparams.ckpt_path is not None:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
-            train_iterations = checkpoint['iteration']
+            #add by zyq : load the pretrain-gpnerf to train the semantic
+            if self.hparams.resume_ckpt_state:
+                train_iterations = checkpoint['iteration']
+                for key, optimizer in optimizers.items():
+                    optimizer_dict = optimizer.state_dict()
+                    optimizer_dict.update(checkpoint['optimizers'][key])
+                    optimizer.load_state_dict(optimizer_dict)
+            else:
+                print(f'load weights from {self.hparams.ckpt_path}, strat training from 0')
+                train_iterations = 0
 
             scaler_dict = scaler.state_dict()
             scaler_dict.update(checkpoint['scaler'])
             scaler.load_state_dict(scaler_dict)
 
-            for key, optimizer in optimizers.items():
-                optimizer_dict = optimizer.state_dict()
-                optimizer_dict.update(checkpoint['optimizers'][key])
-                optimizer.load_state_dict(optimizer_dict)
+            
             discard_index = checkpoint['dataset_index'] if self.hparams.resume_ckpt_state else -1
         else:
             train_iterations = 0
@@ -329,7 +335,8 @@ class Runner:
                     optimizer.zero_grad(set_to_none=True)
 
                 scaler.scale(metrics['loss']).backward()
-
+                if self.hparams.clip_grad_max != 0:
+                    torch.nn.utils.clip_grad_norm_(self.nerf.parameters(), self.hparams.clip_grad_max)
 
                 for key, optimizer in optimizers.items():
                     if key == 'bg_nerf' and (not bg_nerf_rays_present):
@@ -360,7 +367,7 @@ class Runner:
                 if train_iterations > 0 and train_iterations % self.hparams.val_interval == 0:
                     val_metrics = self._run_validation(train_iterations)
                     self._write_final_metrics(val_metrics, train_iterations)
-
+                
                 
                 if train_iterations >= self.hparams.train_iterations:
                     break
@@ -422,7 +429,6 @@ class Runner:
                     f.write('{},{}\n'.format(metadata_item.image_index, metadata_item.image_path.name))
         if self.hparams.writer_log:
             self.writer = SummaryWriter(str(self.experiment_path / 'tb')) if self.is_master else None
-
         if 'RANK' in os.environ:
             dist.barrier()
 
@@ -459,11 +465,17 @@ class Runner:
         
         if self.hparams.enable_semantic:
             sem_logits = results[f'sem_map_{typ}']
-            # sem_label = self.logits_2_label(sem_logits)
             semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
             # semantic_loss = self.crossentropy_loss(sem_logits.type(torch.float).unsqueeze(-1), labels.type(torch.float).unsqueeze(-1))
             metrics['semantic_loss'] = semantic_loss
             metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss
+            # 
+            sem_label = self.logits_2_label(sem_logits)
+            
+            self.writer.add_scalar('train_sem/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
+            
+            # self.writer.add_histogram("gt_labels", labels,train_iterations)
+            # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
 
         else:
             metrics['loss'] = photo_loss
@@ -498,6 +510,9 @@ class Runner:
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
                 with (experiment_path_current / 'psnr.txt').open('w') as f:
                     for i in main_tqdm(indices_to_eval):
+                        # if i != 0:
+                        #     break
+                        # metadata_item = self.train_items[i]
                         
                         metadata_item = self.val_items[i]
                         viz_rgbs = metadata_item.load_image().float() / 255.
@@ -513,12 +528,13 @@ class Runner:
                             gt_class = metadata_item.load_label_class()
                             # for i in range(mask.shape[0]):
                             #     self.metrics_val.add_batch(mask[i].cpu().numpy(), pre_mask[i].cpu().numpy())
-
-
-
                             sem_label = self.logits_2_label(sem_logits)
+
+                            # OA, mIoU
+                            self.metrics_val.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
+
+
                             viz_result_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-                             
                             img = Runner._create_result_label(viz_rgbs, gt_label, viz_result_sem)
                             if self.writer is not None:
                                 # gt & pred
@@ -646,6 +662,36 @@ class Runner:
 
 
                         del results
+
+                # OA, mIoU
+                CLASSES = ('Building', 'Road', 'Tree', 'LowVeg', 'Moving_Car',  'Static_Car', 'Human', 'Clutter')
+                mIoU = np.nanmean(self.metrics_val.Intersection_over_Union())
+                F1 = np.nanmean(self.metrics_val.F1())
+                OA = np.nanmean(self.metrics_val.OA())
+                iou_per_class = self.metrics_val.Intersection_over_Union()
+                print("eval_value")
+                eval_value = {'mIoU': mIoU,
+                              'F1': F1,
+                              'OA': OA}
+                print('val:', eval_value)
+                iou_value = {}
+                for class_name, iou in zip(CLASSES, iou_per_class):
+                    iou_value[class_name] = iou
+                print(iou_value)
+                experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                with (experiment_path_current /'semantic.txt').open('w') as f:
+                    f.write('eval_value:\n')
+                    for key in eval_value:
+                        f.write('{}: {}\n'.format(key, eval_value[key]))
+                    f.write('iou_value:\n')
+                    for key in iou_value:
+                        f.write('{}: {}\n'.format(key, iou_value[key]))
+                        # f.write('eval_value:\n{}\niou_value:\n{}\n'.format(eval_value, iou_value))
+
+                self.writer.flush()
+                self.writer.close()
+
+                self.metrics_val.reset()
 
                 if 'RANK' in os.environ:
                     dist.barrier()
@@ -783,7 +829,7 @@ class Runner:
 
         val_paths = sorted(list((dataset_path / 'val' / 'metadata').iterdir()))
         # zyq: control the number for debug
-        # train_paths=train_paths[:100]
+        # train_paths=train_paths[:10]
         # val_paths = val_paths[:2]
 
         train_paths += val_paths
@@ -829,13 +875,15 @@ class Runner:
             mask_path = dataset_mask
         else:
             mask_path = None
-        
-        label_path = None
-        for extension in ['.jpg', '.JPG', '.png', '.PNG']:
-            candidate = metadata_path.parent.parent / 'labels' / '{}{}'.format(metadata_path.stem, extension)
-            if candidate.exists():
-                label_path = candidate
-                break
+
+        # if self.hparams.enable_semantic:
+        if True:
+            label_path = None
+            for extension in ['.jpg', '.JPG', '.png', '.PNG']:
+                candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_size}' / '{}{}'.format(metadata_path.stem, extension)
+                if candidate.exists():
+                    label_path = candidate
+                    break
 
         return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                              intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path)

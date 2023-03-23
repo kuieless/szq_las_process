@@ -43,8 +43,11 @@ class NeRF(nn.Module):
         
         #semantic
         self.enable_semantic = hparams.enable_semantic
+        self.stop_semantic_grad = hparams.stop_semantic_grad
+        self.use_pano_lift = hparams.use_pano_lift
         if self.enable_semantic:
             self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim, self.layer_dim // 2), nn.Linear(self.layer_dim // 2, hparams.num_semantic_classes))
+            self.semantic_linear_bg = nn.Sequential(fc_block(1 + self.geo_feat_dim, self.layer_dim // 2), nn.Linear(self.layer_dim // 2, hparams.num_semantic_classes))
 
         #hash
         base_resolution = hparams.base_resolution
@@ -158,7 +161,11 @@ class NeRF(nn.Module):
 
         # semantic 
         if self.enable_semantic:
-            sem_logits = self.semantic_linear(h)
+            if self.stop_semantic_grad:
+                h_stop = h.detach()
+            sem_logits = self.semantic_linear(h_stop)
+            if self.use_pano_lift:
+                sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
 
         # color
         d = x[:, self.xyz_dim:-1]
@@ -171,7 +178,11 @@ class NeRF(nn.Module):
                 h = F.relu(h, inplace=True)
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
-        return torch.cat([color, sigma.unsqueeze(1), sem_logits], -1)
+
+        if self.enable_semantic:
+            return torch.cat([color, sigma.unsqueeze(1), sem_logits], -1)
+        else:
+            return torch.cat([color, sigma.unsqueeze(1)], -1)
 
     def forward_bg(self, point_type, x: torch.Tensor, sigma_only: bool = False, sigma_noise: Optional[torch.Tensor] = None,train_iterations=-1) -> torch.Tensor:
         position = x[:, :self.xyz_dim]
@@ -186,7 +197,12 @@ class NeRF(nn.Module):
 
         # semantic 
         if self.enable_semantic:
-            sem_logits = self.semantic_linear(h)
+            if self.stop_semantic_grad:
+                h_stop = h.detach()
+            sem_logits = self.semantic_linear_bg(h_stop)
+            if self.use_pano_lift:
+                sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
+
 
         # color
         d = x[:, self.xyz_dim:-1]
@@ -199,8 +215,10 @@ class NeRF(nn.Module):
                 h = F.relu(h, inplace=True)
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
-
-        return torch.cat([color, sigma.unsqueeze(1), sem_logits], -1)
+        if self.enable_semantic:
+            return torch.cat([color, sigma.unsqueeze(1), sem_logits], -1)
+        else:
+            return torch.cat([color, sigma.unsqueeze(1)], -1)
 
 
 class Embedding(nn.Module):
