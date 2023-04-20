@@ -212,47 +212,9 @@ class FilesystemDataset(Dataset):
                     continue
 
                 image_rgbs, img_indices, image_keep_mask, label = image_data
-                label_class = torch.zeros((label.shape[0]), dtype=torch.int)
-                # label_0 = ((label[:,0]==128) +0) * ((label[:,1]==0  ) + 0) * ((label[:,2]==0  ) + 0)
-                # label_1 = ((label[:,0]==128) +0) * ((label[:,1]==64 ) + 0) * ((label[:,2]==128) + 0)
-                # label_2 = ((label[:,0]==0  ) +0) * ((label[:,1]==128) + 0) * ((label[:,2]==0  ) + 0)
-                # label_3 = ((label[:,0]==128) +0) * ((label[:,1]==128) + 0) * ((label[:,2]==0  ) + 0)
-                # label_4 = ((label[:,0]==64 ) +0) * ((label[:,1]==0  ) + 0) * ((label[:,2]==128) + 0)
-                # label_5 = ((label[:,0]==192) +0) * ((label[:,1]==0  ) + 0) * ((label[:,2]==192) + 0)
-                # label_6 = ((label[:,0]==64 ) +0) * ((label[:,1]==64 ) + 0) * ((label[:,2]==0 ) + 0)
-                # label_7 = ((label[:,0]==0  ) +0) * ((label[:,1]==0  ) + 0) * ((label[:,2]==0  ) + 0)
-
-                # label_class[label_0] = 0
-                # label_class[label_1] = 1
-                # label_class[label_2] = 2
-                # label_class[label_3] = 3
-                # label_class[label_4] = 4
-                # label_class[label_5] = 5
-                # label_class[label_6] = 6
-                # label_class[label_7] = 7
-
-                # print(f"\ntotal: {label_class.shape[0]}  \n\
-                #   0:  {torch.sum(label_0)}\n   \
-                #   1:  {torch.sum(label_1)}\n   \
-                #   2:  {torch.sum(label_2)}\n   \
-                #   3:  {torch.sum(label_3)}\n   \
-                #   4:  {torch.sum(label_4)}\n   \
-                #   5:  {torch.sum(label_5)}\n   \
-                #   6:  {torch.sum(label_6)}\n   \
-                #   7:  {torch.sum(label_7)}\n")
-                
-                label_class[(label[:,0]==128 +0) * (label[:,1]==0  + 0) * (label[:,2]==0  + 0)] = 0   # building
-                label_class[(label[:,0]==128 +0) * (label[:,1]==64 + 0) * (label[:,2]==128+ 0)] = 1   # road
-                label_class[(label[:,0]==0   +0) * (label[:,1]==128+ 0) * (label[:,2]==0  + 0)] = 2   # tree
-                label_class[(label[:,0]==128 +0) * (label[:,1]==128+ 0) * (label[:,2]==0  + 0)] = 3   # vegetation
-                label_class[(label[:,0]==64  +0) * (label[:,1]==0  + 0) * (label[:,2]==128+ 0)] = 4   # moving car
-                label_class[(label[:,0]==192 +0) * (label[:,1]==0  + 0) * (label[:,2]==192+ 0)] = 5   # static car
-                label_class[(label[:,0]==64  +0) * (label[:,1]==64 + 0) * (label[:,2]==0  + 0)] = 6   # human
-                label_class[(label[:,0]==0   +0) * (label[:,1]==0  + 0) * (label[:,2]==0  + 0)] = 7   # cluster
-
                 
 
-                labels.append(label_class)
+                labels.append(label)
                 rgbs.append(image_rgbs)
                 indices.append(img_indices)
                 in_memory_count += len(image_rgbs)

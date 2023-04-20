@@ -55,27 +55,11 @@ class ImageMetadata:
 
         if size[0] != self.W or size[1] != self.H:
             labels = labels.resize((self.W, self.H), Image.LANCZOS)
-
+       
+        #label_class = torch.zeros((label.shape[0]), dtype=torch.int)
+        # need  transfer to the torch.int type  
         return torch.ByteTensor(np.asarray(labels))
+        
     
-    def load_label_class(self):
-        labels = Image.open(self.label_path).convert('RGB')
-        # labels = cv2.imread(str(self.label_path))
-        size = labels.size
-
-        if size[0] != self.W or size[1] != self.H:
-            labels = labels.resize((self.W, self.H), Image.LANCZOS)
-        label = torch.ByteTensor(np.asarray(labels)).view(-1, 3)
-        label_class = torch.zeros((label.shape[0]), dtype=torch.int)
-        label_class[(label[:,0]==128+0) * (label[:,1]==0 + 0) * (label[:,2]==0 + 0)] = 0
-        label_class[(label[:,0]==128+0) * (label[:,1]==64 + 0) * (label[:,2]==128 + 0)] = 1
-        label_class[(label[:,0]==0  +0) * (label[:,1]==128 + 0) * (label[:,2]==0 + 0)] = 2
-        label_class[(label[:,0]==128+0) * (label[:,1]==128 + 0) * (label[:,2]==0 + 0)] = 3
-        label_class[(label[:,0]==64+0) * (label[:,1]==0 + 0) * (label[:,2]==128 + 0)] = 4
-        label_class[(label[:,0]==192+0) * (label[:,1]==0 + 0) * (label[:,2]==192 + 0)] = 5
-        label_class[(label[:,0]==64+0) * (label[:,1]==0 + 0) * (label[:,2]==64 + 0)] = 6
-        label_class[(label[:,0]==0+0) * (label[:,1]==0 + 0) * (label[:,2]==0 + 0)] = 7
-
-        return label_class
     
 

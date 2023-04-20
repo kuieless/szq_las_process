@@ -38,7 +38,7 @@ from gp_nerf.models.model_utils import get_nerf, get_bg_nerf
 import wandb
 
 #semantic
-from gp_nerf.unetformer.uavid2rgb import uavid2rgb
+from gp_nerf.unetformer.uavid2rgb import uavid2rgb, custom2rgb
 from gp_nerf.unetformer.metric import Evaluator
 
 def get_n_params(model):
@@ -525,19 +525,26 @@ class Runner:
                             
                             sem_logits = results[f'sem_map_{typ}']
                             
+                            # 0420 unetformer 目前label储存的是rgb图，后期需要修改为mask id
                             if self.hparams.label_type == "unetformer":
-                                gt_label = metadata_item.load_label().float() / 255.
-                                gt_class = metadata_item.load_label_class()
-                            else:
-                                gt_label = metadata_item.load_label().float() / 255.
-                                gt_class = metadata_item.load_label_class()
+                                gt_label = metadata_item.load_label()
+                                gt_class = gt_label
+                                gt_label_rgb =  uavid2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                                gt_label_rgb = gt_label_rgb.float()/255.
+                                viz_result_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+
+                            elif self.hparams.label_type == "m2f_custom":
+                                gt_label = metadata_item.load_label()
+                                gt_class = gt_label
+                                gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                                gt_label_rgb = gt_label_rgb.float()/255.
+                                viz_result_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
                             sem_label = self.logits_2_label(sem_logits)
 
                             # OA, mIoU
                             self.metrics_val.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
-                            viz_result_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-                            img = Runner._create_result_label(viz_rgbs, gt_label, viz_result_sem)
+                            img = Runner._create_result_label(viz_rgbs, gt_label_rgb, viz_result_sem)
                             if self.writer is not None:
                                 # gt & pred
                                 self.writer.add_image('val/{}_label'.format(i), T.ToTensor()(img), train_index)

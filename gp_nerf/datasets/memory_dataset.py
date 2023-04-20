@@ -31,18 +31,6 @@ class MemoryDataset(Dataset):
             
             #zyq : add labels
             image_rgbs, image_indices, image_keep_mask, label = image_data
-            label_class = torch.zeros((label.shape[0]), dtype=torch.int)
-            
-            label_class[(label[:,0]==128 +0) * (label[:,1]==0  + 0) * (label[:,2]==0  + 0)] = 0   #building
-            label_class[(label[:,0]==128 +0) * (label[:,1]==64 + 0) * (label[:,2]==128+ 0)] = 1
-            label_class[(label[:,0]==0   +0) * (label[:,1]==128+ 0) * (label[:,2]==0  + 0)] = 2
-            label_class[(label[:,0]==128 +0) * (label[:,1]==128+ 0) * (label[:,2]==0  + 0)] = 3
-            label_class[(label[:,0]==64  +0) * (label[:,1]==0  + 0) * (label[:,2]==128+ 0)] = 4
-            label_class[(label[:,0]==192 +0) * (label[:,1]==0  + 0) * (label[:,2]==192+ 0)] = 5
-            label_class[(label[:,0]==64  +0) * (label[:,1]==64 + 0) * (label[:,2]==0  + 0)] = 6
-            label_class[(label[:,0]==0   +0) * (label[:,1]==0  + 0) * (label[:,2]==0  + 0)] = 7
-
-           
 
             # print("image index: {}, fx: {}, fy: {}".format(metadata_item.image_index, metadata_item.intrinsics[0], metadata_item.intrinsics[1]))
             directions = get_ray_directions(metadata_item.W,
@@ -61,7 +49,7 @@ class MemoryDataset(Dataset):
             rgbs.append(image_rgbs.float() / 255.)
             rays.append(image_rays)
             indices.append(image_indices)
-            labels.append(label_class)
+            labels.append(label)
         main_print('Finished loading data')
 
         self._rgbs = torch.cat(rgbs)
