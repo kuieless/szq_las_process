@@ -17,6 +17,9 @@ def get_opts_base():
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
     parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'separate_semantic'], help='')
     parser.add_argument('--label_size', type=str, default='origin', choices=['origin', '1024'], help='')
+    parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['unetformer', 'm2f_custom'], help='')
+    
+    
     parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')
 
 

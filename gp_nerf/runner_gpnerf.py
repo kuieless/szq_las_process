@@ -524,16 +524,18 @@ class Runner:
                         if self.hparams.enable_semantic:
                             
                             sem_logits = results[f'sem_map_{typ}']
-                            gt_label = metadata_item.load_label().float() / 255.
-                            gt_class = metadata_item.load_label_class()
-                            # for i in range(mask.shape[0]):
-                            #     self.metrics_val.add_batch(mask[i].cpu().numpy(), pre_mask[i].cpu().numpy())
+                            
+                            if self.hparams.label_type == "unetformer":
+                                gt_label = metadata_item.load_label().float() / 255.
+                                gt_class = metadata_item.load_label_class()
+                            else:
+                                gt_label = metadata_item.load_label().float() / 255.
+                                gt_class = metadata_item.load_label_class()
+
                             sem_label = self.logits_2_label(sem_logits)
 
                             # OA, mIoU
                             self.metrics_val.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
-
-
                             viz_result_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
                             img = Runner._create_result_label(viz_rgbs, gt_label, viz_result_sem)
                             if self.writer is not None:
@@ -880,7 +882,11 @@ class Runner:
         if True:
             label_path = None
             for extension in ['.jpg', '.JPG', '.png', '.PNG']:
-                candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_size}' / '{}{}'.format(metadata_path.stem, extension)
+                if self.hparams.label_type == "unetformer":
+                    candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_size}' / '{}{}'.format(metadata_path.stem, extension)
+                elif self.hparams.label_type == "m2f_custom":
+                    candidate = metadata_path.parent.parent / f'labels_m2f' / '{}{}'.format(metadata_path.stem, extension)
+
                 if candidate.exists():
                     label_path = candidate
                     break
