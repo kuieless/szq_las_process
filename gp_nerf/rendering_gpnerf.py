@@ -127,6 +127,9 @@ def render_rays(nerf: nn.Module,
                 if len(val.shape) > 1:
                     mult = mult.unsqueeze(-1)
 
+
+                if hparams.stop_semantic_grad and key == 'sem_map':
+                    mult = mult.detach()
                 expanded_bg_val[rays_with_bg] = bg_results[f'{key}_{typ}'] * mult
 
                 if get_bg_fg_rgb:
@@ -260,6 +263,7 @@ def _inference(point_type,
     # Perform model inference to get rgb and raw sigma
     B = xyz_.shape[0]
     out_chunks = []
+    out_semantic_chunk=[]
     rays_d_ = rays_d.repeat(1, N_samples_, 1).view(-1, rays_d.shape[-1])
 
     if image_indices is not None:
@@ -280,12 +284,14 @@ def _inference(point_type,
         # sigma_noise = torch.rand(len(xyz_chunk), 1, device=xyz_chunk.device) if nerf.training else None
         sigma_noise=None
 
-        if hparams.use_cascade:
-            model_chunk = nerf(typ == 'coarse', point_type, xyz_chunk, sigma_noise=sigma_noise)
-        else:
-            model_chunk = nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+        if hparams.enable_semantic:
+            model_chunk, semantic_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+            out_chunks += [model_chunk]
+            out_semantic_chunk += [semantic_chunk]
 
-        out_chunks += [model_chunk]
+        else:
+            model_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+            out_chunks += [model_chunk]
 
     out = torch.cat(out_chunks, 0)
     out = out.view(N_rays_, N_samples_, out.shape[-1])
@@ -293,7 +299,9 @@ def _inference(point_type,
     rgbs = out[..., :3]  # (N_rays, N_samples_, 3)
     sigmas = out[..., 3]  # (N_rays, N_samples_)
     if hparams.enable_semantic:
-        sem_logits = out[..., 4:4 + hparams.num_semantic_classes]
+        out_semantic = torch.cat(out_semantic_chunk, 0)
+        out = out_semantic.view(N_rays_, N_samples_, out_semantic.shape[-1])
+        sem_logits = out[..., 0:0 + hparams.num_semantic_classes]
 
     if 'zvals_coarse' in results:
         # combine coarse and fine samples
@@ -343,8 +351,8 @@ def _inference(point_type,
         results[f'rgb_{typ}'] = (weights.unsqueeze(-1) * rgbs).sum(dim=1)  # n1 n2 c -> n1 c
         if hparams.enable_semantic:
             if hparams.stop_semantic_grad:
-                w = weights.detach()
-                sem_map = torch.sum(w[..., None] * sem_logits, -2)
+                w = weights[..., None].detach()
+                sem_map = torch.sum(w * sem_logits, -2)
             else:
                 sem_map = torch.sum(weights[..., None] * sem_logits, -2)
             results[f'sem_map_{typ}'] = sem_map

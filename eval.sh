@@ -2,7 +2,7 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=4
 
-exp_name=logs/eval
+exp_name=logs_357/eval
 ckpt_path=   # give the checkpoint path  
 dataset1='Mill19'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2='building' #  "building"  "rubble"  "quad"  "residence"  "sci-art"  "campus"
