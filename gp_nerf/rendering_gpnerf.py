@@ -322,6 +322,9 @@ def _inference(point_type,
                 torch.gather(torch.cat((sem_logits[..., 5], results['raw_sem_logits_coarse'][..., 5]), 1), 1, ordering).unsqueeze(-1),
                 torch.gather(torch.cat((sem_logits[..., 6], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
                 torch.gather(torch.cat((sem_logits[..., 7], results['raw_sem_logits_coarse'][..., 7]), 1), 1, ordering).unsqueeze(-1),
+                torch.gather(torch.cat((sem_logits[..., 8], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
+                torch.gather(torch.cat((sem_logits[..., 9], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
+                torch.gather(torch.cat((sem_logits[..., 10], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
             ), -1)
 
 

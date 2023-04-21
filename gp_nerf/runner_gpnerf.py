@@ -432,7 +432,7 @@ class Runner:
         if 'RANK' in os.environ:
             dist.barrier()
 
-    def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels, train_iterations = -1) \
+    def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], train_iterations = -1) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
         from gp_nerf.rendering_gpnerf import render_rays
         
@@ -472,10 +472,12 @@ class Runner:
             # 
             sem_label = self.logits_2_label(sem_logits)
             
-            self.writer.add_scalar('train_sem/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
-            
-            # self.writer.add_histogram("gt_labels", labels,train_iterations)
-            # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
+            if self.writer is not None:
+                self.writer.add_scalar('train_sem/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
+                # self.writer.add_histogram("gt_labels", labels,train_iterations)
+                # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
+            if self.wandb is not None:
+                self.wandb.log({'train_sem/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
 
         else:
             metrics['loss'] = photo_loss
@@ -528,32 +530,42 @@ class Runner:
                             # 0420 unetformer 目前label储存的是rgb图，后期需要修改为mask id
                             if self.hparams.label_type == "unetformer":
                                 gt_label = metadata_item.load_label()
-                                gt_class = gt_label
-                                gt_label_rgb =  uavid2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-                                gt_label_rgb = gt_label_rgb.float()/255.
-                                viz_result_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                                gt_label_rgb = uavid2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
+                                sem_label = self.logits_2_label(sem_logits)
+                                visualize_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+
+                                gt_class = gt_label.view(-1)
+
+                                
                             elif self.hparams.label_type == "m2f_custom":
                                 gt_label = metadata_item.load_label()
-                                gt_class = gt_label
                                 gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-                                gt_label_rgb = gt_label_rgb.float()/255.
-                                viz_result_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
-                            sem_label = self.logits_2_label(sem_logits)
+                                sem_label = self.logits_2_label(sem_logits)
+                                visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+
+                                gt_class = gt_label.view(-1)
+
 
                             # OA, mIoU
                             self.metrics_val.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
-                            img = Runner._create_result_label(viz_rgbs, gt_label_rgb, viz_result_sem)
+                            img = Runner._create_result_label(viz_rgbs, torch.from_numpy(visualize_sem), torch.from_numpy(gt_label_rgb))
                             if self.writer is not None:
                                 # gt & pred
                                 self.writer.add_image('val/{}_label'.format(i), T.ToTensor()(img), train_index)
                                 img.save(str(experiment_path_current / 'val_rgbs' / '{}_label.jpg'.format(i)))
                                 #pred
-                                self.writer.add_image('val/{}_label_pred'.format(i), T.ToTensor()(viz_result_sem), train_index)
-                                Image.fromarray((viz_result_sem).astype(np.uint8)).save(
+                                self.writer.add_image('val/{}_label_pred'.format(i), T.ToTensor()(visualize_sem), train_index)
+                                Image.fromarray((visualize_sem).astype(np.uint8)).save(
                                     str(experiment_path_current / 'val_rgbs' / '{}_label_pred.jpg'.format(i)))
-                        
+                            
+                            if self.wandb is not None:
+                                Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
+                                self.wandb.log({"images_semantic_3/{}".format(train_index): Img})
+                                Img = wandb.Image((visualize_sem).astype(np.uint8),
+                                                caption="ckpt {}: {} th; ".format(train_index, i))
+                                self.wandb.log({"images_semantic_pred/{}".format(train_index): Img})
 
 
 
@@ -673,7 +685,11 @@ class Runner:
                         del results
 
                 # OA, mIoU
-                CLASSES = ('Building', 'Road', 'Tree', 'LowVeg', 'Moving_Car',  'Static_Car', 'Human', 'Clutter')
+
+                if self.hparams.label_type == 'unetformer':
+                    CLASSES = ('Building', 'Road', 'Tree', 'LowVeg', 'Moving_Car',  'Static_Car', 'Human', 'Clutter')
+                elif self.hparams.label_type == 'm2f_custom':
+                    CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
                 mIoU = np.nanmean(self.metrics_val.Intersection_over_Union())
                 F1 = np.nanmean(self.metrics_val.F1())
                 OA = np.nanmean(self.metrics_val.OA())
@@ -810,7 +826,7 @@ class Runner:
         return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
     
     def _create_result_label(rgbs: torch.Tensor, label_gt: torch.Tensor, label_pred: torch.Tensor) -> Image:
-        images = (rgbs * 255, label_gt * 255, label_pred)
+        images = (rgbs * 255, label_gt, label_pred)
         return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
 
     @staticmethod
@@ -889,10 +905,8 @@ class Runner:
         if True:
             label_path = None
             for extension in ['.jpg', '.JPG', '.png', '.PNG']:
-                if self.hparams.label_type == "unetformer":
-                    candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_size}' / '{}{}'.format(metadata_path.stem, extension)
-                elif self.hparams.label_type == "m2f_custom":
-                    candidate = metadata_path.parent.parent / f'labels_m2f' / '{}{}'.format(metadata_path.stem, extension)
+                
+                candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_name}' / '{}{}'.format(metadata_path.stem, extension)
 
                 if candidate.exists():
                     label_path = candidate

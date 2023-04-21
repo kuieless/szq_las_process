@@ -214,7 +214,7 @@ class FilesystemDataset(Dataset):
                 image_rgbs, img_indices, image_keep_mask, label = image_data
                 
 
-                labels.append(label)
+                labels.append(torch.tensor(label, dtype=torch.int))
                 rgbs.append(image_rgbs)
                 indices.append(img_indices)
                 in_memory_count += len(image_rgbs)

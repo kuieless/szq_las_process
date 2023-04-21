@@ -49,15 +49,16 @@ class ImageMetadata:
         return keep_mask
     
     def load_label(self) -> torch.Tensor:
-        labels = Image.open(self.label_path).convert('RGB')
+        labels = Image.open(self.label_path)    #.convert('RGB')
         # labels = cv2.imread(str(self.label_path))
         size = labels.size
 
         if size[0] != self.W or size[1] != self.H:
-            labels = labels.resize((self.W, self.H), Image.LANCZOS)
+            labels = labels.resize((self.W, self.H), Image.NEAREST)
        
         #label_class = torch.zeros((label.shape[0]), dtype=torch.int)
         # need  transfer to the torch.int type  
+        # return torch.ByteTensor(np.asarray(labels))
         return torch.ByteTensor(np.asarray(labels))
         
     
