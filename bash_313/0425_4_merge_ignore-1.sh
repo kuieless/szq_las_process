@@ -1,9 +1,9 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=4
 
 
-exp_name='logs_357/0425_1_m2f_ignore0'
+exp_name='logs_313/0425_4_merge_ignore-1'
 
 
 dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
@@ -17,8 +17,8 @@ train_iterations=100000
 val_interval=50000
 ckpt_interval=50000
 
-ignore_index=0
-label_name='m2f'
+ignore_index=-1
+label_name='merge'
 wandb_id=gpnerf_semantic  #gpnerf_semantic   None
 wandb_run_name=$exp_name
 
