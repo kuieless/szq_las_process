@@ -5,9 +5,16 @@ def get_opts_base():
 
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
         
-    parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf， else mega-nerf')
+    parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
 
     parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
+
+
+    #sdf 
+    parser.add_argument('--gradient_error_weight', default=0.005, type=float, help='')
+    parser.add_argument('--gradient_error_weight_increase', default=True, type=eval, choices=[True, False])
+    parser.add_argument('--cos_iterations', type=int, default=50000, help='training iterations')
+    parser.add_argument('--normal_iterations', type=int, default=50000, help='training iterations')
 
     # semantic
     parser.add_argument('--stop_semantic_grad', default=True, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
@@ -18,7 +25,7 @@ def get_opts_base():
     parser.add_argument('--enable_semantic', default=True, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
-    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'separate_semantic'], help='')
+    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'separate_semantic', 'sdf'], help='')
     parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')
     
     parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')

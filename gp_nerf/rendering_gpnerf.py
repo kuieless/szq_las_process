@@ -135,8 +135,8 @@ def render_rays(nerf: nn.Module,
 
                 if get_bg_fg_rgb:
                     results[f'bg_{key}_{typ}'] = expanded_bg_val
-
                 results[f'{key}_{typ}'] = val + expanded_bg_val
+
         elif get_bg_fg_rgb:
             for key in TO_COMPOSITE:
                 if f'{key}_{typ}' not in results:

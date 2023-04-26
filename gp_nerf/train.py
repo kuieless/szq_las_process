@@ -21,7 +21,12 @@ def _get_train_opts() -> Namespace:
 
 @record
 def main(hparams: Namespace) -> None:
-    from gp_nerf.runner_gpnerf import Runner
+    if hparams.network_type == 'sdf':
+        from gp_nerf.runner_gpnerf_sdf import Runner
+        hparams.cos_iterations = int(hparams.train_iterations / 2)
+        hparams.normal_iterations = int(hparams.train_iterations / 2)
+    else:
+        from gp_nerf.runner_gpnerf import Runner
     print(f"stop_semantic_grad:{hparams.stop_semantic_grad}")
     print(f"use_pano_lift:{hparams.use_pano_lift}")
 

@@ -284,7 +284,6 @@ class Runner:
                 dataset.load_chunk()
                 chunk_id += 1
 
-
             if 'RANK' in os.environ:
                 world_size = int(os.environ['WORLD_SIZE'])
                 sampler = DistributedSampler(dataset, world_size, int(os.environ['RANK']))
@@ -435,7 +434,7 @@ class Runner:
     def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], train_iterations = -1) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
         
-        from gp_nerf.rendering_gpnerf import render_rays
+        from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
         
         
         results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
@@ -450,20 +449,28 @@ class Runner:
                                                     get_bg_fg_rgb=False,
                                                     train_iterations=train_iterations
                                                     )
+        
+        # wandb : log sdf inv_s parameter
+        if self.wandb is not None:
+            self.wandb.log({"train/inv_s": 1.0 / results['inv_s'], 'epoch': train_iterations})
+        if self.writer is not None:
+            self.writer.add_scalar('train/inv_s', 1.0 / results['inv_s'], train_iterations)
+        
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
 
         with torch.no_grad():
             psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
-            depth_variance = results[f'depth_variance_{typ}'].mean()
+            # depth_variance = results[f'depth_variance_{typ}'].mean()
 
         metrics = {
             'psnr': psnr_,
-            'depth_variance': depth_variance,
+            # 'depth_variance': depth_variance,
         }
 
         photo_loss = F.mse_loss(results[f'rgb_{typ}'], rgbs, reduction='mean')
         metrics['photo_loss'] = photo_loss
         
+        #semantic loss
         if self.hparams.enable_semantic:
             sem_logits = results[f'sem_map_{typ}']
             
@@ -483,6 +490,14 @@ class Runner:
         else:
             metrics['loss'] = photo_loss
 
+        # sdf 
+        metrics['gradient_error'] = results[f'gradient_error_{typ}']
+        metrics['curvature_error'] = results[f'curvature_error_{typ}']
+        if self.hparams.gradient_error_weight_increase and train_iterations > self.hparams.train_iterations / 2:
+            gradient_error_weight = 0.1
+        else:
+            gradient_error_weight = self.hparams.gradient_error_weight
+        metrics['loss'] = metrics['loss'] + gradient_error_weight * results[f'gradient_error_{typ}'] + 0.1 * results[f'curvature_error_{typ}']
         return metrics, bg_nerf_rays_present
 
     def _run_validation(self, train_index=-1) -> Dict[str, float]:
@@ -768,7 +783,7 @@ class Runner:
         torch.save(dict, self.model_path / '{}.pt'.format(train_index))
 
     def render_image(self, metadata: ImageMetadata, train_index=-1) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
-        from gp_nerf.rendering_gpnerf import render_rays
+        from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
         directions = get_ray_directions(metadata.W,
                                         metadata.H,
                                         metadata.intrinsics[0],
