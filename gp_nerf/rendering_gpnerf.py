@@ -82,7 +82,7 @@ def render_rays(nerf: nn.Module,
                            train_iterations=train_iterations)
 
     if rays_with_bg.shape[0] != 0:
-        z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4, hparams.coarse_samples // 2, rays.device)
+        z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4+1, hparams.coarse_samples // 2, rays.device)
         z_vals_outer = _expand_and_perturb_z_vals(z_vals_outer, hparams.coarse_samples // 2, perturb, rays_with_bg.shape[0])
 
         xyz_coarse_bg = rays_o[rays_with_bg] + rays_d[rays_with_bg] * z_vals_outer.unsqueeze(-1)
