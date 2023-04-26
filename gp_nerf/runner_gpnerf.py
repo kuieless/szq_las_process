@@ -284,10 +284,10 @@ class Runner:
                 dataset.load_chunk()
                 chunk_id += 1
 
-                dataset.load_chunk()
-                chunk_id += 1
-                dataset.load_chunk()
-                chunk_id += 1
+                # dataset.load_chunk()
+                # chunk_id += 1
+                # dataset.load_chunk()
+                # chunk_id += 1
 
                 print(chunk_id)
 
