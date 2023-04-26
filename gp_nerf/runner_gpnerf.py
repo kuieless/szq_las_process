@@ -11,7 +11,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Tuple, List, Optional, Dict, Union
 
-
 import cv2
 import numpy as np
 import torch
@@ -57,7 +56,7 @@ class Runner:
         faulthandler.register(signal.SIGUSR1)
 
         if hparams.enable_semantic:
-            CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=-1)
+            CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
             self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
             self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
 
@@ -237,7 +236,7 @@ class Runner:
             scaler.load_state_dict(scaler_dict)
 
             
-            discard_index = checkpoint['dataset_index'] if self.hparams.resume_ckpt_state else -1
+            discard_index = checkpoint['dataset_index'] if self.hparams.resume_ckpt_state and not self.hparams.debug else -1
         else:
             train_iterations = 0
             discard_index = -1
@@ -260,7 +259,7 @@ class Runner:
                                         self.hparams.center_pixels, self.device,
                                         [Path(x) for x in sorted(self.hparams.chunk_paths)], self.hparams.num_chunks,
                                         self.hparams.train_scale_factor, self.hparams.disk_flush_size,self.hparams.desired_chunks)
-            if self.hparams.ckpt_path is not None and self.hparams.resume_ckpt_state:
+            if self.hparams.ckpt_path is not None and self.hparams.resume_ckpt_state and not self.hparams.debug:
                 dataset.set_state(checkpoint['dataset_state'])
             if 'RANK' in os.environ and self.is_local_master:
                 dist.barrier()
@@ -277,12 +276,20 @@ class Runner:
             pbar = None
         # start training
 
-
+        chunk_id = 0
         while train_iterations < self.hparams.train_iterations:
 
             # If discard_index >= 0, we already set to the right chunk through set_state
             if self.hparams.dataset_type == 'filesystem' and discard_index == -1:
                 dataset.load_chunk()
+                chunk_id += 1
+
+                dataset.load_chunk()
+                chunk_id += 1
+                dataset.load_chunk()
+                chunk_id += 1
+
+                print(chunk_id)
 
 
             if 'RANK' in os.environ:
@@ -295,11 +302,10 @@ class Runner:
                 
                 data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=4,
                                              pin_memory=False)
-
-            # item: dict[3]  including    rgbs:N*3     rays:N*8   img_indices: N means that the point belonging to which image
-            for dataset_index, item in enumerate(data_loader):
-
-
+                
+            
+            for dataset_index, item in enumerate(data_loader): #, start=10462):
+                # item = np.load('79972.npy',allow_pickle=True).item()
 
                 if dataset_index <= discard_index:
                     continue
@@ -328,6 +334,7 @@ class Runner:
                                 continue
 
                             if not math.isfinite(val):
+                                np.save(f"{train_iterations}.npy", item)
                                 raise Exception('Train metrics not finite: {}'.format(metrics))
 
 
@@ -465,8 +472,8 @@ class Runner:
         
         if self.hparams.enable_semantic:
             sem_logits = results[f'sem_map_{typ}']
+            
             semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
-            # semantic_loss = self.crossentropy_loss(sem_logits.type(torch.float).unsqueeze(-1), labels.type(torch.float).unsqueeze(-1))
             metrics['semantic_loss'] = semantic_loss
             metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss
             # 
@@ -901,7 +908,6 @@ class Runner:
         else:
             mask_path = None
 
-        # if self.hparams.enable_semantic:
         if True:
             label_path = None
             for extension in ['.jpg', '.JPG', '.png', '.PNG']:

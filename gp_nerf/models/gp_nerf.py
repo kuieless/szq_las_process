@@ -165,7 +165,7 @@ class NeRF(nn.Module):
                 h_stop = h.detach()
                 sem_logits = self.semantic_linear(h_stop)
             else:
-                sem_logits = self.semantic_linear_bg(h)
+                sem_logits = self.semantic_linear(h)
             if self.use_pano_lift:
                 sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
 

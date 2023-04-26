@@ -7,22 +7,21 @@ def get_opts_base():
         
     parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf， else mega-nerf')
 
-    # semantic
+    parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
 
+    # semantic
     parser.add_argument('--stop_semantic_grad', default=True, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
     parser.add_argument('--use_pano_lift', default=False, type=eval, choices=[True, False], help='activate the logits by sofrmax before volume rendering')
+    parser.add_argument('--ignore_index', type=int, default=-1, help='')
+    parser.add_argument('--label_name', type=str, default='m2f', choices=['m2f', 'merge', 'uf_origin', 'uf_1024'], help='')
 
     parser.add_argument('--enable_semantic', default=True, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
     parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'separate_semantic'], help='')
-    parser.add_argument('--label_name', type=str, default='m2f', choices=['uf_origin', 'uf_1024', 'm2f', 'merge'], help='')
     parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')
     
-    
     parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')
-
-
 
     # network setting
     parser.add_argument('--num_layers', type=int, default=2, help='change our sigma layer')

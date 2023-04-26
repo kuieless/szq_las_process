@@ -10,6 +10,10 @@ dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2='sci-art' #  "building"  "rubble"  "quad"  "residence"  "sci-art"  "campus"
 val_interval=100000
 train_iterations=100000
+
+
+
+
 label_name='m2f'
 label_type='m2f_custom'
 stop_semantic_grad=True

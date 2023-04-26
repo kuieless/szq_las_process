@@ -93,6 +93,7 @@ class FilesystemDataset(Dataset):
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         #zyq  only load one batch
         #idx = 1
+        
         return {
             'rgbs': self._loaded_rgbs[idx],
             'rays': self._loaded_rays[idx],
@@ -110,7 +111,6 @@ class FilesystemDataset(Dataset):
         loaded_img_indices = torch.IntTensor(loaded_chunk['img_indices'].to_numpy().astype('int32'))
         
         loaded_labels = torch.IntTensor(loaded_chunk['labels'].to_numpy().astype('int32'))
-        # loaded_labels = torch.IntTensor(loaded_chunk['labels'].to_numpy().astype('float'))
 
 
         if self._directions is not None:

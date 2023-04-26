@@ -23,6 +23,8 @@ def _get_eval_opts() -> Namespace:
 def main(hparams: Namespace) -> None:
     assert hparams.ckpt_path is not None or hparams.container_path is not None
     from gp_nerf.runner_gpnerf import Runner
+    print(f"stop_semantic_grad:{hparams.stop_semantic_grad}")
+    print(f"use_pano_lift:{hparams.use_pano_lift}")
 
     print("run clean version, remove the bg nerf")
     hparams.bg_nerf = False

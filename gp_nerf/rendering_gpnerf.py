@@ -28,6 +28,7 @@ def render_rays(nerf: nn.Module,
 
     rays_o, rays_d = rays[:, 0:3], rays[:, 3:6]  # both (N_rays, 3)
     near, far = rays[:, 6:7], rays[:, 7:8]  # both (N_rays, 1)
+    near = torch.clamp(near, max=1e4-1)
     if image_indices is not None:
         image_indices = image_indices.unsqueeze(-1).unsqueeze(-1)
 
@@ -263,7 +264,7 @@ def _inference(point_type,
     # Perform model inference to get rgb and raw sigma
     B = xyz_.shape[0]
     out_chunks = []
-    out_semantic_chunk=[]
+    out_semantic_chunk=[] 
     rays_d_ = rays_d.repeat(1, N_samples_, 1).view(-1, rays_d.shape[-1])
 
     if image_indices is not None:
@@ -322,9 +323,9 @@ def _inference(point_type,
                 torch.gather(torch.cat((sem_logits[..., 5], results['raw_sem_logits_coarse'][..., 5]), 1), 1, ordering).unsqueeze(-1),
                 torch.gather(torch.cat((sem_logits[..., 6], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
                 torch.gather(torch.cat((sem_logits[..., 7], results['raw_sem_logits_coarse'][..., 7]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 8], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 9], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 10], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
+                torch.gather(torch.cat((sem_logits[..., 8], results['raw_sem_logits_coarse'][..., 8]), 1), 1, ordering).unsqueeze(-1),
+                torch.gather(torch.cat((sem_logits[..., 9], results['raw_sem_logits_coarse'][..., 9]), 1), 1, ordering).unsqueeze(-1),
+                torch.gather(torch.cat((sem_logits[..., 10], results['raw_sem_logits_coarse'][..., 10]), 1), 1, ordering).unsqueeze(-1),
             ), -1)
 
 

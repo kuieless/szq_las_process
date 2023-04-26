@@ -56,9 +56,6 @@ class ImageMetadata:
         if size[0] != self.W or size[1] != self.H:
             labels = labels.resize((self.W, self.H), Image.NEAREST)
        
-        #label_class = torch.zeros((label.shape[0]), dtype=torch.int)
-        # need  transfer to the torch.int type  
-        # return torch.ByteTensor(np.asarray(labels))
         return torch.ByteTensor(np.asarray(labels))
         
     

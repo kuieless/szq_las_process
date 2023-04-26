@@ -24,7 +24,7 @@ def custom2rgb(mask):
     mask_rgb = np.zeros(shape=(h, w, 3), dtype=np.uint8)
     mask_convert = mask[np.newaxis, :, :]
     mask_rgb[np.all(mask_convert == 0, axis=0)] = [0, 0, 0]             # cluster       black
-
+    
     mask_rgb[np.all(mask_convert == 1, axis=0)] = [128, 0, 0]           # building      red
     mask_rgb[np.all(mask_convert == 2, axis=0)] = [192, 192, 192]         # road        grey  
     mask_rgb[np.all(mask_convert == 3, axis=0)] = [192, 0, 192]         # car           light violet
