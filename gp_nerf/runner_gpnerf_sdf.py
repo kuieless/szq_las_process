@@ -555,7 +555,7 @@ class Runner:
 
                                 
                             elif self.hparams.label_type == "m2f_custom":
-                                gt_label = metadata_item.load_label()
+                                gt_label = metadata_item.load_gt()
                                 gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
                                 sem_label = self.logits_2_label(sem_logits)
@@ -637,16 +637,16 @@ class Runner:
                             val_metrics[agg_key] += val_lpips_metrics[network]
 
                         viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
-                        viz_depth = results[f'depth_{typ}']
+                        # viz_depth = results[f'depth_{typ}']
                         if f'fg_depth_{typ}' in results:
                             to_use = results[f'fg_depth_{typ}'].view(-1)
                             while to_use.shape[0] > 2 ** 24:
                                 to_use = to_use[::2]
                             ma = torch.quantile(to_use, 0.95)
 
-                            viz_depth = viz_depth.clamp_max(ma)
+                            # viz_depth = viz_depth.clamp_max(ma)
 
-                        img = Runner._create_result_image(viz_rgbs, viz_result_rgbs, viz_depth)
+                        img = Runner._create_result_image(viz_rgbs, viz_result_rgbs) #, viz_depth)
                         error_map = viz_rgbs - viz_result_rgbs
                         if self.wandb is not None:
                             Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
@@ -669,8 +669,8 @@ class Runner:
                             img = Runner._create_result_image(viz_rgbs,
                                                                 results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],
                                                                                             viz_rgbs.shape[1],
-                                                                                            3).cpu(),
-                                                                results[f'bg_depth_{typ}'])
+                                                                                            3).cpu())
+                                                                # results[f'bg_depth_{typ}'])
                             if self.wandb is not None:
                                 Img = wandb.Image(T.ToTensor()(img),
                                                     caption="ckpt {}: {} th".format(train_index, i))
@@ -684,8 +684,8 @@ class Runner:
                             img = Runner._create_result_image(viz_rgbs,
                                                                 results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],
                                                                                             viz_rgbs.shape[1],
-                                                                                            3).cpu(),
-                                                                results[f'fg_depth_{typ}'])
+                                                                                            3).cpu())
+                                                                # results[f'fg_depth_{typ}'])
                             if self.wandb is not None:
                                 Img = wandb.Image(T.ToTensor()(img),
                                                     caption="ckpt {}: {} th".format(train_index, i))
@@ -723,10 +723,10 @@ class Runner:
                 with (experiment_path_current /'semantic.txt').open('w') as f:
                     f.write('eval_value:\n')
                     for key in eval_value:
-                        f.write('{}: {}\n'.format(key, eval_value[key]))
+                        f.write(f'{key:<12}: {eval_value[key]}\n')
                     f.write('iou_value:\n')
                     for key in iou_value:
-                        f.write('{}: {}\n'.format(key, iou_value[key]))
+                        f.write(f'{key:<12}: {iou_value[key]}\n' )
                         # f.write('eval_value:\n{}\niou_value:\n{}\n'.format(eval_value, iou_value))
 
                 self.writer.flush()
@@ -836,9 +836,11 @@ class Runner:
             return results, rays
 
     @staticmethod
-    def _create_result_image(rgbs: torch.Tensor, result_rgbs: torch.Tensor, result_depths: torch.Tensor) -> Image:
-        depth_vis = Runner.visualize_scalars(torch.log(result_depths + 1e-8).view(rgbs.shape[0], rgbs.shape[1]).cpu())
-        images = (rgbs * 255, result_rgbs * 255, depth_vis)
+    # def _create_result_image(rgbs: torch.Tensor, result_rgbs: torch.Tensor, result_depths: torch.Tensor) -> Image:
+    def _create_result_image(rgbs: torch.Tensor, result_rgbs: torch.Tensor) -> Image:
+
+        # depth_vis = Runner.visualize_scalars(torch.log(result_depths + 1e-8).view(rgbs.shape[0], rgbs.shape[1]).cpu())
+        images = (rgbs * 255, result_rgbs * 255) #, depth_vis)
         return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
     
     def _create_result_label(rgbs: torch.Tensor, label_gt: torch.Tensor, label_pred: torch.Tensor) -> Image:

@@ -540,7 +540,7 @@ class Runner:
 
                                 
                             elif self.hparams.label_type == "m2f_custom":
-                                gt_label = metadata_item.load_label()
+                                gt_label = metadata_item.load_gt()
                                 gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
                                 sem_label = self.logits_2_label(sem_logits)
@@ -708,10 +708,10 @@ class Runner:
                 with (experiment_path_current /'semantic.txt').open('w') as f:
                     f.write('eval_value:\n')
                     for key in eval_value:
-                        f.write('{}: {}\n'.format(key, eval_value[key]))
+                        f.write(f'{key:<12}: {eval_value[key]}\n')
                     f.write('iou_value:\n')
                     for key in iou_value:
-                        f.write('{}: {}\n'.format(key, iou_value[key]))
+                        f.write(f'{key:<12}: {iou_value[key]}\n' )
                         # f.write('eval_value:\n{}\niou_value:\n{}\n'.format(eval_value, iou_value))
 
                 self.writer.flush()
