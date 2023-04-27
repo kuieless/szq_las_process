@@ -54,7 +54,7 @@ def get_n_params(model):
 class Runner:
     def __init__(self, hparams: Namespace, set_experiment_path: bool = True):
         faulthandler.register(signal.SIGUSR1)
-
+        
         if hparams.enable_semantic:
             CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
             self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
@@ -466,19 +466,18 @@ class Runner:
         
         if self.hparams.enable_semantic:
             sem_logits = results[f'sem_map_{typ}']
-            
             semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
             metrics['semantic_loss'] = semantic_loss
             metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss
-            # 
-            sem_label = self.logits_2_label(sem_logits)
             
-            if self.writer is not None:
-                self.writer.add_scalar('train_sem/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
-                # self.writer.add_histogram("gt_labels", labels,train_iterations)
-                # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
-            if self.wandb is not None:
-                self.wandb.log({'train_sem/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
+            if train_iterations % 1000 == 0:
+                sem_label = self.logits_2_label(sem_logits)
+                if self.writer is not None:
+                    self.writer.add_scalar('train_sem/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
+                    # self.writer.add_histogram("gt_labels", labels,train_iterations)
+                    # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
+                if self.wandb is not None:
+                    self.wandb.log({'train_sem/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
 
         else:
             metrics['loss'] = photo_loss
