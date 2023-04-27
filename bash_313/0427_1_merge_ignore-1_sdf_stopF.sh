@@ -1,15 +1,15 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=7
 
 
-exp_name='logs_313/0426_2_merge_ignore-1_sdf'
+exp_name='logs_313/0427_1_merge_ignore-1_sdf_stopF'
 
 
 dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2='sci-art' #  "building"  "rubble"  "quad"  "residence"  "sci-art"  "campus"
 label_type='m2f_custom'
-stop_semantic_grad=True
+stop_semantic_grad=False
 use_pano_lift=False
 
 batch_size=5210

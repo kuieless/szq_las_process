@@ -42,11 +42,15 @@ class NeRF(nn.Module):
         self.stop_semantic_grad = hparams.stop_semantic_grad
         self.use_pano_lift = hparams.use_pano_lift
         if self.enable_semantic:
-            self.semantic_linear = nn.Sequential(fc_block(1 + hparams.geo_feat_dim, layer_dim // 2), nn.Linear(layer_dim // 2, hparams.num_semantic_classes))
+            self.semantic_linear    = nn.Sequential(fc_block(1 + hparams.geo_feat_dim, layer_dim // 2), nn.Linear(layer_dim // 2, hparams.num_semantic_classes))
             self.semantic_linear_bg = nn.Sequential(fc_block(1 + hparams.geo_feat_dim, layer_dim // 2), nn.Linear(layer_dim // 2, hparams.num_semantic_classes))
-
+            for param in self.semantic_linear.parameters():
+                param.requires_grad = True
+            for param in self.semantic_linear_bg.parameters():
+                param.requires_grad = True
 
         #sdf 
+        print("sdf")
         self.include_input = True
         self.geometric_init = True
         self.weight_norm = True
@@ -113,7 +117,7 @@ class NeRF(nn.Module):
     def gradient_neus(self, x, none):
         x.requires_grad_(True)
 
-        y, _ = self.forward_sdf(x)
+        y = self.forward_sdf(x)
         y = y[:, :1]
         d_output = torch.ones_like(y, requires_grad=False, device=y.device)
         gradients = torch.autograd.grad(
@@ -134,31 +138,32 @@ class NeRF(nn.Module):
         # finite difference
         # f(x+h, y, z), f(x, y+h, z), f(x, y, z+h) - f(x-h, y, z), f(x, y-h, z), f(x, y, z-h)
         pos_x = x + torch.tensor([[epsilon, 0.00, 0.00]], device=x.device)
-        dist_dx_pos, _ = self.forward_sdf(pos_x)
+        dist_dx_pos = self.forward_sdf(pos_x)
         dist_dx_pos = dist_dx_pos[:,:1]
         pos_y = x + torch.tensor([[0.00, epsilon, 0.00]], device=x.device)
-        dist_dy_pos, _ = self.forward_sdf(pos_y)
+        dist_dy_pos = self.forward_sdf(pos_y)
         dist_dy_pos = dist_dy_pos[:,:1]
         pos_z = x + torch.tensor([[0.00, 0.00, epsilon]], device=x.device)
-        dist_dz_pos, _ = self.forward_sdf(pos_z)
+        dist_dz_pos = self.forward_sdf(pos_z)
         dist_dz_pos = dist_dz_pos[:,:1]
 
         neg_x = x + torch.tensor([[-epsilon, 0.00, 0.00]], device=x.device)
-        dist_dx_neg, _ = self.forward_sdf(neg_x)
+        dist_dx_neg = self.forward_sdf(neg_x)
         dist_dx_neg = dist_dx_neg[:,:1]
         neg_y = x + torch.tensor([[0.00, -epsilon, 0.00]], device=x.device)
-        dist_dy_neg, _  = self.forward_sdf(neg_y)
+        dist_dy_neg = self.forward_sdf(neg_y)
         dist_dy_neg = dist_dy_neg[:,:1]
         neg_z = x + torch.tensor([[0.00, 0.00, -epsilon]], device=x.device)
-        dist_dz_neg, _  = self.forward_sdf(neg_z)
+        dist_dz_neg = self.forward_sdf(neg_z)
         dist_dz_neg = dist_dz_neg[:,:1]
 
 
         return torch.cat([0.5*(dist_dx_pos - dist_dx_neg) / epsilon, 0.5*(dist_dy_pos - dist_dy_neg) / epsilon, 0.5*(dist_dz_pos - dist_dz_neg) / epsilon], dim=-1)
 
     def forward_sdf(self, x: torch.Tensor, sigma_only: bool = False,
-        sigma_noise: Optional[torch.Tensor] = None,train_iterations=-1) -> torch.Tensor:
+        sigma_noise: Optional[torch.Tensor] = None, train_iterations=-1) -> torch.Tensor:
         # sdf
+        # x.requires_grad_(True)
 
         position = x[:, :self.xyz_dim]
         h = self.encoder(position, bound=self.fg_bound)
@@ -182,21 +187,21 @@ class NeRF(nn.Module):
         
         sdf_output = h
 
-        # semantic 
-        if self.enable_semantic:
-            if self.stop_semantic_grad:
-                h_stop = h.detach()
-                sem_logits = self.semantic_linear_bg(h_stop)
-            else:
-                sem_logits = self.semantic_linear_bg(h)
-            if self.use_pano_lift:
-                sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
-            return sdf_output, sem_logits
-        
-        else:
-            return sdf_output, None
+        return sdf_output
 
-    
+    # semantic 
+    def forward_semantic(self, h):
+        if self.stop_semantic_grad:
+            h_stop = h.detach()
+            sem_logits = self.semantic_linear(h_stop)
+        else:
+            sem_logits = self.semantic_linear(h)
+        if self.use_pano_lift:
+            sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
+        return sem_logits
+
+
+
     def forward_color(self, x, d, n, geo_feat, image_indices_):
         # dir
         #d = (d + 1) / 2 # tcnn SH encoding requires inputs to be in [0, 1]

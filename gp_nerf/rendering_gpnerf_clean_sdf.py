@@ -285,8 +285,9 @@ def _get_results(point_type,
         """" Step 2: Sample fine point """
         typ = 'fine'
         with torch.no_grad():
+        # if True:
             # query SDF and RGB
-            sdf_nn_output, _ = nerf.forward_sdf(xyz_, train_iterations=train_iterations)
+            sdf_nn_output = nerf.forward_sdf(xyz_)
             sdf = sdf_nn_output[..., 0]
             sdf = sdf.view(N_rays_, N_samples_)
             if point_type == 'fg':
@@ -324,10 +325,11 @@ def _get_results(point_type,
     
     # only forward new points to save computation
     rays_d_ = rays_d.unsqueeze(-2).repeat(1, N_samples_, 1).view(-1, rays_d.shape[-1])
+    sdf_nn_output = nerf.forward_sdf(xyz_)
+
     if hparams.enable_semantic:
-        sdf_nn_output, sem_logits = nerf.forward_sdf(xyz_)
-    else:
-        sdf_nn_output, _ = nerf.forward_sdf(xyz_)
+        sem_logits = nerf.forward_semantic(sdf_nn_output)
+    
     sdf = sdf_nn_output[:, :1]
     feature_vector = sdf_nn_output[:, 1:]
     
@@ -858,7 +860,7 @@ def cat_z_vals(nerf, rays_o, rays_d, z_vals, new_z_vals, sdf, bound=0, last=Fals
     z_vals = torch.cat([z_vals, new_z_vals], dim=-1)
     z_vals, index = torch.sort(z_vals, dim=-1)
     if not last:            
-        new_sdf, _ = nerf.forward_sdf(pts.reshape(-1, 3))
+        new_sdf = nerf.forward_sdf(pts.reshape(-1, 3))
         new_sdf = new_sdf[...,:1].reshape(batch_size, n_importance)
         sdf = torch.cat([sdf, new_sdf], dim=-1)
         xx = torch.arange(batch_size)[:, None].expand(batch_size, n_samples + n_importance).reshape(-1)
