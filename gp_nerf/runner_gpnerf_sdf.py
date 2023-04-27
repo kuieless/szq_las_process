@@ -383,8 +383,8 @@ class Runner:
 
     def eval(self):
         self._setup_experiment_dir()
-        val_metrics = self._run_validation(0)
-        self._write_final_metrics(val_metrics, train_iterations=0)
+        val_metrics = self._run_validation(100000)
+        self._write_final_metrics(val_metrics, train_iterations=100000)
         
 
 
@@ -509,6 +509,9 @@ class Runner:
             self.nerf.eval()
             val_metrics = defaultdict(float)
             base_tmp_path = None
+            
+            val_type = 'val'  # train  val
+            
             try:
                 if 'RANK' in os.environ:
                     base_tmp_path = Path(self.hparams.exp_name) / os.environ['TORCHELASTIC_RUN_ID']
@@ -523,7 +526,10 @@ class Runner:
                         image_path.mkdir()
                     dist.barrier()
                 else:
-                    indices_to_eval = np.arange(len(self.val_items))
+                    if val_type == 'val':
+                        indices_to_eval = np.arange(len(self.val_items))
+                    elif val_type == 'train':
+                        indices_to_eval = np.arange(len(self.train_items))
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
@@ -531,9 +537,10 @@ class Runner:
                     for i in main_tqdm(indices_to_eval):
                         # if i != 0:
                         #     break
-                        # metadata_item = self.train_items[i]
-                        
-                        metadata_item = self.val_items[i]
+                        if val_type == 'val':
+                            metadata_item = self.val_items[i]
+                        elif val_type == 'train':
+                            metadata_item = self.train_items[i]
                         viz_rgbs = metadata_item.load_image().float() / 255.
 
                         results, _ = self.render_image(metadata_item, train_index)
@@ -541,9 +548,7 @@ class Runner:
 
                         # semantic
                         if self.hparams.enable_semantic:
-                            
                             sem_logits = results[f'sem_map_{typ}']
-                            
                             # 0420 unetformer 目前label储存的是rgb图，后期需要修改为mask id
                             if self.hparams.label_type == "unetformer":
                                 gt_label = metadata_item.load_label()
@@ -553,10 +558,13 @@ class Runner:
                                 visualize_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
                                 gt_class = gt_label.view(-1)
-
                                 
                             elif self.hparams.label_type == "m2f_custom":
-                                gt_label = metadata_item.load_gt()
+                                if val_type == 'val':
+                                    gt_label = metadata_item.load_gt()
+                                elif val_type == 'train':
+                                    gt_label = metadata_item.load_label()
+                                
                                 gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
                                 sem_label = self.logits_2_label(sem_logits)

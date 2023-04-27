@@ -24,7 +24,7 @@ wandb_run_name=$exp_name
 network_type='sdf'
 
 
-python gp_nerf/train.py  --network_type   $network_type   --config_file  configs/$dataset2.yaml   --dataset_path  /data/yuqi/Datasets/MegaNeRF/$dataset1/$dataset2/$dataset2-pixsfm    --chunk_paths   /data/yuqi/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name     --exp_name  $exp_name  --train_iterations   $train_iterations   --desired_chunks  20     --val_interval  $val_interval    --ckpt_interval   $ckpt_interval  --label_name   $label_name   --label_type   $label_type   --stop_semantic_grad  $stop_semantic_grad  --use_pano_lift  $use_pano_lift  --wandb_id  $wandb_id   --wandb_run_name  $wandb_run_name    --batch_size  $batch_size   --ignore_index  $ignore_index 
+python gp_nerf/train.py  --network_type   $network_type   --config_file  configs/$dataset2.yaml   --dataset_path  /data/yuqi/Datasets/MegaNeRF/$dataset1/$dataset2/$dataset2-pixsfm    --chunk_paths   /data/yuqi/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name     --exp_name  $exp_name  --train_iterations   $train_iterations        --val_interval  $val_interval    --ckpt_interval   $ckpt_interval  --label_name   $label_name   --label_type   $label_type   --stop_semantic_grad  $stop_semantic_grad  --use_pano_lift  $use_pano_lift  --wandb_id  $wandb_id   --wandb_run_name  $wandb_run_name    --batch_size  $batch_size   --ignore_index  $ignore_index 
 
 
 

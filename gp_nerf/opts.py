@@ -71,9 +71,9 @@ def get_opts_base():
     parser.add_argument('--chunk_paths', type=str, nargs='+', default=None,
                         help="""scratch directory to write shuffled batches to when training using the filesystem dataset. 
     Should be set to a non-existent path when first created, and can then be reused by subsequent training runs once all chunks are written""")
-    parser.add_argument('--desired_chunks', type=int, default=60,
+    parser.add_argument('--desired_chunks', type=int, default=20,
                         help='due to the long time and hugh space consumption,we only keep part of chunk')
-    parser.add_argument('--num_chunks', type=int, default=300,
+    parser.add_argument('--num_chunks', type=int, default=20,
                         help='number of shuffled chunk files to write to disk. Each chunk should be small enough to fit into CPU memory')
     
 
@@ -91,7 +91,7 @@ def get_opts_base():
                         help='ray far bounds. Will be automatically set if not explicitly set')
     parser.add_argument('--ray_altitude_range', nargs='+', type=float, default=None,
                         help='constrains ray sampling to the given altitude')
-    parser.add_argument('--train_scale_factor', type=int, default=1,
+    parser.add_argument('--train_scale_factor', type=int, default=4,
                         help='downsamples training images if greater than 1')
     parser.add_argument('--val_scale_factor', type=int, default=4,
                         help='downsamples validation images if greater than 1')
