@@ -40,6 +40,8 @@ import wandb
 from gp_nerf.unetformer.uavid2rgb import uavid2rgb, custom2rgb
 from gp_nerf.unetformer.metric import Evaluator
 
+logger_iteration = int(100)
+
 def get_n_params(model):
     pp=0
     for p in list(model.parameters()):
@@ -343,7 +345,7 @@ class Runner:
                         continue
                     else:
                         lr_temp = optimizer.param_groups[0]['lr']
-                        if self.wandb is not None:
+                        if self.wandb is not None and train_iterations % logger_iteration == 0:
                             self.wandb.log({"train/optimizer_{}_lr".format(key): lr_temp, 'epoch':train_iterations})
                         scaler.step(optimizer)
 
@@ -354,11 +356,12 @@ class Runner:
                 train_iterations += 1
                 if self.is_master:
                     pbar.update(1)
-                    for key, value in metrics.items():
-                        if self.writer is not None:
-                            self.writer.add_scalar('train/{}'.format(key), value, train_iterations)
-                        if self.wandb is not None:
-                            self.wandb.log({"train/{}".format(key): value, 'epoch':train_iterations})
+                    if train_iterations % logger_iteration ==0:
+                        for key, value in metrics.items():
+                            if self.writer is not None:
+                                self.writer.add_scalar('train/{}'.format(key), value, train_iterations)
+                            if self.wandb is not None:
+                                self.wandb.log({"train/{}".format(key): value, 'epoch':train_iterations})
 
                     if train_iterations > 0 and train_iterations % self.hparams.ckpt_interval == 0:
                         self._save_checkpoint(optimizers, scaler, train_iterations, dataset_index,
@@ -469,16 +472,15 @@ class Runner:
             semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
             metrics['semantic_loss'] = semantic_loss
             metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss
-            
-            if train_iterations % 1000 == 0:
-                sem_label = self.logits_2_label(sem_logits)
-                if self.writer is not None:
-                    self.writer.add_scalar('train_sem/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
-                    # self.writer.add_histogram("gt_labels", labels,train_iterations)
-                    # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
-                if self.wandb is not None:
-                    self.wandb.log({'train_sem/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
-
+            with torch.no_grad():
+                if train_iterations % 1000 == 0:
+                    sem_label = self.logits_2_label(sem_logits)
+                    if self.writer is not None:
+                        self.writer.add_scalar('train_sem/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
+                        # self.writer.add_histogram("gt_labels", labels,train_iterations)
+                        # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
+                    if self.wandb is not None:
+                        self.wandb.log({'train_sem/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
         else:
             metrics['loss'] = photo_loss
 
