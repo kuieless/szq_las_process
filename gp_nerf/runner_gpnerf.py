@@ -494,6 +494,9 @@ class Runner:
             self.nerf.eval()
             val_metrics = defaultdict(float)
             base_tmp_path = None
+            
+            val_type = self.hparams.val_type  # train  val
+            print('val_type: ', val_type)
             try:
                 if 'RANK' in os.environ:
                     base_tmp_path = Path(self.hparams.exp_name) / os.environ['TORCHELASTIC_RUN_ID']
@@ -508,7 +511,10 @@ class Runner:
                         image_path.mkdir()
                     dist.barrier()
                 else:
-                    indices_to_eval = np.arange(len(self.val_items))
+                    if val_type == 'val':
+                        indices_to_eval = np.arange(len(self.val_items))
+                    elif val_type == 'train':
+                        indices_to_eval = np.arange(len(self.train_items))
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
@@ -516,9 +522,10 @@ class Runner:
                     for i in main_tqdm(indices_to_eval):
                         # if i != 0:
                         #     break
-                        # metadata_item = self.train_items[i]
-                        
-                        metadata_item = self.val_items[i]
+                        if val_type == 'val':
+                            metadata_item = self.val_items[i]
+                        elif val_type == 'train':
+                            metadata_item = self.train_items[i]
                         viz_rgbs = metadata_item.load_image().float() / 255.
 
                         results, _ = self.render_image(metadata_item, train_index)
@@ -526,9 +533,7 @@ class Runner:
 
                         # semantic
                         if self.hparams.enable_semantic:
-                            
                             sem_logits = results[f'sem_map_{typ}']
-                            
                             # 0420 unetformer 目前label储存的是rgb图，后期需要修改为mask id
                             if self.hparams.label_type == "unetformer":
                                 gt_label = metadata_item.load_label()
@@ -538,10 +543,13 @@ class Runner:
                                 visualize_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
                                 gt_class = gt_label.view(-1)
-
                                 
                             elif self.hparams.label_type == "m2f_custom":
-                                gt_label = metadata_item.load_gt()
+                                if val_type == 'val':
+                                    gt_label = metadata_item.load_gt()
+                                if val_type == 'train':
+                                    gt_label = metadata_item.load_label()
+                                
                                 gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
                                 sem_label = self.logits_2_label(sem_logits)
@@ -552,24 +560,6 @@ class Runner:
 
                             # OA, mIoU
                             self.metrics_val.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
-                            img = Runner._create_result_label(viz_rgbs, torch.from_numpy(visualize_sem), torch.from_numpy(gt_label_rgb))
-                            if self.writer is not None:
-                                # gt & pred
-                                self.writer.add_image('val/{}_label'.format(i), T.ToTensor()(img), train_index)
-                                img.save(str(experiment_path_current / 'val_rgbs' / '{}_label.jpg'.format(i)))
-                                #pred
-                                self.writer.add_image('val/{}_label_pred'.format(i), T.ToTensor()(visualize_sem), train_index)
-                                Image.fromarray((visualize_sem).astype(np.uint8)).save(
-                                    str(experiment_path_current / 'val_rgbs' / '{}_label_pred.jpg'.format(i)))
-                            
-                            if self.wandb is not None:
-                                Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
-                                self.wandb.log({"images_semantic_3/{}".format(train_index): Img})
-                                Img = wandb.Image((visualize_sem).astype(np.uint8),
-                                                caption="ckpt {}: {} th; ".format(train_index, i))
-                                self.wandb.log({"images_semantic_pred/{}".format(train_index): Img})
-
-
 
                         viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
                         #add by zyq:
@@ -623,65 +613,81 @@ class Runner:
                             val_metrics[agg_key] += val_lpips_metrics[network]
 
                         viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
-                        viz_depth = results[f'depth_{typ}']
-                        if f'fg_depth_{typ}' in results:
-                            to_use = results[f'fg_depth_{typ}'].view(-1)
-                            while to_use.shape[0] > 2 ** 24:
-                                to_use = to_use[::2]
-                            ma = torch.quantile(to_use, 0.95)
+                        if 'depth_' in results:
+                            viz_depth = results[f'depth_{typ}']
+                            if f'fg_depth_{typ}' in results:
+                                to_use = results[f'fg_depth_{typ}'].view(-1)
+                                while to_use.shape[0] > 2 ** 24:
+                                    to_use = to_use[::2]
+                                ma = torch.quantile(to_use, 0.95)
 
-                            viz_depth = viz_depth.clamp_max(ma)
+                                viz_depth = viz_depth.clamp_max(ma)
+                        else: 
+                            viz_depth = None
+                        
 
-                        img = Runner._create_result_image(viz_rgbs, viz_result_rgbs, viz_depth)
-                        error_map = viz_rgbs - viz_result_rgbs
-                        if self.wandb is not None:
-                            Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
-                            self.wandb.log({"images_3_val/{}".format(train_index): Img})
-                            Img = wandb.Image((viz_result_rgbs.numpy() * 255).astype(np.uint8),
-                                              caption="ckpt {}: {} th; psnr is {}".format(train_index, i, val_psnr))
-                            self.wandb.log({"images_pred_val/{}".format(train_index): Img})
+                        ################################## visualize all
+                        if self.hparams.enable_semantic:
+                            #  NSR  SDF ------------------------------------  save the normal_map
+                            # world -> camera 
+                            w2c = torch.linalg.inv(torch.cat((metadata_item.c2w,torch.tensor([[0,0,0,1]])),0))
+                            viz_result_normal_map = results[f'normal_map_{typ}']
+                            # viz_result_normal_map = torch.mm(viz_result_normal_map, w2c[:3,:3])# + w2c[:3,3]
+                            viz_result_normal_map = torch.mm(w2c[:3,:3],viz_result_normal_map.T).T
+                            # normalize 
+                            viz_result_normal_map = viz_result_normal_map / (1e-5 + torch.linalg.norm(viz_result_normal_map, ord = 2, dim=-1, keepdim=True))
+                            # viz_result_normal_map = viz_result_normal_map.view(*viz_rgbs.shape).cpu()
+                            viz_result_normal_map = viz_result_normal_map.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                            if val_type == 'val':
+                                gt_label_rgb = torch.from_numpy(gt_label_rgb)
+                                pseudo_gt_label_rgb = metadata_item.load_label()
+                                pseudo_gt_label_rgb = custom2rgb(pseudo_gt_label_rgb.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                                pseudo_gt_label_rgb = torch.from_numpy(pseudo_gt_label_rgb)
+                            elif val_type == 'train':
+                                gt_label_rgb = None
+                                pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
+                            img = Runner._create_rendering_semantic(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, 
+                                                                    viz_result_rgbs, torch.from_numpy(visualize_sem), viz_result_normal_map)
+                            img.save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
                             
-                        if self.writer is not None:
-                            self.writer.add_image('val/{}'.format(i), T.ToTensor()(img), train_index)
-                            img.save(str(experiment_path_current / 'val_rgbs' / '{}.jpg'.format(i)))
-                            Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                                str(experiment_path_current / 'val_rgbs' / '{}_pred.jpg'.format(i)))
-
+                            if self.writer is not None:
+                                self.writer.add_image('val/{}'.format(i), T.ToTensor()(img), train_index)
+                            if self.wandb is not None:
+                                Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
+                                self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
                         else:
-                            img.save(str(image_path / '{}.jpg'.format(i)))
-
-
-                        if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
-                            img = Runner._create_result_image(viz_rgbs,
-                                                                results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],
-                                                                                            viz_rgbs.shape[1],
-                                                                                            3).cpu(),
-                                                                results[f'bg_depth_{typ}'])
+                            img = Runner._create_result_image(viz_rgbs, viz_result_rgbs, viz_depth)
                             if self.wandb is not None:
-                                Img = wandb.Image(T.ToTensor()(img),
-                                                    caption="ckpt {}: {} th".format(train_index, i))
-                                self.wandb.log({"images_bg_val/{}".format(train_index): Img})
+                                Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
+                                self.wandb.log({"images_val/{}".format(train_index): Img})
                             if self.writer is not None:
-                                self.writer.add_image('val/{}_bg'.format(i), T.ToTensor()(img), train_index)
-                                img.save(str(experiment_path_current / 'val_rgbs' / '{}_bg.jpg'.format(i)))
-                            else:
-                                img.save(str(image_path / '{}_bg.jpg'.format(i)))
+                                self.writer.add_image('val/{}'.format(i), T.ToTensor()(img), train_index)
+                            img.save(str(experiment_path_current / 'val_rgbs' / '{}.jpg'.format(i)))
 
-                            img = Runner._create_result_image(viz_rgbs,
-                                                                results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],
-                                                                                            viz_rgbs.shape[1],
-                                                                                            3).cpu(),
-                                                                results[f'fg_depth_{typ}'])
-                            if self.wandb is not None:
-                                Img = wandb.Image(T.ToTensor()(img),
-                                                    caption="ckpt {}: {} th".format(train_index, i))
-                                self.wandb.log({"images_fg_val/{}".format(train_index): Img})
-                            if self.writer is not None:
-                                self.writer.add_image('val/{}_fg'.format(i), T.ToTensor()(img), train_index)
-                                # add by zyq
-                                img.save(str(experiment_path_current / 'val_rgbs' / '{}_fg.jpg'.format(i)))
-                            else:
-                                img.save(str(image_path / '{}_fg.jpg'.format(i)))
+                        if val_type == 'val':
+                            ##################################   pred   label & rgb
+                            # if self.wandb is not None:
+                            #     Img = wandb.Image((viz_result_rgbs.numpy() * 255).astype(np.uint8),
+                            #                       caption="ckpt {}: {} th; psnr is {}".format(train_index, i, val_psnr))
+                            #     self.wandb.log({"images_pred_rgbs/{}".format(train_index): Img})
+                            Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                str(experiment_path_current / 'val_rgbs' / '{}_pred_rgb.jpg'.format(i)))
+                            if self.hparams.enable_semantic:
+                                Image.fromarray((visualize_sem).astype(np.uint8)).save(
+                                    str(experiment_path_current / 'val_rgbs' / '{}_pred_label.jpg'.format(i)))
+
+                            ##################################   fg & bg
+                            if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
+                                img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
+                                                                results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
+                                img.save(str(experiment_path_current / 'val_rgbs' / '{}_fg_bg.jpg'.format(i)))
+                                
+                                # if self.wandb is not None:
+                                #     Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
+                                #     self.wandb.log({"images_fg_bg/{}".format(train_index): Img})
+                                # if self.writer is not None:
+                                #     self.writer.add_image('val/{}_fg_bg'.format(i), T.ToTensor()(img), train_index)
+                            ################################## 
 
 
                         del results
@@ -746,7 +752,7 @@ class Runner:
                     shutil.rmtree(base_tmp_path)
 
             return val_metrics
-
+        
     def _save_checkpoint(self, optimizers: Dict[str, any], scaler: GradScaler, train_index: int, dataset_index: int,
                          dataset_state: Optional[str]) -> None:
         dict = {
@@ -823,13 +829,37 @@ class Runner:
 
     @staticmethod
     def _create_result_image(rgbs: torch.Tensor, result_rgbs: torch.Tensor, result_depths: torch.Tensor) -> Image:
-        depth_vis = Runner.visualize_scalars(torch.log(result_depths + 1e-8).view(rgbs.shape[0], rgbs.shape[1]).cpu())
-        images = (rgbs * 255, result_rgbs * 255, depth_vis)
+        if result_depths is not None:
+            depth_vis = Runner.visualize_scalars(torch.log(result_depths + 1e-8).view(rgbs.shape[0], rgbs.shape[1]).cpu())
+            images = (rgbs * 255, result_rgbs * 255, depth_vis)
+            return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
+        else:
+            images = (rgbs * 255, result_rgbs * 255) #, depth_vis)
+            return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
+    
+    def _create_fg_bg_image(fgs: torch.Tensor, bgs: torch.Tensor) -> Image:
+        images = (fgs * 255, bgs * 255) #, depth_vis)
         return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
     
     def _create_result_label(rgbs: torch.Tensor, label_gt: torch.Tensor, label_pred: torch.Tensor) -> Image:
         images = (rgbs * 255, label_gt, label_pred)
         return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
+
+
+    def _create_rendering_semantic(rgbs: torch.Tensor, gt_semantic: torch.Tensor, pseudo_semantic: torch.Tensor,
+                                   pred_rgb: torch.Tensor, pred_semantic: torch.Tensor, pred_depth_or_normal: torch.Tensor) -> Image:
+        if gt_semantic is None:
+            gt_semantic = torch.zeros_like(rgbs)
+        if pred_depth_or_normal is None:
+            pred_depth_or_normal = torch.zeros_like(rgbs)
+        else:
+            pred_depth_or_normal = (pred_depth_or_normal+1)*0.5*255
+        image_1 = (rgbs * 255, gt_semantic, pseudo_semantic)
+        image_1 = Image.fromarray(np.concatenate(image_1, 1).astype(np.uint8))
+        image_2 = (pred_rgb * 255, pred_semantic, pred_depth_or_normal)
+        image_2 = Image.fromarray(np.concatenate(image_2, 1).astype(np.uint8))
+        
+        return Image.fromarray(np.concatenate((image_1, image_2), 0).astype(np.uint8))
 
     @staticmethod
     def visualize_scalars(scalar_tensor: torch.Tensor) -> np.ndarray:

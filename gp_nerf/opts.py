@@ -8,6 +8,7 @@ def get_opts_base():
     parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
 
     parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
+    parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train'], help='')
 
 
     #sdf 
@@ -115,7 +116,6 @@ def get_opts_base():
                         help='use all pixels for validation images instead of those specified in cluster masks')
     parser.add_argument('--cluster_2d', default=False, action='store_true', help='cluster without altitude dimension')
 
-    parser.add_argument('--sh_deg', type=int, default=None, help='use spherical harmonics (pos_dir_dim should be set to 0)')
     parser.add_argument('--no_center_pixels', dest='center_pixels', default=True, action='store_false', help='do not shift pixels by +0.5 when computing ray directions')
     parser.add_argument('--no_shifted_softplus', dest='shifted_softplus', default=True, action='store_false', help='use ReLU instead of shifted softplus activation')
     parser.add_argument('--image_pixel_batch_size', type=int, default=16 * 1024, help='number of pixels to evaluate per split when rendering validation images')
