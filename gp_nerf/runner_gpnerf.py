@@ -628,16 +628,7 @@ class Runner:
 
                         ################################## visualize all
                         if self.hparams.enable_semantic:
-                            #  NSR  SDF ------------------------------------  save the normal_map
-                            # world -> camera 
-                            w2c = torch.linalg.inv(torch.cat((metadata_item.c2w,torch.tensor([[0,0,0,1]])),0))
-                            viz_result_normal_map = results[f'normal_map_{typ}']
-                            # viz_result_normal_map = torch.mm(viz_result_normal_map, w2c[:3,:3])# + w2c[:3,3]
-                            viz_result_normal_map = torch.mm(w2c[:3,:3],viz_result_normal_map.T).T
-                            # normalize 
-                            viz_result_normal_map = viz_result_normal_map / (1e-5 + torch.linalg.norm(viz_result_normal_map, ord = 2, dim=-1, keepdim=True))
-                            # viz_result_normal_map = viz_result_normal_map.view(*viz_rgbs.shape).cpu()
-                            viz_result_normal_map = viz_result_normal_map.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                            
                             if val_type == 'val':
                                 gt_label_rgb = torch.from_numpy(gt_label_rgb)
                                 pseudo_gt_label_rgb = metadata_item.load_label()
@@ -647,7 +638,7 @@ class Runner:
                                 gt_label_rgb = None
                                 pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
                             img = Runner._create_rendering_semantic(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, 
-                                                                    viz_result_rgbs, torch.from_numpy(visualize_sem), viz_result_normal_map)
+                                                                    viz_result_rgbs, torch.from_numpy(visualize_sem), viz_depth)
                             img.save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
                             
                             if self.writer is not None:
