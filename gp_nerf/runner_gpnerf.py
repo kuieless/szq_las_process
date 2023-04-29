@@ -35,6 +35,7 @@ from mega_nerf.ray_utils import get_rays, get_ray_directions
 from gp_nerf.models.model_utils import get_nerf, get_bg_nerf
 
 import wandb
+from torchvision.utils import make_grid
 
 #semantic
 from gp_nerf.unetformer.uavid2rgb import uavid2rgb, custom2rgb
@@ -557,28 +558,16 @@ class Runner:
                         # semantic
                         if self.hparams.enable_semantic:
                             sem_logits = results[f'sem_map_{typ}']
-                            # 0420 unetformer 目前label储存的是rgb图，后期需要修改为mask id
-                            if self.hparams.label_type == "unetformer":
+                            
+                            if val_type == 'val':
+                                gt_label = metadata_item.load_gt()
+                            elif val_type == 'train':
                                 gt_label = metadata_item.load_label()
-                                gt_label_rgb = uavid2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-
-                                sem_label = self.logits_2_label(sem_logits)
-                                visualize_sem = uavid2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-
-                                gt_class = gt_label.view(-1)
-                                
-                            elif self.hparams.label_type == "m2f_custom":
-                                if val_type == 'val':
-                                    gt_label = metadata_item.load_gt()
-                                if val_type == 'train':
-                                    gt_label = metadata_item.load_label()
-                                
-                                gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-
-                                sem_label = self.logits_2_label(sem_logits)
-                                visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-
-                                gt_class = gt_label.view(-1)
+                            
+                            gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                            sem_label = self.logits_2_label(sem_logits)
+                            visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                            gt_class = gt_label.view(-1)
 
 
                             # OA, mIoU
@@ -661,6 +650,10 @@ class Runner:
                                 gt_label_rgb = None
                                 pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
                             
+                            
+                            # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                            img_list = [viz_rgbs * 255, gt_label_rgb, pseudo_gt_label_rgb, viz_result_rgbs * 255, torch.from_numpy(visualize_sem)]
+                            
                             if self.hparams.network_type == 'sdf':
                                 #  NSR  SDF ------------------------------------  save the normal_map
                                 # world -> camera 
@@ -672,19 +665,35 @@ class Runner:
                                 viz_result_normal_map = viz_result_normal_map / (1e-5 + torch.linalg.norm(viz_result_normal_map, ord = 2, dim=-1, keepdim=True))
                                 # viz_result_normal_map = viz_result_normal_map.view(*viz_rgbs.shape).cpu()
                                 viz_result_normal_map = viz_result_normal_map.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
-                                img = Runner._create_rendering_semantic(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, 
-                                                                    viz_result_rgbs, torch.from_numpy(visualize_sem), viz_result_normal_map)
-
+                                
+                                # img = Runner._create_rendering_semantic(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, 
+                                #                                     viz_result_rgbs, torch.from_numpy(visualize_sem), viz_result_normal_map)
+                                # img_list = Runner._create_res_list(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, viz_result_rgbs, torch.from_numpy(visualize_sem), viz_result_normal_map)
+                                
+                                normal_viz = (viz_result_normal_map+1)*0.5*255
+                                img_list.append(normal_viz)
                             else:
-                                img = Runner._create_rendering_semantic(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, 
-                                                                    viz_result_rgbs, torch.from_numpy(visualize_sem), viz_depth)
-                            img.save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
+                                depth_vis = Runner.visualize_scalars(torch.log(viz_depth + 1e-8).view(viz_rgbs.shape[0], viz_rgbs.shape[1]).cpu())
+                                img_list.append(depth_vis)
+                            
+                            # NOTE: 对需要可视化的list进行处理
+                            # list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                            # 将None元素转换为zeros矩阵
+                            img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                            img_list = torch.stack(img_list).permute(0,3,1,2)
+                            img = make_grid(img_list, nrow=3)
+                            img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                            Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
+                            
+                            # img.save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
                             
                             if self.writer is not None:
-                                self.writer.add_image('val/{}'.format(i), T.ToTensor()(img), train_index)
+                                self.writer.add_image('val/{}'.format(i), img, train_index)
                             if self.wandb is not None:
-                                Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
+                                Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
                                 self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
+                        
+                        # NOTE： 这里的else是原始的GPNeRF可视化
                         else:
                             img = Runner._create_result_image(viz_rgbs, viz_result_rgbs, viz_depth)
                             if self.wandb is not None:
@@ -874,10 +883,6 @@ class Runner:
         images = (fgs * 255, bgs * 255) #, depth_vis)
         return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
     
-    def _create_result_label(rgbs: torch.Tensor, label_gt: torch.Tensor, label_pred: torch.Tensor) -> Image:
-        images = (rgbs * 255, label_gt, label_pred)
-        return Image.fromarray(np.concatenate(images, 1).astype(np.uint8))
-
 
     def _create_rendering_semantic(rgbs: torch.Tensor, gt_semantic: torch.Tensor, pseudo_semantic: torch.Tensor,
                                    pred_rgb: torch.Tensor, pred_semantic: torch.Tensor, pred_depth_or_normal: torch.Tensor) -> Image:
@@ -894,6 +899,15 @@ class Runner:
         
         return Image.fromarray(np.concatenate((image_1, image_2), 0).astype(np.uint8))
 
+    def _create_res_list(rgbs, gt_semantic, pseudo_semantic, pred_rgb, pred_semantic, pred_normal) -> Image:
+        if gt_semantic is None:
+            gt_semantic = torch.zeros_like(rgbs)
+        pred_normal = (pred_normal+1)*0.5*255
+
+        res_list = [rgbs * 255, gt_semantic, pseudo_semantic, pred_rgb * 255, pred_semantic, pred_normal]
+        
+        return res_list
+    
     @staticmethod
     def visualize_scalars(scalar_tensor: torch.Tensor) -> np.ndarray:
         to_use = scalar_tensor.view(-1)
