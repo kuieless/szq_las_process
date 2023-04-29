@@ -49,7 +49,7 @@ class MemoryDataset(Dataset):
             rgbs.append(image_rgbs.float() / 255.)
             rays.append(image_rays)
             indices.append(image_indices)
-            labels.append(label)
+            labels.append(torch.tensor(label, dtype=torch.int))
         main_print('Finished loading data')
 
         self._rgbs = torch.cat(rgbs)
