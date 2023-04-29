@@ -40,8 +40,6 @@ import wandb
 from gp_nerf.unetformer.uavid2rgb import uavid2rgb, custom2rgb
 from gp_nerf.unetformer.metric import Evaluator
 
-logger_iteration = int(100)
-
 def get_n_params(model):
     pp=0
     for p in list(model.parameters()):
@@ -56,7 +54,7 @@ def get_n_params(model):
 class Runner:
     def __init__(self, hparams: Namespace, set_experiment_path: bool = True):
         faulthandler.register(signal.SIGUSR1)
-        
+
         if hparams.enable_semantic:
             CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
             self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
@@ -286,7 +284,6 @@ class Runner:
                 dataset.load_chunk()
                 chunk_id += 1
 
-
             if 'RANK' in os.environ:
                 world_size = int(os.environ['WORLD_SIZE'])
                 sampler = DistributedSampler(dataset, world_size, int(os.environ['RANK']))
@@ -345,7 +342,7 @@ class Runner:
                         continue
                     else:
                         lr_temp = optimizer.param_groups[0]['lr']
-                        if self.wandb is not None and train_iterations % logger_iteration == 0:
+                        if self.wandb is not None and train_iterations % self.hparams.logger_interval == 0:
                             self.wandb.log({"train/optimizer_{}_lr".format(key): lr_temp, 'epoch':train_iterations})
                         scaler.step(optimizer)
 
@@ -356,7 +353,7 @@ class Runner:
                 train_iterations += 1
                 if self.is_master:
                     pbar.update(1)
-                    if train_iterations % logger_iteration ==0:
+                    if train_iterations % self.hparams.logger_interval ==0:
                         for key, value in metrics.items():
                             if self.writer is not None:
                                 self.writer.add_scalar('train/{}'.format(key), value, train_iterations)
@@ -387,8 +384,8 @@ class Runner:
 
     def eval(self):
         self._setup_experiment_dir()
-        val_metrics = self._run_validation(0)
-        self._write_final_metrics(val_metrics, train_iterations=0)
+        val_metrics = self._run_validation(100000)
+        self._write_final_metrics(val_metrics, train_iterations=100000)
         
 
 
@@ -437,8 +434,10 @@ class Runner:
 
     def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], train_iterations = -1) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
-        
-        from gp_nerf.rendering_gpnerf import render_rays
+        if self.hparams.network_type == 'sdf':
+            from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
+        else:
+            from gp_nerf.rendering_gpnerf import render_rays
         
         
         results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
@@ -453,20 +452,30 @@ class Runner:
                                                     get_bg_fg_rgb=False,
                                                     train_iterations=train_iterations
                                                     )
+        
+        
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
-
-        with torch.no_grad():
-            psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
-            depth_variance = results[f'depth_variance_{typ}'].mean()
-
-        metrics = {
-            'psnr': psnr_,
-            'depth_variance': depth_variance,
-        }
+        if self.hparams.network_type == 'sdf':
+            with torch.no_grad():
+                psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
+                # depth_variance = results[f'depth_variance_{typ}'].mean()
+            metrics = {
+                'psnr': psnr_,
+                # 'depth_variance': depth_variance,
+            }
+        else:
+            with torch.no_grad():
+                psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
+                depth_variance = results[f'depth_variance_{typ}'].mean()
+            metrics = {
+                'psnr': psnr_,
+                'depth_variance': depth_variance,
+            }
 
         photo_loss = F.mse_loss(results[f'rgb_{typ}'], rgbs, reduction='mean')
         metrics['photo_loss'] = photo_loss
         
+        #semantic loss
         if self.hparams.enable_semantic:
             sem_logits = results[f'sem_map_{typ}']
             semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
@@ -484,6 +493,20 @@ class Runner:
         else:
             metrics['loss'] = photo_loss
 
+        if self.hparams.network_type == 'sdf':
+            # sdf 
+            metrics['gradient_error'] = results[f'gradient_error_{typ}']
+            metrics['curvature_error'] = results[f'curvature_error_{typ}']
+            if self.hparams.gradient_error_weight_increase and train_iterations > self.hparams.train_iterations / 2:
+                gradient_error_weight = 0.1
+            else:
+                gradient_error_weight = self.hparams.gradient_error_weight
+            metrics['loss'] = metrics['loss'] + gradient_error_weight * results[f'gradient_error_{typ}'] + 0.1 * results[f'curvature_error_{typ}']
+            if self.wandb is not None:
+                self.wandb.log({"train/inv_s": 1.0 / results['inv_s'], 'epoch': train_iterations})
+            if self.writer is not None:
+                self.writer.add_scalar('train/inv_s', 1.0 / results['inv_s'], train_iterations)
+            
         return metrics, bg_nerf_rays_present
 
     def _run_validation(self, train_index=-1) -> Dict[str, float]:
@@ -637,7 +660,23 @@ class Runner:
                             elif val_type == 'train':
                                 gt_label_rgb = None
                                 pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
-                            img = Runner._create_rendering_semantic(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, 
+                            
+                            if self.hparams.network_type == 'sdf':
+                                #  NSR  SDF ------------------------------------  save the normal_map
+                                # world -> camera 
+                                w2c = torch.linalg.inv(torch.cat((metadata_item.c2w,torch.tensor([[0,0,0,1]])),0))
+                                viz_result_normal_map = results[f'normal_map_{typ}']
+                                # viz_result_normal_map = torch.mm(viz_result_normal_map, w2c[:3,:3])# + w2c[:3,3]
+                                viz_result_normal_map = torch.mm(w2c[:3,:3],viz_result_normal_map.T).T
+                                # normalize 
+                                viz_result_normal_map = viz_result_normal_map / (1e-5 + torch.linalg.norm(viz_result_normal_map, ord = 2, dim=-1, keepdim=True))
+                                # viz_result_normal_map = viz_result_normal_map.view(*viz_rgbs.shape).cpu()
+                                viz_result_normal_map = viz_result_normal_map.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                                img = Runner._create_rendering_semantic(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, 
+                                                                    viz_result_rgbs, torch.from_numpy(visualize_sem), viz_result_normal_map)
+
+                            else:
+                                img = Runner._create_rendering_semantic(viz_rgbs, gt_label_rgb, pseudo_gt_label_rgb, 
                                                                     viz_result_rgbs, torch.from_numpy(visualize_sem), viz_depth)
                             img.save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
                             
@@ -670,9 +709,9 @@ class Runner:
                             ##################################   fg & bg
                             if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
                                 img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
-                                                                results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
+                                                                 results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
                                 img.save(str(experiment_path_current / 'val_rgbs' / '{}_fg_bg.jpg'.format(i)))
-                                
+                            
                                 # if self.wandb is not None:
                                 #     Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
                                 #     self.wandb.log({"images_fg_bg/{}".format(train_index): Img})
@@ -743,7 +782,7 @@ class Runner:
                     shutil.rmtree(base_tmp_path)
 
             return val_metrics
-        
+
     def _save_checkpoint(self, optimizers: Dict[str, any], scaler: GradScaler, train_index: int, dataset_index: int,
                          dataset_state: Optional[str]) -> None:
         dict = {
@@ -766,7 +805,10 @@ class Runner:
         torch.save(dict, self.model_path / '{}.pt'.format(train_index))
 
     def render_image(self, metadata: ImageMetadata, train_index=-1) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
-        from gp_nerf.rendering_gpnerf import render_rays
+        if self.hparams.network_type == 'sdf':
+            from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
+        else:
+            from gp_nerf.rendering_gpnerf import render_rays
         directions = get_ray_directions(metadata.W,
                                         metadata.H,
                                         metadata.intrinsics[0],

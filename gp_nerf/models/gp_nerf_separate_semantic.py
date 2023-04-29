@@ -88,11 +88,8 @@ class NeRF(nn.Module):
                 self.scaling_factor_altitude_range = (hparams.z_range[1]-hparams.z_range[0]) / (2 * hparams.aabb_bound)
 
         self.embedding_a = nn.Embedding(self.appearance_count, self.appearance_dim)
-        if 'quad' in hparams.dataset_path:
-            desired_resolution_fg = desired_resolution * hparams.quad_factor
-            print("Quad6k")
-        else:
-            desired_resolution_fg = desired_resolution
+        
+        desired_resolution_fg = desired_resolution
         encoding = "hashgrid"
         
         print("use two mlp")

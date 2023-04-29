@@ -9,6 +9,7 @@ def get_opts_base():
 
     parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
     parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train'], help='')
+    parser.add_argument('--logger_interval', type=int, default=100, help='training iterations')
 
 
     #sdf 
@@ -52,7 +53,6 @@ def get_opts_base():
     parser.add_argument('--contract_norm', type=str, default='l2', choices=['l2', 'inf'], help='')
     parser.add_argument('--contract_bg_len', default=1, type=float, help='set 0.4 of 1：1')
     parser.add_argument('--aabb_bound', default=1.6, type=float, help='work only when not use ellipsoid')
-    parser.add_argument('--quad_factor', default=6, type=float, help='')
 
 
     parser.add_argument('--train_iterations', type=int, default=100000, help='training iterations')

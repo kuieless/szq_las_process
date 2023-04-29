@@ -23,15 +23,13 @@ def _get_eval_opts() -> Namespace:
 def main(hparams: Namespace) -> None:
     assert hparams.ckpt_path is not None or hparams.container_path is not None
     if hparams.network_type == 'sdf':
-        from gp_nerf.runner_gpnerf_sdf import Runner
         hparams.cos_iterations = int(hparams.train_iterations / 2)
         hparams.normal_iterations = int(hparams.train_iterations / 2)
-    else:
-        from gp_nerf.runner_gpnerf import Runner
+
+    from gp_nerf.runner_gpnerf import Runner
     print(f"stop_semantic_grad:{hparams.stop_semantic_grad}")
     print(f"use_pano_lift:{hparams.use_pano_lift}")
 
-    print("run clean version, remove the bg nerf")
     hparams.bg_nerf = False
 
     if hparams.detect_anomalies:

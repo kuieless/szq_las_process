@@ -89,11 +89,8 @@ class NeRF(nn.Module):
 
 
         self.embedding_a = nn.Embedding(self.appearance_count, self.appearance_dim)
-        if 'quad' in hparams.dataset_path:
-            desired_resolution_fg = desired_resolution * hparams.quad_factor
-            print("Quad6k")
-        else:
-            desired_resolution_fg = desired_resolution
+        
+        desired_resolution_fg = desired_resolution
         encoding = "hashgrid"
 
         print("use two mlp")
