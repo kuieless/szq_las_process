@@ -1,6 +1,7 @@
 
 
 # Byte-compiled / optimized / DLL files
+train_test*
 logs_313
 */*/shencoder
 */*/*/build
