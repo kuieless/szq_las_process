@@ -364,7 +364,7 @@ class Runner:
                         self._save_checkpoint(optimizers, scaler, train_iterations, dataset_index,
                                               dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
             
-                if train_iterations > 0 and train_iterations % self.hparams.val_interval == 0:
+                if (train_iterations > 0 and train_iterations % self.hparams.val_interval == 0) or train_iterations == self.hparams.train_iterations:
                     val_metrics = self._run_validation(train_iterations)
                     self._write_final_metrics(val_metrics, train_iterations)
                 
