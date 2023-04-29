@@ -226,11 +226,11 @@ def _get_results(point_type,
     #cos_anneal_ratio = min(self.epoch / 100, 1.0), normal_epsilon_ratio= min((self.epoch - 50) / 100, 0.99),
     
     #2023/02/21
-    # cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.9)
-    # normal_epsilon_ratio = min((train_iterations) / (2*hparams.normal_iterations), 0.9)
+    cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.9)
+    normal_epsilon_ratio = min((train_iterations) / (2*hparams.normal_iterations), 0.95)
     #2023/02/22
-    cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.8)
-    normal_epsilon_ratio = min((train_iterations - hparams.normal_iterations) / (2*hparams.normal_iterations), 0.95)
+    # cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.8)
+    # normal_epsilon_ratio = min((train_iterations - hparams.normal_iterations) / (2*hparams.normal_iterations), 0.95)
     curvature_loss = False  #   和torch-nsr一样，暂时不考虑
 
     # # ---------------gpnerf sampling and contraction-------------------
