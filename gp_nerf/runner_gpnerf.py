@@ -560,7 +560,8 @@ class Runner:
                             sem_logits = results[f'sem_map_{typ}']
                             
                             if val_type == 'val':
-                                gt_label = metadata_item.load_gt()
+                                # gt_label = metadata_item.load_gt()
+                                gt_label = metadata_item.load_label()
                             elif val_type == 'train':
                                 gt_label = metadata_item.load_label()
                             
