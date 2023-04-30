@@ -626,7 +626,7 @@ class Runner:
                             val_metrics[agg_key] += val_lpips_metrics[network]
 
                         viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
-                        if 'depth_' in results:
+                        if f'depth_{typ}' in results:
                             viz_depth = results[f'depth_{typ}']
                             if f'fg_depth_{typ}' in results:
                                 to_use = results[f'fg_depth_{typ}'].view(-1)
@@ -674,7 +674,8 @@ class Runner:
                                 normal_viz = (viz_result_normal_map+1)*0.5*255
                                 img_list.append(normal_viz)
                             else:
-                                depth_vis = Runner.visualize_scalars(torch.log(viz_depth + 1e-8).view(viz_rgbs.shape[0], viz_rgbs.shape[1]).cpu())
+                                if viz_depth is not None:
+                                    depth_vis = torch.from_numpy(Runner.visualize_scalars(torch.log(viz_depth + 1e-8).view(viz_rgbs.shape[0], viz_rgbs.shape[1]).cpu()))
                                 img_list.append(depth_vis)
                             
                             # NOTE: 对需要可视化的list进行处理
