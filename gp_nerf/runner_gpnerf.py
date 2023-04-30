@@ -283,7 +283,10 @@ class Runner:
             # If discard_index >= 0, we already set to the right chunk through set_state
             if self.hparams.dataset_type == 'filesystem' and discard_index == -1:
                 dataset.load_chunk()
-                chunk_id += 1
+                # for i in  range(30):
+                #     dataset.load_chunk()
+                #     chunk_id += 1
+                #     print(f"chunk_id: {chunk_id}")
 
             if 'RANK' in os.environ:
                 world_size = int(os.environ['WORLD_SIZE'])
@@ -538,7 +541,7 @@ class Runner:
                     if val_type == 'val':
                         indices_to_eval = np.arange(len(self.val_items))
                     elif val_type == 'train':
-                        indices_to_eval = np.arange(len(self.train_items))
+                        indices_to_eval = np.arange(200)  #np.arange(len(self.train_items))
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
