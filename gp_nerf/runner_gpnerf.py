@@ -575,55 +575,58 @@ class Runner:
                             self.metrics_val.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
 
                         viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
-                        #add by zyq:
                         viz_result_rgbs = viz_result_rgbs.clamp(0,1)
-                        eval_rgbs = viz_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
-                        eval_result_rgbs = viz_result_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
+                        
+                        #calculate psnr  ssim  lpips ******************************:
+                        if val_type == 'val':
+                            eval_rgbs = viz_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
+                            eval_result_rgbs = viz_result_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
 
-                        val_psnr = psnr(eval_result_rgbs.view(-1, 3), eval_rgbs.view(-1, 3))
+                            val_psnr = psnr(eval_result_rgbs.view(-1, 3), eval_rgbs.view(-1, 3))
 
-                        main_print('The psnr of the {} image is: {}'.format(i, val_psnr))
-                        f.write('The psnr of the {} image is: {}\n'.format(i, val_psnr))
+                            main_print('The psnr of the {} image is: {}'.format(i, val_psnr))
+                            f.write('The psnr of the {} image is: {}\n'.format(i, val_psnr))
 
-                        metric_key = 'val/psnr/{}'.format(train_index)
-                        if self.wandb is not None:
-                            self.wandb.log({'val/psnr/{}'.format(train_index): val_psnr, 'epoch': i})
-                        if self.writer is not None:
-                            self.writer.add_scalar(metric_key, val_psnr, i)
-                        else:
-                            torch.save({'value': val_psnr, 'metric_key': metric_key, 'agg_key': 'val/psnr'},
-                                       metric_path / 'psnr-{}.pt'.format(i))
-
-                        val_metrics['val/psnr'] += val_psnr
-
-                        val_ssim = ssim(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs, 1)
-
-                        metric_key = 'val/ssim/{}'.format(train_index)
-                        if self.wandb is not None:
-                            self.wandb.log({'val/ssim/{}'.format(train_index): val_ssim, 'epoch':i})
-                        if self.writer is not None:
-                            self.writer.add_scalar(metric_key, val_ssim, i)
-                        else:
-                            torch.save({'value': val_ssim, 'metric_key': metric_key, 'agg_key': 'val/ssim'},
-                                       metric_path / 'ssim-{}.pt'.format(i))
-
-                        val_metrics['val/ssim'] += val_ssim
-
-                        val_lpips_metrics = lpips(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs)
-
-                        for network in val_lpips_metrics:
-                            agg_key = 'val/lpips/{}'.format(network)
-                            metric_key = '{}/{}'.format(agg_key, train_index)
+                            metric_key = 'val/psnr/{}'.format(train_index)
                             if self.wandb is not None:
-                                self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
+                                self.wandb.log({'val/psnr/{}'.format(train_index): val_psnr, 'epoch': i})
                             if self.writer is not None:
-                                self.writer.add_scalar(metric_key, val_lpips_metrics[network], i)
+                                self.writer.add_scalar(metric_key, val_psnr, i)
                             else:
-                                torch.save(
-                                    {'value': val_lpips_metrics[network], 'metric_key': metric_key, 'agg_key': agg_key},
-                                    metric_path / 'lpips-{}-{}.pt'.format(network, i))
+                                torch.save({'value': val_psnr, 'metric_key': metric_key, 'agg_key': 'val/psnr'},
+                                        metric_path / 'psnr-{}.pt'.format(i))
 
-                            val_metrics[agg_key] += val_lpips_metrics[network]
+                            val_metrics['val/psnr'] += val_psnr
+
+                            val_ssim = ssim(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs, 1)
+
+                            metric_key = 'val/ssim/{}'.format(train_index)
+                            if self.wandb is not None:
+                                self.wandb.log({'val/ssim/{}'.format(train_index): val_ssim, 'epoch':i})
+                            if self.writer is not None:
+                                self.writer.add_scalar(metric_key, val_ssim, i)
+                            else:
+                                torch.save({'value': val_ssim, 'metric_key': metric_key, 'agg_key': 'val/ssim'},
+                                        metric_path / 'ssim-{}.pt'.format(i))
+
+                            val_metrics['val/ssim'] += val_ssim
+
+                            val_lpips_metrics = lpips(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs)
+
+                            for network in val_lpips_metrics:
+                                agg_key = 'val/lpips/{}'.format(network)
+                                metric_key = '{}/{}'.format(agg_key, train_index)
+                                if self.wandb is not None:
+                                    self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
+                                if self.writer is not None:
+                                    self.writer.add_scalar(metric_key, val_lpips_metrics[network], i)
+                                else:
+                                    torch.save(
+                                        {'value': val_lpips_metrics[network], 'metric_key': metric_key, 'agg_key': agg_key},
+                                        metric_path / 'lpips-{}-{}.pt'.format(network, i))
+
+                                val_metrics[agg_key] += val_lpips_metrics[network]
+                        #  calculate psnr  ssim  lpips ******************************:
 
                         viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
                         if f'depth_{typ}' in results:
@@ -638,7 +641,6 @@ class Runner:
                         else: 
                             viz_depth = None
                         
-
                         ################################## visualize all
                         if self.hparams.enable_semantic:
                             
@@ -648,9 +650,8 @@ class Runner:
                                 pseudo_gt_label_rgb = custom2rgb(pseudo_gt_label_rgb.view(*viz_rgbs.shape[:-1]).cpu().numpy())
                                 pseudo_gt_label_rgb = torch.from_numpy(pseudo_gt_label_rgb)
                             elif val_type == 'train':
-                                gt_label_rgb = None
                                 pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
-                            
+                                gt_label_rgb = None
                             
                             # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                             img_list = [viz_rgbs * 255, gt_label_rgb, pseudo_gt_label_rgb, viz_result_rgbs * 255, torch.from_numpy(visualize_sem)]
