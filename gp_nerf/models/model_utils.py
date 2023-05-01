@@ -27,8 +27,6 @@ def _get_single_nerf_inner(hparams: Namespace, appearance_count: int, layer_dim:
         from gp_nerf.models.gp_nerf import NeRF, ShiftedSoftplus
     elif hparams.network_type =='mlp':
         from gp_nerf.models.network_mlp import NeRF, ShiftedSoftplus
-    elif hparams.network_type == 'separate_semantic':
-        from gp_nerf.models.gp_nerf_separate_semantic import NeRF, ShiftedSoftplus
     elif hparams.network_type == 'sdf':
         from gp_nerf.models.gp_nerf_sdf import NeRF, ShiftedSoftplus
         

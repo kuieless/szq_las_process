@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from PIL import Image
 from torch.cuda.amp import GradScaler
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ExponentialLR
+from torch.optim.lr_scheduler import ExponentialLR, StepLR
 from torch.utils.data import DistributedSampler, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms as T
@@ -244,9 +244,14 @@ class Runner:
 
         schedulers = {}
         for key, optimizer in optimizers.items():
-            schedulers[key] = ExponentialLR(optimizer,
-                                            gamma=self.hparams.lr_decay_factor ** (1 / self.hparams.train_iterations),
-                                            last_epoch=train_iterations - 1)
+            # schedulers[key] = ExponentialLR(optimizer,
+            #                                 gamma=self.hparams.lr_decay_factor ** (1 / self.hparams.train_iterations),
+            #                                 last_epoch=train_iterations - 1)
+            schedulers[key] = StepLR(optimizer,
+                                     step_size=self.hparams.train_iterations / 4,
+                                     gamma=self.hparams.lr_decay_factor,
+                                     last_epoch=train_iterations - 1)
+            
 
         # load data
         if self.hparams.dataset_type == 'filesystem':
@@ -387,9 +392,12 @@ class Runner:
 
 
     def eval(self):
+        if self.hparams.ckpt_path is not None:
+            checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
+            train_iterations = checkpoint['iteration']
         self._setup_experiment_dir()
-        val_metrics = self._run_validation(100000)
-        self._write_final_metrics(val_metrics, train_iterations=100000)
+        val_metrics = self._run_validation(train_iterations)
+        self._write_final_metrics(val_metrics, train_iterations=train_iterations)
         
 
 

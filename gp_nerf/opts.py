@@ -10,6 +10,9 @@ def get_opts_base():
     parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
     parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train'], help='')
     parser.add_argument('--logger_interval', type=int, default=100, help='training iterations')
+    
+    parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
+    parser.add_argument('--separate_semantic', type=eval, default=False, help='')
 
 
     #sdf 
@@ -27,7 +30,7 @@ def get_opts_base():
     parser.add_argument('--enable_semantic', default=True, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
-    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'separate_semantic', 'sdf'], help='')
+    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf'], help='')
     parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')
     
     parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')
@@ -97,7 +100,8 @@ def get_opts_base():
     parser.add_argument('--val_scale_factor', type=int, default=4,
                         help='downsamples validation images if greater than 1')
 
-    parser.add_argument('--pos_xyz_dim', type=int, default=12,
+    #12 -> 2
+    parser.add_argument('--pos_xyz_dim', type=int, default=2,
                         help='frequency encoding dimension applied to xyz position')
     parser.add_argument('--pos_dir_dim', type=int, default=4,
                         help='frequency encoding dimension applied to view direction (set to 0 to disable)')
@@ -122,7 +126,7 @@ def get_opts_base():
     parser.add_argument('--perturb', type=float, default=1.0, help='factor to perturb depth sampling points')
     parser.add_argument('--noise_std', type=float, default=1.0, help='std dev of noise added to regularize sigma')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-    parser.add_argument('--lr_decay_factor', type=float, default=1, help='learning rate decay factor')
+    parser.add_argument('--lr_decay_factor', type=float, default=0.5, help='learning rate decay factor')
     parser.add_argument('--no_bg_nerf', dest='bg_nerf', default=True, action='store_false',help='do not use background MLP')
     parser.add_argument('--ellipse_scale_factor', type=float, default=1.1, help='Factor to scale foreground bounds')
     parser.add_argument('--no_ellipse_bounds', dest='ellipse_bounds', default=True, action='store_false', help='use spherical foreground bounds instead of ellipse')

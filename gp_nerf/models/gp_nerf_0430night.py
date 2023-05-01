@@ -22,11 +22,10 @@ def fc_block(in_f, out_f):
 
 def semantic_mlp(in_f, out_f, dim_mlp):
     semantic_linears = [torch.nn.Linear(in_f, dim_mlp)]
+    for i in range(3):
+        semantic_linears.append(torch.nn.ReLU(inplace=True))
+        semantic_linears.append(torch.nn.Linear(dim_mlp, dim_mlp))
     semantic_linears.append(torch.nn.ReLU(inplace=True))
-
-    semantic_linears.append(torch.nn.Linear(dim_mlp, dim_mlp))
-    semantic_linears.append(torch.nn.ReLU(inplace=True))
-    
     semantic_linears.append(torch.nn.Linear(dim_mlp, out_f))
     return torch.nn.Sequential(*semantic_linears)
 
