@@ -30,7 +30,7 @@ def get_opts_base():
     parser.add_argument('--enable_semantic', default=True, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
-    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf'], help='')
+    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf', '0430_day', '0430_night'], help='')
     parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')
     
     parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')

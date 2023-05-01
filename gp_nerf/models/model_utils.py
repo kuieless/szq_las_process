@@ -25,6 +25,10 @@ def _get_single_nerf_inner(hparams: Namespace, appearance_count: int, layer_dim:
     rgb_dim = 3  #3 * ((hparams.sh_deg + 1) ** 2) if hparams.sh_deg is not None else 3
     if hparams.network_type =='gpnerf':
         from gp_nerf.models.gp_nerf import NeRF, ShiftedSoftplus
+    elif hparams.network_type =='0430_day':
+        from gp_nerf.models.gp_nerf_0430day_small import NeRF, ShiftedSoftplus
+    elif hparams.network_type =='0430_night':
+        from gp_nerf.models.gp_nerf_0430night import NeRF, ShiftedSoftplus
     elif hparams.network_type =='mlp':
         from gp_nerf.models.network_mlp import NeRF, ShiftedSoftplus
     elif hparams.network_type == 'sdf':

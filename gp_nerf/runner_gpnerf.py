@@ -399,7 +399,7 @@ class Runner:
     def _write_final_metrics(self, val_metrics: Dict[str, float], train_iterations) -> None:
         if self.is_master:
             experiment_path_current = self.experiment_path / "eval_{}".format(train_iterations)
-            with (experiment_path_current /'metrics.txt').open('w') as f:
+            with (experiment_path_current /'metrics.txt').open('a') as f:
                 for key in val_metrics:
 
                     avg_val = val_metrics[key] / len(self.val_items)
@@ -549,7 +549,11 @@ class Runner:
                     dist.barrier()
                 else:
                     if val_type == 'val':
-                        indices_to_eval = np.arange(len(self.val_items))
+                        if 'residence'in self.hparams.dataset_path:
+                            indices_to_eval = np.arange(len(self.val_items) - 2)
+                        
+                        else:
+                            indices_to_eval = np.arange(len(self.val_items))
                     elif val_type == 'train':
                         indices_to_eval = np.arange(200)  #np.arange(len(self.train_items))
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
@@ -573,8 +577,10 @@ class Runner:
                             sem_logits = results[f'sem_map_{typ}']
                             
                             if val_type == 'val':
-                                # gt_label = metadata_item.load_gt()
-                                gt_label = metadata_item.load_label()
+                                if 'sci' in self.hparams.dataset_path or 'residence'in self.hparams.dataset_path:
+                                    gt_label = metadata_item.load_gt()
+                                else:
+                                    gt_label = metadata_item.load_label()
                             elif val_type == 'train':
                                 gt_label = metadata_item.load_label()
                             
@@ -605,22 +611,18 @@ class Runner:
                                 self.wandb.log({'val/psnr/{}'.format(train_index): val_psnr, 'epoch': i})
                             if self.writer is not None:
                                 self.writer.add_scalar(metric_key, val_psnr, i)
-                            else:
-                                torch.save({'value': val_psnr, 'metric_key': metric_key, 'agg_key': 'val/psnr'},
-                                        metric_path / 'psnr-{}.pt'.format(i))
 
                             val_metrics['val/psnr'] += val_psnr
 
                             val_ssim = ssim(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs, 1)
 
                             metric_key = 'val/ssim/{}'.format(train_index)
+                            
+                            # TODO: 暂时不放ssim
                             if self.wandb is not None:
                                 self.wandb.log({'val/ssim/{}'.format(train_index): val_ssim, 'epoch':i})
                             if self.writer is not None:
                                 self.writer.add_scalar(metric_key, val_ssim, i)
-                            else:
-                                torch.save({'value': val_ssim, 'metric_key': metric_key, 'agg_key': 'val/ssim'},
-                                        metric_path / 'ssim-{}.pt'.format(i))
 
                             val_metrics['val/ssim'] += val_ssim
 
@@ -629,14 +631,11 @@ class Runner:
                             for network in val_lpips_metrics:
                                 agg_key = 'val/lpips/{}'.format(network)
                                 metric_key = '{}/{}'.format(agg_key, train_index)
-                                if self.wandb is not None:
-                                    self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
-                                if self.writer is not None:
-                                    self.writer.add_scalar(metric_key, val_lpips_metrics[network], i)
-                                else:
-                                    torch.save(
-                                        {'value': val_lpips_metrics[network], 'metric_key': metric_key, 'agg_key': agg_key},
-                                        metric_path / 'lpips-{}-{}.pt'.format(network, i))
+                                # TODO: 暂时不放lpips
+                                # if self.wandb is not None:
+                                #     self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
+                                # if self.writer is not None:
+                                #     self.writer.add_scalar(metric_key, val_lpips_metrics[network], i)
 
                                 val_metrics[agg_key] += val_lpips_metrics[network]
                         #  calculate psnr  ssim  lpips ******************************:
@@ -767,7 +766,7 @@ class Runner:
                     iou_value[class_name] = iou
                 print(iou_value)
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
-                with (experiment_path_current /'semantic.txt').open('w') as f:
+                with (experiment_path_current /'metrics.txt').open('a') as f:
                     f.write('eval_value:\n')
                     for key in eval_value:
                         f.write(f'{key:<12}: {eval_value[key]}\n')
@@ -775,6 +774,15 @@ class Runner:
                     for key in iou_value:
                         f.write(f'{key:<12}: {iou_value[key]}\n' )
                         # f.write('eval_value:\n{}\niou_value:\n{}\n'.format(eval_value, iou_value))
+                
+                if self.wandb is not None:
+                    self.wandb.log({'val/mIoU': mIoU, 'epoch':train_index})
+                    self.wandb.log({'val/F1': F1, 'epoch':train_index})
+                    self.wandb.log({'val/OA': OA, 'epoch':train_index})
+                if self.writer is not None:
+                    self.writer.add_scalar('val/mIoU', mIoU, train_index)
+                    self.writer.add_scalar('val/F1', F1, train_index)
+                    self.writer.add_scalar('val/OA', OA, train_index)
 
                 self.writer.flush()
                 self.writer.close()
