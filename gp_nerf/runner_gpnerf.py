@@ -527,6 +527,10 @@ class Runner:
         with torch.inference_mode():
             #semantic 
             self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+            if self.hparams.label_type == 'unetformer':
+                CLASSES = ('Building', 'Road', 'Tree', 'LowVeg', 'Moving_Car',  'Static_Car', 'Human', 'Clutter')
+            elif self.hparams.label_type == 'm2f_custom':
+                CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
             
             self.nerf.eval()
             val_metrics = defaultdict(float)
@@ -559,8 +563,9 @@ class Runner:
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
-                with (experiment_path_current / 'psnr.txt').open('w') as f:
+                with (experiment_path_current / 'psnr.txt').open('w') as f, (experiment_path_current / 'iou.txt').open('w') as f2:
                     for i in main_tqdm(indices_to_eval):
+                        self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                         # if i != 0:
                         #     break
                         if val_type == 'val':
@@ -592,7 +597,7 @@ class Runner:
 
                             # OA, mIoU
                             self.metrics_val.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
-
+                            self.metrics_val_each.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
                         viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
                         viz_result_rgbs = viz_result_rgbs.clamp(0,1)
                         
@@ -617,7 +622,7 @@ class Runner:
                             val_ssim = ssim(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs, 1)
 
                             metric_key = 'val/ssim/{}'.format(train_index)
-                            
+
                             # TODO: 暂时不放ssim
                             if self.wandb is not None:
                                 self.wandb.log({'val/ssim/{}'.format(train_index): val_ssim, 'epoch':i})
@@ -743,15 +748,38 @@ class Runner:
                                 #     self.writer.add_image('val/{}_fg_bg'.format(i), T.ToTensor()(img), train_index)
                             ################################## 
 
+                                            # OA, mIoU
+                                mIoU = np.nanmean(self.metrics_val_each.Intersection_over_Union())
+                                F1 = np.nanmean(self.metrics_val_each.F1())
+                                OA = np.nanmean(self.metrics_val_each.OA())
+                                iou_per_class = self.metrics_val_each.Intersection_over_Union()
+                                eval_value = {'mIoU': mIoU,
+                                            'F1': F1,
+                                            'OA': OA}
+                                iou_value = {}
+                                for class_name, iou in zip(CLASSES, iou_per_class):
+                                    iou_value[class_name] = iou
+                                f2.write('*'*10+f'{i}'+'*'*10+'\n')
+                                f2.write('eval_value:\n')
+                                for key in eval_value:
+                                    f2.write(f'{key:<12}: {eval_value[key]}\n')
+                                f2.write('iou_value:\n')
+                                for key in iou_value:
+                                    f2.write(f'{key:<12}: {iou_value[key]}\n' )
+                                f2.write('\n')
 
+                                if self.wandb is not None:
+                                    self.wandb.log({'val/mIoU_each/{}'.format(train_index): mIoU, 'epoch':i})
+                                    self.wandb.log({'val/F1_each/{}'.format(train_index): F1, 'epoch':i})
+                                    self.wandb.log({'val/OA_each/{}'.format(train_index): OA, 'epoch':i})
+                                if self.writer is not None:
+                                    self.writer.add_scalar('val/mIoU_each/{}'.format(train_index), mIoU, i)
+                                    self.writer.add_scalar('val/F1_each/{}'.format(train_index), F1, i)
+                                    self.writer.add_scalar('val/OA_each/{}'.format(train_index), OA, i)
+                                self.metrics_val_each.reset()
                         del results
 
                 # OA, mIoU
-
-                if self.hparams.label_type == 'unetformer':
-                    CLASSES = ('Building', 'Road', 'Tree', 'LowVeg', 'Moving_Car',  'Static_Car', 'Human', 'Clutter')
-                elif self.hparams.label_type == 'm2f_custom':
-                    CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
                 mIoU = np.nanmean(self.metrics_val.Intersection_over_Union())
                 F1 = np.nanmean(self.metrics_val.F1())
                 OA = np.nanmean(self.metrics_val.OA())
