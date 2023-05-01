@@ -23,6 +23,7 @@ __pycache__/
 *.gif
 *.pdf
 __pycache__
+logs_nouse
 logs_zyq/
 exp/
 feature_map/

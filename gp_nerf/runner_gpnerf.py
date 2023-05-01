@@ -702,7 +702,7 @@ class Runner:
                             # img.save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
                             
                             if self.writer is not None:
-                                self.writer.add_image('val/{}'.format(i), img, train_index)
+                                self.writer.add_image('val/{}'.format(i), img.byte(), train_index)
                             if self.wandb is not None:
                                 Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
                                 self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
