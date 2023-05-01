@@ -61,13 +61,6 @@ class Runner:
             self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
             self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
 
-        if hparams.wandb_id =='None':
-            self.wandb = None
-            print('no using wandb')
-        else:
-            self.wandb = wandb.init(project=hparams.wandb_id, entity="mega-ingp")
-            self.wandb.name = hparams.wandb_run_name
-
         if hparams.ckpt_path is not None:
             checkpoint = torch.load(hparams.ckpt_path, map_location='cpu')
             np.random.set_state(checkpoint['np_random_state'])     
@@ -97,6 +90,8 @@ class Runner:
             self.experiment_path = self._get_experiment_path() if self.is_master else None
             self.model_path = self.experiment_path / 'models' if self.is_master else None
 
+        
+        self.wandb = None
         self.writer = None
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -443,6 +438,13 @@ class Runner:
             self.writer = SummaryWriter(str(self.experiment_path / 'tb')) if self.is_master else None
         if 'RANK' in os.environ:
             dist.barrier()
+        
+        if self.hparams.wandb_id =='None':
+            self.wandb = None
+            print('no using wandb')
+        else:
+            self.wandb = wandb.init(project=self.hparams.wandb_id, entity="mega-ingp", name=self.hparams.wandb_run_name, dir=self.experiment_path)
+            
 
     def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], train_iterations = -1) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
