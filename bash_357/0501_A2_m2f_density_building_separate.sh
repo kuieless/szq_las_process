@@ -2,7 +2,7 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=7
 
-exp_name='logs_357/0501_A2_m2f_density_building_separate'
+exp_name='logs_357/0502_A2_m2f_density_building_separate'
 dataset1='Mill19'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2='building' #  "building"  "rubble"  "quad"  "residence"  "sci-art"  "campus"
 wandb_id=gpnerf_semantic  #gpnerf_semantic   None
