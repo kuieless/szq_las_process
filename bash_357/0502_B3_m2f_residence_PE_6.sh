@@ -1,10 +1,10 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=4
 
-exp_name='logs_357/0502_A1_m2f_building_PE_6'
-dataset1='Mill19'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
-dataset2='building' #  "building"  "rubble"  "quad"  "residence"  "sci-art"  "campus"
+exp_name='logs_357/0502_B3_m2f_residence_PE_6'
+dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
+dataset2='residence' #  "building"  "rubble"  "quad"  "residence"  "sci-art"  "campus"
 wandb_id=gpnerf_semantic  #gpnerf_semantic   None
 
 
