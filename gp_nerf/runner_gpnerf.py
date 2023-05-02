@@ -554,11 +554,10 @@ class Runner:
                 else:
                     if val_type == 'val':
                         if 'residence'in self.hparams.dataset_path:
-                            indices_to_eval = np.arange(len(self.val_items) - 2)
+                            self.val_items=self.val_items[:19]
                         elif 'building'in self.hparams.dataset_path:
-                            indices_to_eval = np.arange(10)
-                        else:
-                            indices_to_eval = np.arange(len(self.val_items))
+                            self.val_items=self.val_items[:10]
+                        indices_to_eval = np.arange(len(self.val_items))
                     elif val_type == 'train':
                         indices_to_eval = np.arange(200)  #np.arange(len(self.train_items))
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
