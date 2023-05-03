@@ -101,7 +101,7 @@ def get_opts_base():
                         help='downsamples validation images if greater than 1')
 
     #12 -> 2
-    parser.add_argument('--pos_xyz_dim', type=int, default=2,
+    parser.add_argument('--pos_xyz_dim', type=int, default=10,
                         help='frequency encoding dimension applied to xyz position')
     parser.add_argument('--pos_dir_dim', type=int, default=4,
                         help='frequency encoding dimension applied to view direction (set to 0 to disable)')

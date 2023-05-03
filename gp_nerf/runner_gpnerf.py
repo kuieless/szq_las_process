@@ -555,7 +555,7 @@ class Runner:
                     if val_type == 'val':
                         if 'residence'in self.hparams.dataset_path:
                             self.val_items=self.val_items[:19]
-                        elif 'building'in self.hparams.dataset_path:
+                        elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
                             self.val_items=self.val_items[:10]
                         indices_to_eval = np.arange(len(self.val_items))
                     elif val_type == 'train':
@@ -582,10 +582,7 @@ class Runner:
                             sem_logits = results[f'sem_map_{typ}']
                             
                             if val_type == 'val':
-                                if 'sci' in self.hparams.dataset_path or 'residence'in self.hparams.dataset_path or 'building'in self.hparams.dataset_path:
                                     gt_label = metadata_item.load_gt()
-                                else:
-                                    gt_label = metadata_item.load_label()
                             elif val_type == 'train':
                                 gt_label = metadata_item.load_label()
                             

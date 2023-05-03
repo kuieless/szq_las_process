@@ -1,6 +1,7 @@
 
 
 # Byte-compiled / optimized / DLL files
+video
 train_test*
 logs_313
 */*/shencoder
