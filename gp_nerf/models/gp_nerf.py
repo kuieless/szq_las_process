@@ -58,7 +58,6 @@ class NeRF(nn.Module):
         in_channels_xyz = xyz_dim + xyz_dim * pos_xyz_dim * 2
         print("semantic layer_dim: {}".format(self.semantic_layer_dim))
 
-
         #semantic
         self.enable_semantic = hparams.enable_semantic
         self.stop_semantic_grad = hparams.stop_semantic_grad

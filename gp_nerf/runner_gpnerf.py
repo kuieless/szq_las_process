@@ -209,15 +209,39 @@ class Runner:
         self._setup_experiment_dir()
         scaler = torch.cuda.amp.GradScaler(enabled=self.hparams.amp)
 
-        optimizers = {}
-        optimizers['nerf'] = Adam(self.nerf.parameters(), lr=self.hparams.lr)
+        if self.hparams.enable_semantic and self.hparams.freeze_geo and self.hparams.ckpt_path is not None:
+            for p_base in self.nerf.encoder.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.encoder_bg.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.plane_encoder.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.sigma_net.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.sigma_net_bg.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.color_net.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.color_net_bg.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.embedding_a.parameters():
+                p_base.requires_grad = False
+                
+            non_frozen_parameters = [p for p in self.nerf.parameters() if p.requires_grad]
+            optimizers = {}
+            optimizers['nerf'] = Adam(non_frozen_parameters, lr=self.hparams.lr)
+        else:
+            optimizers = {}
+            optimizers['nerf'] = Adam(self.nerf.parameters(), lr=self.hparams.lr)
+        
         if self.bg_nerf is not None:
             optimizers['bg_nerf'] = Adam(self.bg_nerf.parameters(), lr=self.hparams.lr)
 
         if self.hparams.ckpt_path is not None:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
-            #add by zyq : load the pretrain-gpnerf to train the semantic
-            if self.hparams.resume_ckpt_state:
+            # # add by zyq : load the pretrain-gpnerf to train the semantic
+            # if self.hparams.resume_ckpt_state:
+            if False:
                 train_iterations = checkpoint['iteration']
                 for key, optimizer in optimizers.items():
                     optimizer_dict = optimizer.state_dict()
@@ -230,9 +254,9 @@ class Runner:
             scaler_dict = scaler.state_dict()
             scaler_dict.update(checkpoint['scaler'])
             scaler.load_state_dict(scaler_dict)
-
             
-            discard_index = checkpoint['dataset_index'] if self.hparams.resume_ckpt_state and not self.hparams.debug else -1
+            discard_index = checkpoint['dataset_index'] if (self.hparams.resume_ckpt_state and not self.hparams.debug) and (not self.hparams.freeze_geo) else -1
+            print(f"dicard_index:{discard_index}")
         else:
             train_iterations = 0
             discard_index = -1
@@ -260,7 +284,7 @@ class Runner:
                                         self.hparams.center_pixels, self.device,
                                         [Path(x) for x in sorted(self.hparams.chunk_paths)], self.hparams.num_chunks,
                                         self.hparams.train_scale_factor, self.hparams.disk_flush_size,self.hparams.desired_chunks)
-            if self.hparams.ckpt_path is not None and self.hparams.resume_ckpt_state and not self.hparams.debug:
+            if self.hparams.ckpt_path is not None and ((self.hparams.resume_ckpt_state and not self.hparams.debug) and (not self.hparams.freeze_geo)):
                 dataset.set_state(checkpoint['dataset_state'])
             if 'RANK' in os.environ and self.is_local_master:
                 dist.barrier()
@@ -981,7 +1005,6 @@ class Runner:
         
 
         val_paths = sorted(list((dataset_path / 'val' / 'metadata').iterdir()))
-        # zyq: control the number for debug
         # train_paths=train_paths[:10]
         # val_paths = val_paths[:2]
 

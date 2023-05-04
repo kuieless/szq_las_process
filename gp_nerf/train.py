@@ -21,6 +21,9 @@ def _get_train_opts() -> Namespace:
 
 @record
 def main(hparams: Namespace) -> None:
+    if hparams.freeze_geo:
+        assert hparams.ckpt_path is not None
+        
     if hparams.network_type == 'sdf':
         hparams.cos_iterations = int(hparams.train_iterations / 2)
         hparams.normal_iterations = int(hparams.train_iterations / 2)

@@ -13,6 +13,7 @@ def get_opts_base():
     
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
+    parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
 
 
     #sdf 
