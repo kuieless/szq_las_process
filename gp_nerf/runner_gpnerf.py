@@ -28,6 +28,8 @@ from tqdm import tqdm
 
 from gp_nerf.datasets.filesystem_dataset import FilesystemDataset
 from gp_nerf.datasets.memory_dataset import MemoryDataset
+from gp_nerf.datasets.memory_dataset_sam import MemoryDataset_SAM
+
 from gp_nerf.image_metadata import ImageMetadata
 from mega_nerf.metrics import psnr, ssim, lpips
 from mega_nerf.misc_utils import main_print, main_tqdm
@@ -38,8 +40,8 @@ import wandb
 from torchvision.utils import make_grid
 
 #semantic
-from gp_nerf.unetformer.uavid2rgb import uavid2rgb, custom2rgb
-from gp_nerf.unetformer.metric import Evaluator
+from tools.unetformer.uavid2rgb import uavid2rgb, custom2rgb
+from tools.unetformer.metric import Evaluator
 
 def get_n_params(model):
     pp=0
@@ -290,6 +292,9 @@ class Runner:
                 dist.barrier()
         elif self.hparams.dataset_type == 'memory':
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device)
+        elif self.hparams.dataset_type == 'sam':
+            dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device)
         else:
             raise Exception('Unrecognized dataset type: {}'.format(self.hparams.dataset_type))

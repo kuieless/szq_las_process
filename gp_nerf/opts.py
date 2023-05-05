@@ -14,7 +14,9 @@ def get_opts_base():
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-
+    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['filesystem', 'memory', 'sam'],
+                        help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
+                        batches or pixels/rays to disk""")
 
     #sdf 
     parser.add_argument('--gradient_error_weight', default=0.005, type=float, help='')
@@ -70,9 +72,7 @@ def get_opts_base():
 
     parser.add_argument('--ckpt_path', type=str, default=None, help='path towards serialized model checkpoint')
     parser.add_argument('--config_file', is_config_file=True)
-    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['filesystem', 'memory'],
-                        help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
-                        batches or pixels/rays to disk""")
+    
     parser.add_argument('--chunk_paths', type=str, nargs='+', default=None,
                         help="""scratch directory to write shuffled batches to when training using the filesystem dataset. 
     Should be set to a non-existent path when first created, and can then be reused by subsequent training runs once all chunks are written""")
