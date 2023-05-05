@@ -96,6 +96,8 @@ class MemoryDataset_SAM(Dataset):
         selected_points_group = []
         group_id = 0
         selected_one = []
+        #visualize
+        visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
         while N_selected < self.N_total:
             random_point = torch.nonzero(bool_tensor)[torch.randint(high=torch.sum(bool_tensor), size=(1,))]
             random_point = random_point.flip(1)
@@ -117,7 +119,41 @@ class MemoryDataset_SAM(Dataset):
                 N_selected += self.N_each
             group_id += 1
             bool_tensor = bool_tensor * (~masks_max)
-        
+            
+        #     # *****************************************************************************
+        #     # below is visualization to save the sampling images
+        #     masks_max_vis = np.stack([masks_max.cpu().numpy(), masks_max.cpu().numpy(), masks_max.cpu().numpy()], axis=2)
+        #     for point in selected_one:
+        #         # print(point)
+        #         for k in range(point.size(0)):  # W , H
+        #             x, y = int(point[k, 0]), int(point[k, 1])
+        #             for m in range(-2,2):
+        #                 for n in range(-2,2):
+        #                     if x+m < W and x+m >0 and y+n < H and y+n >0:
+        #                         masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
+        #     cv2.imwrite(f"zyq/mask_final_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
+        #     visual += masks_max * group_id
+        # visual = visual.cpu().numpy()
+        # rgb_array = np.stack([visual, visual, visual], axis=2)*(127/visual.max()+127)
+        # rgb_array_test = rgb_array
+        # for point in selected_points:
+        #     for k in range(point.size(0)):  # H, W
+        #         x, y = point[k, 0], point[k, 1]
+        #         if x < H and x >0 and y < W and y >0:
+        #             rgb_array_test[x, y] = np.array([0, 128, 0])
+        # for point in selected_one:
+        #     # print(point)
+        #     for k in range(point.size(0)):  # W , H
+        #         x, y = int(point[k, 0]), int(point[k, 1])
+        #         for m in range(-5,5):
+        #             for n in range(-5,5):
+        #                 if x+m < W and x+m >0 and y+n < H and y+n >0:
+        #                     rgb_array_test[(y+n), (x+m)] = np.array([0, 0, 128])
+        # cv2.imwrite(f"zyq/mask_final.png", (rgb_array_test).astype(np.int32))
+        # print(f"zyq/mask_final.png")
+        # # *****************************************************************************
+
+
         selected_points = torch.cat(selected_points)
         selected_points_group = torch.cat(selected_points_group)
         assert selected_points.size(0) == selected_points_group.size(0)
