@@ -74,14 +74,15 @@ class MemoryDataset_SAM(Dataset):
         
         main_print('Finished loading data')
 
-        self._rgbs = torch.stack(rgbs)
+        # self._rgbs = torch.stack(rgbs)
         self._rays = torch.stack(rays)
         self._img_indices = torch.stack(indices)
         self._labels = torch.stack(labels)
         self._sam_features = torch.stack(sam_features)
 
     def __len__(self) -> int:
-        return self._rgbs.shape[0]
+        # return self._rgbs.shape[0]
+        return self._rays.shape[0]
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         #sam_mask
@@ -115,7 +116,7 @@ class MemoryDataset_SAM(Dataset):
             else:
                 select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(self.N_each,))]
                 selected_points.append(select_point)
-                selected_points_group.append(group_id * torch.ones(select_point.size(0)).to(self.device))
+                selected_points_group.append(group_id * torch.ones(select_point.size(0),dtype=torch.int).to(self.device))
                 N_selected += self.N_each
             group_id += 1
             bool_tensor = bool_tensor * (~masks_max)
@@ -163,7 +164,7 @@ class MemoryDataset_SAM(Dataset):
 
 
         return {
-            'rgbs': self._rgbs[0, selected_points[:, 0], selected_points[:, 1], :],
+            # 'rgbs': self._rgbs[0, selected_points[:, 0], selected_points[:, 1], :],
             'rays': self._rays[0, selected_points[:, 0], selected_points[:, 1], :],
             'img_indices': self._img_indices[0, selected_points[:, 0], selected_points[:, 1]],
             'labels': self._labels[0, selected_points[:, 0], selected_points[:, 1]],

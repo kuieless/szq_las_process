@@ -62,6 +62,8 @@ class Runner:
             CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
             self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
             self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
+            if hparams.dataset_type == 'sam':
+                self.crossentropy_loss_feat = lambda pred, target: nn.CrossEntropyLoss()(pred, target)
 
         if hparams.ckpt_path is not None:
             checkpoint = torch.load(hparams.ckpt_path, map_location='cpu')
@@ -355,7 +357,8 @@ class Runner:
                     if self.hparams.dataset_type == 'sam':
                         groups = item['groups'].to(self.device, non_blocking=True)
                         metrics, bg_nerf_rays_present = self._training_step(
-                        item['rgbs'].squeeze(0).to(self.device, non_blocking=True),
+                        None,
+                        # item['rgbs'].squeeze(0).to(self.device, non_blocking=True),
                         item['rays'].squeeze(0).to(self.device, non_blocking=True),
                         image_indices.squeeze(0), labels.squeeze(0), groups.squeeze(0), train_iterations)
                     else:
@@ -511,32 +514,52 @@ class Runner:
         
         
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
-        if self.hparams.network_type == 'sdf':
-            with torch.no_grad():
-                psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
-                # depth_variance = results[f'depth_variance_{typ}'].mean()
-            metrics = {
-                'psnr': psnr_,
-                # 'depth_variance': depth_variance,
-            }
-        else:
-            with torch.no_grad():
-                psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
-                depth_variance = results[f'depth_variance_{typ}'].mean()
-            metrics = {
-                'psnr': psnr_,
-                'depth_variance': depth_variance,
-            }
+        if not self.hparams.freeze_geo:
+            if self.hparams.network_type == 'sdf':
+                with torch.no_grad():
+                    psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
+                    # depth_variance = results[f'depth_variance_{typ}'].mean()
+                metrics = {
+                    'psnr': psnr_,
+                    # 'depth_variance': depth_variance,
+                }
+            else:
+                with torch.no_grad():
+                    psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
+                    depth_variance = results[f'depth_variance_{typ}'].mean()
+                metrics = {
+                    'psnr': psnr_,
+                    'depth_variance': depth_variance,
+                }
 
-        photo_loss = F.mse_loss(results[f'rgb_{typ}'], rgbs, reduction='mean')
-        metrics['photo_loss'] = photo_loss
+            photo_loss = F.mse_loss(results[f'rgb_{typ}'], rgbs, reduction='mean')
+            metrics['photo_loss'] = photo_loss
+        else:
+            metrics['photo_loss'] = 0
         
         #semantic loss
         if self.hparams.enable_semantic:
             sem_logits = results[f'sem_map_{typ}']
             semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
             metrics['semantic_loss'] = semantic_loss
-            metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss
+            if self.hparams.dataset_type == 'sam':
+                semantic_feature  = results[f'semantic_feature_{typ}']
+                group_id, group_counts = torch.unique(groups, return_counts=True)
+                counts = 0
+                group_loss_each = 0
+                for cur_counts in group_counts:
+                    feature_group = semantic_feature[counts:counts+cur_counts.item()]
+                    feature_group_mean = feature_group.detach().mean(dim=0).repeat(feature_group.shape[0],1)
+                    group_loss_each += (self.crossentropy_loss_feat(feature_group, feature_group_mean))
+                    counts += cur_counts.item()
+                group_loss = group_loss_each / len(group_counts)
+                metrics['sam_group_loss'] = group_loss
+                metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss + self.hparams.wgt_group_loss * group_loss
+
+            else:
+                metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss
+
+            
             with torch.no_grad():
                 if train_iterations % 1000 == 0:
                     sem_label = self.logits_2_label(sem_logits)

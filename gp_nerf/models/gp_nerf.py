@@ -44,6 +44,11 @@ class NeRF(nn.Module):
                  xyz_dim: int,  # xyz_dim : fg = 3, bg =4
                  sigma_activation: nn.Module, hparams):
         super(NeRF, self).__init__()
+
+        #sam
+        self.dataset_type = hparams.dataset_type
+        print(f"the dataset_type is :{self.dataset_type}")
+
         self.layer_dim = layer_dim
         print("layer_dim: {}".format(self.layer_dim))
         self.appearance_count = appearance_count
@@ -183,7 +188,8 @@ class NeRF(nn.Module):
         if self.enable_semantic:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
             if self.separate_semantic:
-                sem_logits = self.semantic_linear(input_xyz)
+                sem_feature = self.semantic_linear[0:4](input_xyz)
+                sem_logits = self.semantic_linear[4](sem_feature)
             else:
                 if self.stop_semantic_grad:
                     h_stop = h.detach()
@@ -206,7 +212,10 @@ class NeRF(nn.Module):
         color = torch.sigmoid(h)
 
         if self.enable_semantic:
-            return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
+            if self.dataset_type == 'sam':
+                return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits, sem_feature
+            else:
+                return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
         else:
             return torch.cat([color, sigma.unsqueeze(1)], -1)
 
@@ -225,7 +234,8 @@ class NeRF(nn.Module):
         if self.enable_semantic:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
             if self.separate_semantic:
-                sem_logits = self.semantic_linear_bg(input_xyz)
+                sem_feature = self.semantic_linear_bg[0:4](input_xyz)
+                sem_logits = self.semantic_linear_bg[4](sem_feature)
             else:
                 if self.stop_semantic_grad:
                     h_stop = h.detach()
@@ -248,7 +258,10 @@ class NeRF(nn.Module):
         # sigmoid activation for rgb
         color = torch.sigmoid(h)
         if self.enable_semantic:
-            return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
+            if self.dataset_type == 'sam':
+                return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits, sem_feature
+            else:
+                return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
         else:
             return torch.cat([color, sigma.unsqueeze(1)], -1)
 

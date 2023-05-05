@@ -20,6 +20,7 @@ def get_opts_base():
     #sam 
     parser.add_argument('--sam_sample_total', type=int, default=20480, help='')
     parser.add_argument('--sam_sample_each', type=int, default=1024, help='')
+    parser.add_argument('--wgt_group_loss', default=1e-2, type=float, help='')
 
 
     #sdf 

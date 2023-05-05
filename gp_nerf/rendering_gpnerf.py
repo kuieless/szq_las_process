@@ -10,7 +10,7 @@ from mega_nerf.spherical_harmonics import eval_sh
 from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere
 
 TO_COMPOSITE = {'rgb', 'depth', 'sem_map'}
-INTERMEDIATE_KEYS = {'zvals_coarse', 'raw_rgb_coarse', 'raw_sigma_coarse', 'depth_real_coarse', 'raw_sem_logits_coarse'}
+INTERMEDIATE_KEYS = {'zvals_coarse', 'raw_rgb_coarse', 'raw_sigma_coarse', 'depth_real_coarse', 'raw_sem_logits_coarse', 'raw_sem_feature_coarse'}
 
 def render_rays(nerf: nn.Module,
                 bg_nerf: Optional[nn.Module],
@@ -264,7 +264,8 @@ def _inference(point_type,
     # Perform model inference to get rgb and raw sigma
     B = xyz_.shape[0]
     out_chunks = []
-    out_semantic_chunk=[] 
+    out_semantic_chunk = [] 
+    out_semantic_feature_chunk = []
     rays_d_ = rays_d.repeat(1, N_samples_, 1).view(-1, rays_d.shape[-1])
 
     if image_indices is not None:
@@ -286,9 +287,15 @@ def _inference(point_type,
         sigma_noise=None
 
         if hparams.enable_semantic:
-            model_chunk, semantic_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
-            out_chunks += [model_chunk]
-            out_semantic_chunk += [semantic_chunk]
+            if hparams.dataset_type == 'sam':
+                model_chunk, semantic_chunk, semantic_feature_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+                out_chunks += [model_chunk]
+                out_semantic_chunk += [semantic_chunk]
+                out_semantic_feature_chunk += [semantic_feature_chunk]
+            else:
+                model_chunk, semantic_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+                out_chunks += [model_chunk]
+                out_semantic_chunk += [semantic_chunk]
 
         else:
             model_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
@@ -303,30 +310,23 @@ def _inference(point_type,
         out_semantic = torch.cat(out_semantic_chunk, 0)
         out = out_semantic.view(N_rays_, N_samples_, out_semantic.shape[-1])
         sem_logits = out[..., 0:0 + hparams.num_semantic_classes]
+        if hparams.dataset_type == 'sam':
+            out_semantic_fea = torch.cat(out_semantic_feature_chunk, 0)
+            sem_feature = out_semantic_fea.view(N_rays_, N_samples_, out_semantic_fea.shape[-1])  
 
     if 'zvals_coarse' in results:
         # combine coarse and fine samples
         z_vals, ordering = torch.sort(torch.cat([z_vals, results['zvals_coarse']], -1), -1, descending=False)
-        rgbs = torch.cat((
-            torch.gather(torch.cat((rgbs[..., 0], results['raw_rgb_coarse'][..., 0]), 1), 1, ordering).unsqueeze(-1),
-            torch.gather(torch.cat((rgbs[..., 1], results['raw_rgb_coarse'][..., 1]), 1), 1, ordering).unsqueeze(-1),
-            torch.gather(torch.cat((rgbs[..., 2], results['raw_rgb_coarse'][..., 2]), 1), 1, ordering).unsqueeze(-1)
-        ), -1)
+        ordering_3c = ordering.view(ordering.shape[0], ordering.shape[1], 1).repeat(1,1,rgbs.shape[-1])
+        rgbs = torch.gather(torch.cat((rgbs, results['raw_rgb_coarse']), 1), 1, ordering_3c)
         sigmas = torch.gather(torch.cat((sigmas, results['raw_sigma_coarse']), 1), 1, ordering)
         if hparams.enable_semantic:
-            sem_logits = torch.cat((
-                torch.gather(torch.cat((sem_logits[..., 0], results['raw_sem_logits_coarse'][..., 0]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 1], results['raw_sem_logits_coarse'][..., 1]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 2], results['raw_sem_logits_coarse'][..., 2]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 3], results['raw_sem_logits_coarse'][..., 3]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 4], results['raw_sem_logits_coarse'][..., 4]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 5], results['raw_sem_logits_coarse'][..., 5]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 6], results['raw_sem_logits_coarse'][..., 6]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 7], results['raw_sem_logits_coarse'][..., 7]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 8], results['raw_sem_logits_coarse'][..., 8]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 9], results['raw_sem_logits_coarse'][..., 9]), 1), 1, ordering).unsqueeze(-1),
-                torch.gather(torch.cat((sem_logits[..., 10], results['raw_sem_logits_coarse'][..., 10]), 1), 1, ordering).unsqueeze(-1),
-            ), -1)
+            ordering_Kc = ordering.view(ordering.shape[0], ordering.shape[1], 1).repeat(1,1,sem_logits.shape[-1])
+            sem_logits = torch.gather(torch.cat((sem_logits, results['raw_sem_logits_coarse']), 1), 1, ordering_Kc)
+            if hparams.dataset_type == 'sam':
+                ordering_Cc = ordering.view(ordering.shape[0], ordering.shape[1], 1).repeat(1,1,sem_feature.shape[-1])
+                sem_feature = torch.gather(torch.cat((sem_feature, results['raw_sem_feature_coarse']), 1), 1, ordering_Cc)
+            
 
 
         if depth_real is not None:
@@ -357,6 +357,9 @@ def _inference(point_type,
             if hparams.stop_semantic_grad:
                 w = weights[..., None].detach()
                 sem_map = torch.sum(w * sem_logits, -2)
+                if hparams.dataset_type == 'sam':
+                    semantic_feature = torch.sum(w * sem_feature, -2)
+                    results[f'semantic_feature_{typ}'] = semantic_feature
             else:
                 sem_map = torch.sum(weights[..., None] * sem_logits, -2)
             results[f'sem_map_{typ}'] = sem_map
@@ -368,7 +371,9 @@ def _inference(point_type,
             results[f'depth_real_{typ}'] = depth_real
         if hparams.enable_semantic:
             results[f'raw_sem_logits_{typ}'] = sem_logits
-        
+            if hparams.dataset_type == 'sam':
+                results[f'raw_sem_feature_{typ}'] = sem_feature
+                
         
 
     with torch.no_grad():
