@@ -38,7 +38,7 @@ class MemoryDataset_SAM(Dataset):
         self.W = metadata_items[0].W
         self.H = metadata_items[0].H
 
-        rgbs = []
+        # rgbs = []
         rays = []
         indices = []
         labels = []
@@ -66,7 +66,7 @@ class MemoryDataset_SAM(Dataset):
                                             device)
             image_rays = get_rays(directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).cpu()  #.view(-1,8).cpu()
 
-            rgbs.append(image_rgbs.float() / 255.)
+            # rgbs.append(image_rgbs.float() / 255.)
             rays.append(image_rays)
             indices.append(image_indices)
             labels.append(torch.tensor(label, dtype=torch.int))

@@ -63,7 +63,7 @@ class Runner:
             self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
             self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
             if hparams.dataset_type == 'sam':
-                self.crossentropy_loss_feat = lambda pred, target: nn.CrossEntropyLoss()(pred, target)
+                self.loss_feat = lambda pred, target: nn.MSELoss()(pred, target)
 
         if hparams.ckpt_path is not None:
             checkpoint = torch.load(hparams.ckpt_path, map_location='cpu')
@@ -182,8 +182,11 @@ class Runner:
         else:
             self.sphere_center = None
             self.sphere_radius = None
+        if self.hparams.dataset_type == 'sam':
+            self.nerf = get_nerf(hparams, len(self.train_items+self.val_items)).to(self.device)
+        else:
+            self.nerf = get_nerf(hparams, len(self.train_items)).to(self.device)
 
-        self.nerf = get_nerf(hparams, len(self.train_items)).to(self.device)
         if 'RANK' in os.environ:
             self.nerf = torch.nn.parallel.DistributedDataParallel(self.nerf, device_ids=[int(os.environ['LOCAL_RANK'])],
                                                                   output_device=int(os.environ['LOCAL_RANK']))
@@ -514,7 +517,7 @@ class Runner:
         
         
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
-        if not self.hparams.freeze_geo:
+        if not self.hparams.freeze_geo and self.hparams.dataset_type != 'sam':
             if self.hparams.network_type == 'sdf':
                 with torch.no_grad():
                     psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
@@ -535,7 +538,9 @@ class Runner:
             photo_loss = F.mse_loss(results[f'rgb_{typ}'], rgbs, reduction='mean')
             metrics['photo_loss'] = photo_loss
         else:
-            metrics['photo_loss'] = 0
+            metrics = {}
+            photo_loss = 0
+            metrics['photo_loss'] = photo_loss
         
         #semantic loss
         if self.hparams.enable_semantic:
@@ -549,10 +554,11 @@ class Runner:
                 group_loss_each = 0
                 for cur_counts in group_counts:
                     feature_group = semantic_feature[counts:counts+cur_counts.item()]
-                    feature_group_mean = feature_group.detach().mean(dim=0).repeat(feature_group.shape[0],1)
-                    group_loss_each += (self.crossentropy_loss_feat(feature_group, feature_group_mean))
+                    f_detach = feature_group.detach()
+                    feature_group_mean = f_detach.mean(dim=0).repeat(feature_group.shape[0],1)
+                    group_loss_each += (self.loss_feat(feature_group, feature_group_mean))
                     counts += cur_counts.item()
-                group_loss = group_loss_each / len(group_counts)
+                group_loss = group_loss_each / len(group_counts) #/ semantic_feature.shape[-1]
                 metrics['sam_group_loss'] = group_loss
                 metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss + self.hparams.wgt_group_loss * group_loss
 
