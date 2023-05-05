@@ -17,6 +17,10 @@ def get_opts_base():
     parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['filesystem', 'memory', 'sam'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
+    #sam 
+    parser.add_argument('--sam_sample_total', type=int, default=20480, help='')
+    parser.add_argument('--sam_sample_each', type=int, default=1024, help='')
+
 
     #sdf 
     parser.add_argument('--gradient_error_weight', default=0.005, type=float, help='')
@@ -28,7 +32,7 @@ def get_opts_base():
     parser.add_argument('--stop_semantic_grad', default=True, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
     parser.add_argument('--use_pano_lift', default=False, type=eval, choices=[True, False], help='activate the logits by sofrmax before volume rendering')
     parser.add_argument('--ignore_index', type=int, default=-1, help='')
-    parser.add_argument('--label_name', type=str, default='m2f', choices=['m2f', 'merge', 'm2f_new', 'merge_new'], help='')
+    parser.add_argument('--label_name', type=str, default='m2f_new', choices=['m2f', 'merge', 'm2f_new', 'merge_new'], help='')
 
     parser.add_argument('--enable_semantic', default=True, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')

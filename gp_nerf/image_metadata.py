@@ -11,7 +11,7 @@ import cv2
 class ImageMetadata:
     #zyq : add label_path for semantic 
     def __init__(self, image_path: Path, c2w: torch.Tensor, W: int, H: int, intrinsics: torch.Tensor, image_index: int,
-                 mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], metadata_label=None, ):
+                 mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None):
         self.image_path = image_path
         self.c2w = c2w
         self.W = W
@@ -20,8 +20,8 @@ class ImageMetadata:
         self.image_index = image_index
         self._mask_path = mask_path
         self.is_val = is_val
-        self.label = metadata_label
         self.label_path = label_path
+        self.sam_feature_path = sam_feature_path
 
     def load_image(self) -> torch.Tensor:
         rgbs = Image.open(self.image_path).convert('RGB')
@@ -71,6 +71,12 @@ class ImageMetadata:
             labels = labels.resize((self.W, self.H), Image.NEAREST)
        
         return torch.ByteTensor(np.asarray(labels))
+    
+    def load_sam_feature(self) -> torch.Tensor:
+        sam_feature_path = self.sam_feature_path
+        feature = np.load(sam_feature_path)
+       
+        return torch.from_numpy(feature)
         
     
     

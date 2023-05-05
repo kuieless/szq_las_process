@@ -295,7 +295,7 @@ class Runner:
                                     self.hparams.center_pixels, self.device)
         elif self.hparams.dataset_type == 'sam':
             dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
-                                    self.hparams.center_pixels, self.device)
+                                    self.hparams.center_pixels, self.device, self.hparams)
         else:
             raise Exception('Unrecognized dataset type: {}'.format(self.hparams.dataset_type))
 
@@ -324,9 +324,12 @@ class Runner:
                 data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size // world_size, sampler=sampler,
                                          num_workers=0, pin_memory=True)
             else:
-                
-                data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=4,
-                                             pin_memory=False)
+                if self.hparams.dataset_type == 'sam':
+                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
+                                                pin_memory=False)
+                else:
+                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=4,
+                                                pin_memory=False)
                 
             
             for dataset_index, item in enumerate(data_loader): #, start=10462):
@@ -348,10 +351,20 @@ class Runner:
                         labels = item['labels'].to(self.device, non_blocking=True)
                     else:
                         labels = None
-                    metrics, bg_nerf_rays_present = self._training_step(
-                        item['rgbs'].to(self.device, non_blocking=True),
-                        item['rays'].to(self.device, non_blocking=True),
-                        image_indices, labels, train_iterations)
+
+                    if self.hparams.dataset_type == 'sam':
+                        groups = item['groups'].to(self.device, non_blocking=True)
+                        metrics, bg_nerf_rays_present = self._training_step(
+                        item['rgbs'].squeeze(0).to(self.device, non_blocking=True),
+                        item['rays'].squeeze(0).to(self.device, non_blocking=True),
+                        image_indices.squeeze(0), labels.squeeze(0), groups.squeeze(0), train_iterations)
+                    else:
+                        groups = None
+
+                        metrics, bg_nerf_rays_present = self._training_step(
+                            item['rgbs'].to(self.device, non_blocking=True),
+                            item['rays'].to(self.device, non_blocking=True),
+                            image_indices, labels, groups, train_iterations)
 
                     with torch.no_grad():
                         for key, val in metrics.items():
@@ -475,7 +488,7 @@ class Runner:
             self.wandb = wandb.init(project=self.hparams.wandb_id, entity="mega-ingp", name=self.hparams.wandb_run_name, dir=self.experiment_path)
             
 
-    def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], train_iterations = -1) \
+    def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], groups: Optional[torch.Tensor], train_iterations = -1) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
         if self.hparams.network_type == 'sdf':
             from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
@@ -1010,16 +1023,22 @@ class Runner:
         
 
         val_paths = sorted(list((dataset_path / 'val' / 'metadata').iterdir()))
-        # train_paths=train_paths[:10]
-        # val_paths = val_paths[:2]
-
-        train_paths += val_paths
-        train_paths.sort(key=lambda x: x.name)
-        val_paths_set = set(val_paths)
-
-        image_indices = {}
-        for i, train_path in enumerate(train_paths):
-            image_indices[train_path.name] = i
+        if self.hparams.dataset_type == 'sam':
+            # train_paths=train_paths[:10]
+            # val_paths = val_paths[:2]
+            image_indices_path = train_paths + val_paths
+            image_indices_path.sort(key=lambda x: x.name)
+            val_paths_set = set(val_paths)
+            image_indices = {}
+            for i, indices_path in enumerate(image_indices_path):
+                image_indices[indices_path.name] = i
+        else:
+            train_paths += val_paths
+            train_paths.sort(key=lambda x: x.name)
+            val_paths_set = set(val_paths)
+            image_indices = {}
+            for i, train_path in enumerate(train_paths):
+                image_indices[train_path.name] = i
 
         train_items = [
             self._get_metadata_item(x, image_indices[x.name], self.hparams.train_scale_factor, x in val_paths_set) for x
@@ -1057,18 +1076,25 @@ class Runner:
         else:
             mask_path = None
 
-        if True:
-            label_path = None
-            for extension in ['.jpg', '.JPG', '.png', '.PNG']:
-                
-                candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_name}' / '{}{}'.format(metadata_path.stem, extension)
+        
+        label_path = None
+        for extension in ['.jpg', '.JPG', '.png', '.PNG']:
+            
+            candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_name}' / '{}{}'.format(metadata_path.stem, extension)
 
-                if candidate.exists():
-                    label_path = candidate
-                    break
-
-        return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
-                             intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path)
+            if candidate.exists():
+                label_path = candidate
+                break
+        if self.hparams.dataset_type == 'sam':
+            sam_feature_path = None
+            candidate = metadata_path.parent.parent / 'sam_features' / '{}.npy'.format(metadata_path.stem)
+            if candidate.exists():
+                sam_feature_path = candidate
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, sam_feature_path)
+        else:
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path)
 
     def _get_experiment_path(self) -> Path:
         exp_dir = Path(self.hparams.exp_name)
