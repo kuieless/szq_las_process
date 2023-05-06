@@ -182,10 +182,10 @@ class Runner:
         else:
             self.sphere_center = None
             self.sphere_radius = None
-        if self.hparams.dataset_type == 'sam':
-            self.nerf = get_nerf(hparams, len(self.train_items+self.val_items)).to(self.device)
-        else:
-            self.nerf = get_nerf(hparams, len(self.train_items)).to(self.device)
+        # if self.hparams.dataset_type == 'sam':
+        #     self.nerf = get_nerf(hparams, len(self.train_items+self.val_items)).to(self.device)
+        # else:
+        self.nerf = get_nerf(hparams, len(self.train_items)).to(self.device)
 
         if 'RANK' in os.environ:
             self.nerf = torch.nn.parallel.DistributedDataParallel(self.nerf, device_ids=[int(os.environ['LOCAL_RANK'])],
@@ -1052,22 +1052,26 @@ class Runner:
         
 
         val_paths = sorted(list((dataset_path / 'val' / 'metadata').iterdir()))
-        if self.hparams.dataset_type == 'sam':
-            # train_paths=train_paths[:10]
-            # val_paths = val_paths[:2]
-            image_indices_path = train_paths + val_paths
-            image_indices_path.sort(key=lambda x: x.name)
-            val_paths_set = set(val_paths)
-            image_indices = {}
-            for i, indices_path in enumerate(image_indices_path):
-                image_indices[indices_path.name] = i
-        else:
-            train_paths += val_paths
-            train_paths.sort(key=lambda x: x.name)
-            val_paths_set = set(val_paths)
-            image_indices = {}
-            for i, train_path in enumerate(train_paths):
-                image_indices[train_path.name] = i
+
+        # train_paths=train_paths[:10]
+        # val_paths = val_paths[:2]
+
+        # if self.hparams.dataset_type == 'sam':
+        #     # train_paths=train_paths[:10]
+        #     # val_paths = val_paths[:2]
+        #     image_indices_path = train_paths + val_paths
+        #     image_indices_path.sort(key=lambda x: x.name)
+        #     val_paths_set = set(val_paths)
+        #     image_indices = {}
+        #     for i, indices_path in enumerate(image_indices_path):
+        #         image_indices[indices_path.name] = i
+        # else:
+        train_paths += val_paths
+        train_paths.sort(key=lambda x: x.name)
+        val_paths_set = set(val_paths)
+        image_indices = {}
+        for i, train_path in enumerate(train_paths):
+            image_indices[train_path.name] = i
 
         train_items = [
             self._get_metadata_item(x, image_indices[x.name], self.hparams.train_scale_factor, x in val_paths_set) for x

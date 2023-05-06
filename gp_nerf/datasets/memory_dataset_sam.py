@@ -43,6 +43,7 @@ class MemoryDataset_SAM(Dataset):
         indices = []
         labels = []
         sam_features = []
+        is_vals =[]
 
         main_print('Loading data')
 
@@ -53,7 +54,7 @@ class MemoryDataset_SAM(Dataset):
                 continue
             
             #zyq : add labels
-            image_rgbs, image_indices, image_keep_mask, label, sam_feature = image_data
+            image_rgbs, image_indices, image_keep_mask, label, sam_feature, is_val = image_data
 
             # print("image index: {}, fx: {}, fy: {}".format(metadata_item.image_index, metadata_item.intrinsics[0], metadata_item.intrinsics[1]))
             directions = get_ray_directions(metadata_item.W,
@@ -71,6 +72,7 @@ class MemoryDataset_SAM(Dataset):
             indices.append(image_indices)
             labels.append(torch.tensor(label, dtype=torch.int))
             sam_features.append(sam_feature)
+            is_vals.append(is_val)
         
         main_print('Finished loading data')
 
@@ -79,12 +81,17 @@ class MemoryDataset_SAM(Dataset):
         self._img_indices = torch.stack(indices)
         self._labels = torch.stack(labels)
         self._sam_features = torch.stack(sam_features)
+        self._is_vals = is_vals
+
 
     def __len__(self) -> int:
         # return self._rgbs.shape[0]
         return self._rays.shape[0]
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        if self._is_vals[idx]:
+            idx = idx + 1
+            assert self._is_vals[idx] == False
         #sam_mask
         # 加入sam的训练去掉了val dataset
         in_labels = np.array([1])
@@ -164,9 +171,9 @@ class MemoryDataset_SAM(Dataset):
 
 
         return {
-            # 'rgbs': self._rgbs[0, selected_points[:, 0], selected_points[:, 1], :],
-            'rays': self._rays[0, selected_points[:, 0], selected_points[:, 1], :],
-            'img_indices': self._img_indices[0, selected_points[:, 0], selected_points[:, 1]],
-            'labels': self._labels[0, selected_points[:, 0], selected_points[:, 1]],
+            # 'rgbs': self._rgbs[idx, selected_points[:, 0], selected_points[:, 1], :],
+            'rays': self._rays[idx, selected_points[:, 0], selected_points[:, 1], :],
+            'img_indices': self._img_indices[idx, selected_points[:, 0], selected_points[:, 1]],
+            'labels': self._labels[idx, selected_points[:, 0], selected_points[:, 1]],
             'groups': selected_points_group,
         }
