@@ -78,4 +78,5 @@ def get_rgb_index_mask_sam(metadata: ImageMetadata) -> Optional[
     assert metadata.image_index <= torch.iinfo(torch.int32).max
     
     #sam 返回原图像尺寸， 没有view(-1), 且在get_items时才对val_images进行mask   keep_mask[:, metadata.W // 2:] = False
-    return rgbs, metadata.image_index * torch.ones(rgbs.shape[:2], dtype=torch.int32), keep_mask, labels, sam_features, metadata.is_val
+    # return rgbs, metadata.image_index * torch.ones(rgbs.shape[:2], dtype=torch.int32), keep_mask, labels, sam_features, metadata.is_val
+    return rgbs, metadata.image_index, keep_mask, labels, sam_features, metadata.is_val

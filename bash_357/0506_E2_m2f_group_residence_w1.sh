@@ -1,5 +1,5 @@
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=6
 
 exp_name='./logs_357/0506_E2_m2f_group_residence_w1'
 dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"

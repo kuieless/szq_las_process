@@ -346,10 +346,6 @@ class Runner:
 
                 # amp: Automatic mixed precision
                 with torch.cuda.amp.autocast(enabled=self.hparams.amp):
-                    if self.hparams.appearance_dim > 0:
-                        image_indices = item['img_indices'].to(self.device, non_blocking=True)
-                    else:
-                        image_indices = None
 
                     #semantic 
                     if self.hparams.enable_semantic:
@@ -357,13 +353,40 @@ class Runner:
                     else:
                         labels = None
 
+                    if self.hparams.appearance_dim > 0:
+                        if self.hparams.dataset_type == 'sam':
+                            #如果用sam一张张读取，则不需要这么多，repeat就行
+                            image_indices = item['img_indices'].to(self.device, non_blocking=True)
+                            image_indices = image_indices.repeat(labels.shape[-1])
+                        else:
+                            image_indices = item['img_indices'].to(self.device, non_blocking=True)
+                    else:
+                        image_indices = None
+
+                    
                     if self.hparams.dataset_type == 'sam':
+                        # 这里得到ray
+                        selected_points = item['selected_points'].to(self.device, non_blocking=True).squeeze(0)
+                        idx = image_indices[0].item()
+                        metadata_item = self.train_items[idx]
+                        directions = get_ray_directions(metadata_item.W,
+                                                        metadata_item.H,
+                                                        metadata_item.intrinsics[0],
+                                                        metadata_item.intrinsics[1],
+                                                        metadata_item.intrinsics[2],
+                                                        metadata_item.intrinsics[3],
+                                                        self.hparams.center_pixels,
+                                                        self.device)
+                        image_rays = get_rays(directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+                        rays = image_rays[selected_points[:, 0], selected_points[:, 1], :]
+                        # 'rays': self._rays[idx, selected_points[:, 0], selected_points[:, 1], :],
+
                         groups = item['groups'].to(self.device, non_blocking=True)
                         metrics, bg_nerf_rays_present = self._training_step(
-                        None,
+                        None, rays, image_indices, labels.squeeze(0), groups.squeeze(0), train_iterations)
                         # item['rgbs'].squeeze(0).to(self.device, non_blocking=True),
-                        item['rays'].squeeze(0).to(self.device, non_blocking=True),
-                        image_indices.squeeze(0), labels.squeeze(0), groups.squeeze(0), train_iterations)
+                        # item['rays'].squeeze(0).to(self.device, non_blocking=True),
+                        
                     else:
                         groups = None
 

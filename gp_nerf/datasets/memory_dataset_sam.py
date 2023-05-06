@@ -56,19 +56,19 @@ class MemoryDataset_SAM(Dataset):
             #zyq : add labels
             image_rgbs, image_indices, image_keep_mask, label, sam_feature, is_val = image_data
 
-            # print("image index: {}, fx: {}, fy: {}".format(metadata_item.image_index, metadata_item.intrinsics[0], metadata_item.intrinsics[1]))
-            directions = get_ray_directions(metadata_item.W,
-                                            metadata_item.H,
-                                            metadata_item.intrinsics[0],
-                                            metadata_item.intrinsics[1],
-                                            metadata_item.intrinsics[2],
-                                            metadata_item.intrinsics[3],
-                                            center_pixels,
-                                            device)
-            image_rays = get_rays(directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).cpu()  #.view(-1,8).cpu()
+            # # print("image index: {}, fx: {}, fy: {}".format(metadata_item.image_index, metadata_item.intrinsics[0], metadata_item.intrinsics[1]))
+            # directions = get_ray_directions(metadata_item.W,
+            #                                 metadata_item.H,
+            #                                 metadata_item.intrinsics[0],
+            #                                 metadata_item.intrinsics[1],
+            #                                 metadata_item.intrinsics[2],
+            #                                 metadata_item.intrinsics[3],
+            #                                 center_pixels,
+            #                                 device)
+            # image_rays = get_rays(directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).cpu()  #.view(-1,8).cpu()
 
             # rgbs.append(image_rgbs.float() / 255.)
-            rays.append(image_rays)
+            # rays.append(image_rays)
             indices.append(image_indices)
             labels.append(torch.tensor(label, dtype=torch.int))
             sam_features.append(sam_feature)
@@ -77,8 +77,8 @@ class MemoryDataset_SAM(Dataset):
         main_print('Finished loading data')
 
         # self._rgbs = torch.stack(rgbs)
-        self._rays = torch.stack(rays)
-        self._img_indices = torch.stack(indices)
+        # self._rays = torch.stack(rays)
+        self._img_indices = indices  #torch.stack(indices)
         self._labels = torch.stack(labels)
         self._sam_features = torch.stack(sam_features)
         self._is_vals = is_vals
@@ -86,7 +86,7 @@ class MemoryDataset_SAM(Dataset):
 
     def __len__(self) -> int:
         # return self._rgbs.shape[0]
-        return self._rays.shape[0]
+        return self._labels.shape[0]
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         if self._is_vals[idx]:
@@ -172,8 +172,10 @@ class MemoryDataset_SAM(Dataset):
 
         return {
             # 'rgbs': self._rgbs[idx, selected_points[:, 0], selected_points[:, 1], :],
-            'rays': self._rays[idx, selected_points[:, 0], selected_points[:, 1], :],
-            'img_indices': self._img_indices[idx, selected_points[:, 0], selected_points[:, 1]],
+            # 'rays': self._rays[idx, selected_points[:, 0], selected_points[:, 1], :],
+            # 'img_indices': self._img_indices[idx, selected_points[:, 0], selected_points[:, 1]],
+            'img_indices': self._img_indices[idx],
             'labels': self._labels[idx, selected_points[:, 0], selected_points[:, 1]],
             'groups': selected_points_group,
+            'selected_points': selected_points
         }
