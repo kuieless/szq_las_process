@@ -1,7 +1,7 @@
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=6
 
-exp_name='./logs_357/0506_E2_m2f_group_residence_w1'
+exp_name='./logs_357/0506_E3_m2f_group_residence_w01'
 dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2='residence' #  "building"  "rubble"  "quad"  "residence"  "sci-art"  "campus"
 wandb_id=None  #gpnerf_semantic   None
@@ -20,7 +20,7 @@ pos_xyz_dim=10
 dataset_type='sam'
 sam_sample_total=20480
 sam_sample_each=1024
-wgt_group_loss=1
+wgt_group_loss=0.1
 
 enable_semantic=True
 freeze_geo=True
