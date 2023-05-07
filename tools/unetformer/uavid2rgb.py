@@ -39,3 +39,22 @@ def custom2rgb(mask):
 
     # mask_rgb = cv2.cvtColor(mask_rgb, cv2.COLOR_RGB2BGR)
     return mask_rgb
+
+def remapping(mask):
+    mask[mask==6] = 0               # human
+    mask[mask==7] = 0               # sky
+    mask[mask==8] = 0               # water
+    mask[mask==10] = 0              # mountain
+    
+    return mask
+
+def remapping_remove_ground(mask):
+    mask[mask==6] = 0               # human
+    mask[mask==7] = 0               # sky
+    mask[mask==8] = 0               # water
+    mask[mask==10] = 0              # mountain
+
+    mask[mask==9] = 0               # ground
+
+    
+    return mask

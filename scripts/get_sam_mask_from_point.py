@@ -13,7 +13,7 @@ import cv2
 import torch
 import time
 import sys
-device = torch.device('cuda:7' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:5' if torch.cuda.is_available() else 'cpu')
 
 
 def init():
@@ -51,8 +51,8 @@ def main() -> None:
     N_each = 1024
     
     H, W = int(3648/4), int(5472/4)
-    # feature = np.load(sys.argv[1])
-    feature = np.load('/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-labels/train/sam_features/000000.npy')
+    feature = np.load(sys.argv[1])
+    # feature = np.load('/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-labels/train/sam_features/000000.npy')
 
     
     # feature = torch.from_numpy(feature).to(device=device)
@@ -82,7 +82,7 @@ def main() -> None:
         selected_one.append(random_point)
         masks, iou_preds, _ = predictor.predict(random_point.cpu().numpy(), in_labels, return_torch=True)
         
-        masks_max = masks[:, torch.argmax(iou_preds),:,:]
+        masks_max = masks[0, torch.argmax(iou_preds),:,:]
         #在mask内选 N_each 个点，若不足 N_each ，则全选
         if masks_max.nonzero().size(0) ==0:
             continue
@@ -99,18 +99,18 @@ def main() -> None:
             selected_points_group.append(i * torch.ones(select_point.size(0)).to(device))
             N_selected += N_each
         
-        # masks_max_vis = np.stack([masks_max.cpu().numpy(), masks_max.cpu().numpy(), masks_max.cpu().numpy()], axis=2)
-        # for point in selected_one:
-        #     # print(point)
-        #     for k in range(point.size(0)):  # W , H
-        #         x, y = int(point[k, 0]), int(point[k, 1])
-        #         for m in range(-2,2):
-        #             for n in range(-2,2):
-        #                 if x+m < W and x+m >0 and y+n < H and y+n >0:
-        #                     masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
-        # cv2.imwrite(f"zyq/{sys.argv[2]}_{sys.argv[3]}_mask_final_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
-        # visual += masks_max * i
-        # i += 1
+        masks_max_vis = np.stack([masks_max.cpu().numpy(), masks_max.cpu().numpy(), masks_max.cpu().numpy()], axis=2)
+        for point in selected_one:
+            #print(point)
+            for k in range(point.size(0)):  # W , H
+                x, y = int(point[k, 0]), int(point[k, 1])
+                for m in range(-2,2):
+                    for n in range(-2,2):
+                        if x+m < W and x+m >0 and y+n < H and y+n >0:
+                            masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
+        cv2.imwrite(f"zyq/{sys.argv[2]}_{sys.argv[3]}_mask_final_{i:03d}_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
+        visual += masks_max * i
+        i += 1
 
         bool_tensor = bool_tensor * (~masks_max.squeeze(0))
     end = time.time()
@@ -133,10 +133,10 @@ def main() -> None:
     rgb_array_test = rgb_array
     
     for point in selected_points:
-        for k in range(point.size(0)):  # H, W
-            x, y = point[k, 0], point[k, 1]
-            if x < H and x >0 and y < W and y >0:
-                rgb_array_test[x, y] = np.array([0, 128, 0])
+        #for k in range(point.size(0)):  # H, W
+        x, y = point[0], point[1]
+        if x < H and x >0 and y < W and y >0:
+            rgb_array_test[x, y] = np.array([0, 128, 0])
 
     for point in selected_one:
         # print(point)

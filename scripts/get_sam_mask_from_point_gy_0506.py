@@ -36,34 +36,12 @@ def flatten(lst):
             result.append(i)
     return result
 
-def main() -> None:
-    # feature = np.load('/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-labels/train/sam_features/000000.npy')
-    # # 初始化sam
-    # predictor = init()
-    # predictor.set_feature(feature, [int(3648/4), int(5472/4)])
-    # in_points = np.array([[int(3648/8), int(5472/8)]])
-    # in_labels = np.array([1])
-    # masks, iou_preds, _ = predictor.predict(in_points, in_labels)
-    # masks = masks.astype(np.int32)*255
-    # cv2.imwrite("mask.png", masks.transpose(1, 2, 0))
+def sample_points(predictor, H, W, save_prefix):
 
     N_total = 20480
     N_each = 1024
     
-    H, W = int(3648/4), int(5472/4)
-    if sys.argv[1] is not None:
-        feature = np.load(sys.argv[1])
-    else:
-        feature = np.load('/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-labels/train/sam_features/000000.npy')
-
-    
-    # feature = torch.from_numpy(feature).to(device=device)
-    # 初始化sam
-    
     in_labels = np.array([1])
-
-    predictor = init()
-    predictor.set_feature(feature, [H, W])
     #初始化一个0数组，记录被选择过的mask
     bool_tensor = torch.ones((H, W), dtype=torch.int).to(device=device)
     # ray的计数器
@@ -110,7 +88,7 @@ def main() -> None:
                     for n in range(-2,2):
                         if x+m < W and x+m >0 and y+n < H and y+n >0:
                             masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
-        cv2.imwrite(f"zyq/{sys.argv[2]}_{sys.argv[3]}_mask_final_{i:03d}_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
+        cv2.imwrite(f"{save_prefix}_mask_final_{i:03d}_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
         visual += masks_max * i
         i += 1
 
@@ -150,12 +128,47 @@ def main() -> None:
                         rgb_array_test[(y+n), (x+m)] = np.array([0, 0, 128])
 
     # 显示图像
-    cv2.imwrite(f"zyq/{sys.argv[2]}_{sys.argv[3]}_mask_final.png", (rgb_array_test).astype(np.int32))
-    print(f"zyq/{sys.argv[2]}_{sys.argv[3]}_mask_final.png")
+    cv2.imwrite(f"{save_prefix}_mask_final.png", (rgb_array_test).astype(np.int32))
+    print(f"{save_prefix}_mask_final.png")
     # cv2.imwrite("mask_final.png", (visual*255/visual.max()).cpu().numpy().astype(np.int32))
     
     print("Done!")
 
+
+def main() -> None:
+    # feature = np.load('/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-labels/train/sam_features/000000.npy')
+    # # 初始化sam
+    # predictor = init()
+    # predictor.set_feature(feature, [int(3648/4), int(5472/4)])
+    # in_points = np.array([[int(3648/8), int(5472/8)]])
+    # in_labels = np.array([1])
+    # masks, iou_preds, _ = predictor.predict(in_points, in_labels)
+    # masks = masks.astype(np.int32)*255
+    # cv2.imwrite("mask.png", masks.transpose(1, 2, 0))
+
+    H, W = int(3648/4), int(5472/4)
+    if len(sys.argv) > 1:
+        feature = np.load(sys.argv[1])
+    else:
+        feature = np.load('/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-labels/train/sam_features/000000.npy')
+
+    
+    # feature = torch.from_numpy(feature).to(device=device)
+    # 初始化sam
+    
+    if len(sys.argv) == 3:
+        dataset = sys.argv[1]
+        idx = sys.argv[2]
+    else:
+        dataset = 'test'
+        idx = '0000'
+    save_root = 'gy'
+    save_prefix = f'{save_root}/{dataset}_{idx}'
+    if not os.path.exists(save_root):
+        os.makedirs(save_root)
+    predictor = init()
+    predictor.set_feature(feature, [H, W])
+    sample_points(predictor, H, W, save_prefix)
 
 if __name__ == '__main__':
     main()

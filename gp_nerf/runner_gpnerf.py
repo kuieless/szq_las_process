@@ -40,8 +40,11 @@ import wandb
 from torchvision.utils import make_grid
 
 #semantic
-from tools.unetformer.uavid2rgb import uavid2rgb, custom2rgb
+from tools.unetformer.uavid2rgb import uavid2rgb, custom2rgb, remapping, remapping_remove_ground
 from tools.unetformer.metric import Evaluator
+
+import pandas as pd
+
 
 def get_n_params(model):
     pp=0
@@ -350,6 +353,8 @@ class Runner:
                     #semantic 
                     if self.hparams.enable_semantic:
                         labels = item['labels'].to(self.device, non_blocking=True)
+                        from tools.unetformer.uavid2rgb import remapping
+                        labels = remapping(labels)
                     else:
                         labels = None
 
@@ -618,6 +623,11 @@ class Runner:
         return metrics, bg_nerf_rays_present
 
     def _run_validation(self, train_index=-1) -> Dict[str, float]:
+        if 'residence'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+            from tools.unetformer.uavid2rgb import remapping_remove_ground as remapping
+        else:
+            from tools.unetformer.uavid2rgb import remapping
+
         with torch.inference_mode():
             #semantic 
             self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -650,6 +660,7 @@ class Runner:
                         if 'residence'in self.hparams.dataset_path:
                             self.val_items=self.val_items[:19]
                         elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                            # self.val_items=self.val_items[:2]
                             self.val_items=self.val_items[:10]
                         indices_to_eval = np.arange(len(self.val_items))
                     elif val_type == 'train':
@@ -657,7 +668,16 @@ class Runner:
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
-                with (experiment_path_current / 'psnr.txt').open('w') as f, (experiment_path_current / 'iou.txt').open('w') as f2:
+                with (experiment_path_current / 'psnr.txt').open('w') as f:
+                    samantic_each_value = {}
+                    for class_name in CLASSES:
+                        samantic_each_value[f'{class_name}_iou'] = []
+                    samantic_each_value['mIoU'] = []
+                    samantic_each_value['FW_IoU'] = []
+                    samantic_each_value['F1'] = []
+                    # samantic_each_value['OA'] = []
+
+                    
                     for i in main_tqdm(indices_to_eval):
                         self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                         # if i != 0:
@@ -679,14 +699,15 @@ class Runner:
                                     gt_label = metadata_item.load_gt()
                             elif val_type == 'train':
                                 gt_label = metadata_item.load_label()
-                            
+                            gt_label = remapping(gt_label)
                             gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
                             sem_label = self.logits_2_label(sem_logits)
+                            sem_label = remapping(sem_label)
                             visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
                             gt_class = gt_label.view(-1)
 
 
-                            # OA, mIoU
+                            # mIoU
                             self.metrics_val.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
                             self.metrics_val_each.add_batch(gt_class.cpu().numpy(), sem_label.cpu().numpy())
                         viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
@@ -839,69 +860,87 @@ class Runner:
                                 #     self.writer.add_image('val/{}_fg_bg'.format(i), T.ToTensor()(img), train_index)
                             ################################## 
 
-                                            # OA, mIoU
+                                            # mIoU
                                 mIoU = np.nanmean(self.metrics_val_each.Intersection_over_Union())
                                 F1 = np.nanmean(self.metrics_val_each.F1())
-                                OA = np.nanmean(self.metrics_val_each.OA())
-                                iou_per_class = self.metrics_val_each.Intersection_over_Union()
-                                eval_value = {'mIoU': mIoU,
-                                            'F1': F1,
-                                            'OA': OA}
-                                iou_value = {}
-                                for class_name, iou in zip(CLASSES, iou_per_class):
-                                    iou_value[class_name] = iou
-                                f2.write('*'*10+f'{i}'+'*'*10+'\n')
-                                f2.write('eval_value:\n')
-                                for key in eval_value:
-                                    f2.write(f'{key:<12}: {eval_value[key]}\n')
-                                f2.write('iou_value:\n')
-                                for key in iou_value:
-                                    f2.write(f'{key:<12}: {iou_value[key]}\n' )
-                                f2.write('\n')
+                                # OA = np.nanmean(self.metrics_val_each.OA())
+                                FW_IoU = self.metrics_val_each.Frequency_Weighted_Intersection_over_Union()
 
-                                if self.wandb is not None:
-                                    self.wandb.log({'val/mIoU_each/{}'.format(train_index): mIoU, 'epoch':i})
-                                    self.wandb.log({'val/F1_each/{}'.format(train_index): F1, 'epoch':i})
-                                    self.wandb.log({'val/OA_each/{}'.format(train_index): OA, 'epoch':i})
-                                if self.writer is not None:
-                                    self.writer.add_scalar('val/mIoU_each/{}'.format(train_index), mIoU, i)
-                                    self.writer.add_scalar('val/F1_each/{}'.format(train_index), F1, i)
-                                    self.writer.add_scalar('val/OA_each/{}'.format(train_index), OA, i)
+                                iou_per_class = self.metrics_val_each.Intersection_over_Union()
+                                for class_name, iou in zip(CLASSES, iou_per_class):
+                                    samantic_each_value[f'{class_name}_iou'].append(iou)
+                                samantic_each_value['mIoU'].append(mIoU)
+                                samantic_each_value['FW_IoU'].append(FW_IoU)
+                                samantic_each_value['F1'].append(F1)
+                                # samantic_each_value['OA'].append(OA)
+
+                                for class_name, iou in zip(CLASSES, iou_per_class):
+                                    if np.isnan(iou):
+                                        continue
+                                    if self.wandb is not None:
+                                        self.wandb.log({f'val/mIoU_each_class/{train_index}_{class_name}': iou, 'epoch':i})
+                                        self.wandb.log({'val/FW_IoU_each_images/{}'.format(train_index): FW_IoU, 'epoch':i})
+                                    if self.writer is not None:
+                                        self.writer.add_scalar(f'val/mIoU_each_class/{train_index}_{class_name}', iou, i)
+                                        self.writer.add_scalar('val/FW_IoU_each_images/{}'.format(train_index), FW_IoU, i)
+
                                 self.metrics_val_each.reset()
                         del results
 
                 # OA, mIoU
                 mIoU = np.nanmean(self.metrics_val.Intersection_over_Union())
+                FW_IoU = self.metrics_val.Frequency_Weighted_Intersection_over_Union()
                 F1 = np.nanmean(self.metrics_val.F1())
-                OA = np.nanmean(self.metrics_val.OA())
+                # OA = np.nanmean(self.metrics_val.OA())
                 iou_per_class = self.metrics_val.Intersection_over_Union()
-                print("eval_value")
+
                 eval_value = {'mIoU': mIoU,
+                              'FW_IoU': FW_IoU,
                               'F1': F1,
-                              'OA': OA}
+                            #   'OA': OA,
+                              }
+                print("eval_value")
                 print('val:', eval_value)
+
                 iou_value = {}
                 for class_name, iou in zip(CLASSES, iou_per_class):
                     iou_value[class_name] = iou
                 print(iou_value)
+
+                with(experiment_path_current / 'semantic_each.txt').open('w') as f2:
+                    for key in samantic_each_value:
+                        f2.write(f'{key}:\n')
+                        for k in range(len(samantic_each_value[key])):
+                            f2.write(f'\t\t{k:<3}: {samantic_each_value[key][k]}\n')
+
+     
+
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 with (experiment_path_current /'metrics.txt').open('a') as f:
+                    for key in eval_value:
+                        f.write(f'{eval_value[key]}\t')
+                    for key in iou_value:
+                        f.write(f'{iou_value[key]}\t')
+                    f.write(f'\n\n')
                     f.write('eval_value:\n')
                     for key in eval_value:
-                        f.write(f'{key:<12}: {eval_value[key]}\n')
+                        f.write(f'\t\t{key:<12}: {eval_value[key]}\n')
                     f.write('iou_value:\n')
                     for key in iou_value:
-                        f.write(f'{key:<12}: {iou_value[key]}\n' )
-                        # f.write('eval_value:\n{}\niou_value:\n{}\n'.format(eval_value, iou_value))
+                        f.write(f'\t\t{key:<12}: {iou_value[key]}\n' )
                 
+
                 if self.wandb is not None:
                     self.wandb.log({'val/mIoU': mIoU, 'epoch':train_index})
+                    self.wandb.log({'val/FW_IoU': FW_IoU, 'epoch':train_index})
                     self.wandb.log({'val/F1': F1, 'epoch':train_index})
-                    self.wandb.log({'val/OA': OA, 'epoch':train_index})
+                    # self.wandb.log({'val/OA': OA, 'epoch':train_index})
                 if self.writer is not None:
                     self.writer.add_scalar('val/mIoU', mIoU, train_index)
+                    self.writer.add_scalar('val/FW_IoU', FW_IoU, train_index)
                     self.writer.add_scalar('val/F1', F1, train_index)
-                    self.writer.add_scalar('val/OA', OA, train_index)
+                    # self.writer.add_scalar('val/OA', OA, train_index)
+
 
                 self.writer.flush()
                 self.writer.close()

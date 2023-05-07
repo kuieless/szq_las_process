@@ -21,6 +21,7 @@ def get_opts_base():
     parser.add_argument('--sam_sample_total', type=int, default=20480, help='')
     parser.add_argument('--sam_sample_each', type=int, default=1024, help='')
     parser.add_argument('--wgt_group_loss', default=1e-2, type=float, help='')
+    parser.add_argument('--sampling_mode', type=str, default='per_mask', choices=['per_mask', 'whole_image'])
 
 
     #sdf 
