@@ -1,0 +1,176 @@
+
+from mega_nerf.metrics import psnr, ssim, lpips
+from mega_nerf.misc_utils import main_print, main_tqdm
+import torch
+from tools.unetformer.uavid2rgb import custom2rgb, remapping
+import numpy as np
+
+def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, writer, val_metrics, i, f):                            
+    eval_rgbs = viz_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
+    eval_result_rgbs = viz_result_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
+    
+    val_psnr = psnr(eval_result_rgbs.view(-1, 3), eval_rgbs.view(-1, 3))
+    metric_key = 'val/psnr/{}'.format(train_index)
+    
+    if wandb is not None:
+        wandb.log({'val/psnr/{}'.format(train_index): val_psnr, 'epoch': i})
+    if writer is not None:
+        writer.add_scalar('3_val_each_image/psnr/{}'.format(train_index), val_psnr, i)
+    val_metrics['val/psnr'] += val_psnr
+    main_print('The psnr of the {} image is: {}'.format(i, val_psnr))
+    f.write('The psnr of the {} image is: {}\n'.format(i, val_psnr))
+
+    val_ssim = ssim(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs, 1)
+
+    metric_key = 'val/ssim/{}'.format(train_index)
+    # TODO: 暂时不放ssim
+    if wandb is not None:
+        wandb.log({'val/ssim/{}'.format(train_index): val_ssim, 'epoch':i})
+    if writer is not None:
+        writer.add_scalar('3_val_each_image/ssim/{}'.format(train_index), val_ssim, i)
+    val_metrics['val/ssim'] += val_ssim
+
+    val_lpips_metrics = lpips(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs)
+    for network in val_lpips_metrics:
+        agg_key = 'val/lpips/{}'.format(network)
+        metric_key = '{}/{}'.format(agg_key, train_index)
+        # TODO: 暂时不放lpips
+        # if self.wandb is not None:
+        #     self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
+        # if self.writer is not None:
+        #     self.writer.add_scalar('3_val_each_image/lpips/{}'.format(network), val_lpips_metrics[network], i)
+        val_metrics[agg_key] += val_lpips_metrics[network]
+    return val_metrics
+
+def get_depth_vis(results, typ):
+    if f'depth_{typ}' in results:
+        viz_depth = results[f'depth_{typ}']
+        if f'fg_depth_{typ}' in results:
+            to_use = results[f'fg_depth_{typ}'].view(-1)
+            while to_use.shape[0] > 2 ** 24:
+                to_use = to_use[::2]
+            ma = torch.quantile(to_use, 0.95)
+
+            viz_depth = viz_depth.clamp_max(ma)
+    else: 
+        viz_depth = None
+
+def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ):
+    sem_logits = results[f'sem_map_{typ}']
+    if val_type == 'val':
+            gt_label = metadata_item.load_gt()
+    elif val_type == 'train':
+        gt_label = metadata_item.load_label()
+    gt_label = remapping(gt_label)
+    gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+
+    sem_label = logits_2_label(sem_logits)
+    sem_label = remapping(sem_label)
+    visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+
+    return gt_label, sem_label, gt_label_rgb, visualize_sem
+
+def get_semantic_gt_pred_visualize(val_type, gt_label_rgb, metadata_item, viz_rgbs):
+    if val_type == 'val':
+        gt_label_rgb = torch.from_numpy(gt_label_rgb)
+        pseudo_gt_label_rgb = metadata_item.load_label()
+        pseudo_gt_label_rgb = custom2rgb(pseudo_gt_label_rgb.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+        pseudo_gt_label_rgb = torch.from_numpy(pseudo_gt_label_rgb)
+    elif val_type == 'train':
+        pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
+        gt_label_rgb = None
+    return  pseudo_gt_label_rgb, gt_label_rgb
+
+
+def get_sdf_normal_map(metadata_item, results, typ, viz_rgbs):
+    #  NSR  SDF ------------------------------------  save the normal_map
+    # world -> camera 
+    w2c = torch.linalg.inv(torch.cat((metadata_item.c2w,torch.tensor([[0,0,0,1]])),0))
+    viz_result_normal_map = results[f'normal_map_{typ}']
+    viz_result_normal_map = torch.mm(w2c[:3,:3],viz_result_normal_map.T).T
+    # normalize 
+    viz_result_normal_map = viz_result_normal_map / (1e-5 + torch.linalg.norm(viz_result_normal_map, ord = 2, dim=-1, keepdim=True))
+    viz_result_normal_map = viz_result_normal_map.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+
+    normal_viz = (viz_result_normal_map+1)*0.5*255
+
+    return normal_viz
+
+def save_semantic_metric(metrics_val_each, CLASSES, samantic_each_value, wandb, writer, train_index, i):
+    mIoU = np.nanmean(metrics_val_each.Intersection_over_Union())
+    F1 = np.nanmean(metrics_val_each.F1())
+    # OA = np.nanmean(metrics_val_each.OA())
+    FW_IoU = metrics_val_each.Frequency_Weighted_Intersection_over_Union()
+    iou_per_class = metrics_val_each.Intersection_over_Union()
+
+    samantic_each_value['mIoU'].append(mIoU)
+    samantic_each_value['FW_IoU'].append(FW_IoU)
+    samantic_each_value['F1'].append(F1)
+    # samantic_each_value['OA'].append(OA)
+
+    for class_name, iou in zip(CLASSES, iou_per_class):
+        samantic_each_value[f'{class_name}_iou'].append(iou)
+    
+
+    for class_name, iou in zip(CLASSES, iou_per_class):
+        if np.isnan(iou):
+            continue
+        if wandb is not None:
+            wandb.log({f'val/mIoU_each_class/{train_index}_{class_name}': iou, 'epoch':i})
+            wandb.log({'val/FW_IoU_each_images/{}'.format(train_index): FW_IoU, 'epoch':i})
+        if writer is not None:
+            writer.add_scalar(f'4_{class_name}/{i}', iou, train_index)
+            writer.add_scalar('3_val_each_image_FW_IoU/{}'.format(train_index), FW_IoU, i)
+
+    return samantic_each_value
+
+def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current, samantic_each_value, wandb, writer, train_index):
+    mIoU = np.nanmean(metrics_val.Intersection_over_Union())
+    FW_IoU = metrics_val.Frequency_Weighted_Intersection_over_Union()
+    F1 = np.nanmean(metrics_val.F1())
+    # OA = np.nanmean(metrics_val.OA())
+    iou_per_class = metrics_val.Intersection_over_Union()
+
+    eval_value = {'mIoU': mIoU,
+                    'FW_IoU': FW_IoU,
+                    'F1': F1,
+                #   'OA': OA,
+                    }
+    print("eval_value")
+    print('val:', eval_value)
+
+    iou_value = {}
+    for class_name, iou in zip(CLASSES, iou_per_class):
+        iou_value[class_name] = iou
+    print(iou_value)
+
+    with(experiment_path_current / 'semantic_each.txt').open('w') as f2:
+        for key in samantic_each_value:
+            f2.write(f'{key}:\n')
+            for k in range(len(samantic_each_value[key])):
+                f2.write(f'\t\t{k:<3}: {samantic_each_value[key][k]}\n')
+
+    with (experiment_path_current /'metrics.txt').open('a') as f:
+        for key in eval_value:
+            f.write(f'{eval_value[key]}\t')
+        for key in iou_value:
+            f.write(f'{iou_value[key]}\t')
+        f.write(f'\n\n')
+        f.write('eval_value:\n')
+        for key in eval_value:
+            f.write(f'\t\t{key:<12}: {eval_value[key]}\n')
+        f.write('iou_value:\n')
+        for key in iou_value:
+            f.write(f'\t\t{key:<12}: {iou_value[key]}\n' )
+    
+
+    if wandb is not None:
+        wandb.log({'val/mIoU': mIoU, 'epoch':train_index})
+        wandb.log({'val/FW_IoU': FW_IoU, 'epoch':train_index})
+        wandb.log({'val/F1': F1, 'epoch':train_index})
+        # self.wandb.log({'val/OA': OA, 'epoch':train_index})
+    if writer is not None:
+        writer.add_scalar('2_val_metric_average/mIoU', mIoU, train_index)
+        writer.add_scalar('2_val_metric_average/FW_IoU', FW_IoU, train_index)
+        writer.add_scalar('2_val_metric_average/F1', F1, train_index)
+        # self.writer.add_scalar('val/OA', OA, train_index)

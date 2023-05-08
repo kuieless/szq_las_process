@@ -2,7 +2,7 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=6
 
-exp_name='logs_357/0508_A2_m2f_b_5layer_pe2'
+exp_name='logs_357/0508_A2_m2f_b_5layer_pe2_residence'
 dataset1='Mill19'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2='building' #  "building"  "rubble"  "quad"  "residence"  "sci-art"  "campus"
 wandb_id=None  #gpnerf_semantic   None
@@ -19,7 +19,7 @@ ckpt_interval=10000
 
 enable_semantic=True
 freeze_geo=True
-ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G3_geo_residence/0/models/200000.pt
+ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G1_geo_building/0/models/200000.pt
 
 pos_xyz_dim=2
 num_layers_semantic_hidden=3
