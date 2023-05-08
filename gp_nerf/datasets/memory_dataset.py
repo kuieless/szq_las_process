@@ -23,7 +23,8 @@ class MemoryDataset(Dataset):
 
         main_print('Loading data')
 
-        for metadata_item in main_tqdm(metadata_items):
+        # for metadata_item in main_tqdm(metadata_items):
+        for metadata_item in main_tqdm(metadata_items[:40]):
             image_data = get_rgb_index_mask(metadata_item)
 
             if image_data is None:

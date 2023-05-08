@@ -727,7 +727,7 @@ class Runner:
                             if self.wandb is not None:
                                 self.wandb.log({'val/psnr/{}'.format(train_index): val_psnr, 'epoch': i})
                             if self.writer is not None:
-                                self.writer.add_scalar(metric_key, val_psnr, i)
+                                self.writer.add_scalar('val_rgbs/psnr/{}'.format(train_index), val_psnr, i)
 
                             val_metrics['val/psnr'] += val_psnr
 
@@ -739,7 +739,7 @@ class Runner:
                             if self.wandb is not None:
                                 self.wandb.log({'val/ssim/{}'.format(train_index): val_ssim, 'epoch':i})
                             if self.writer is not None:
-                                self.writer.add_scalar(metric_key, val_ssim, i)
+                                self.writer.add_scalar('val_rgbs/ssim/{}'.format(train_index), val_ssim, i)
 
                             val_metrics['val/ssim'] += val_ssim
 
@@ -752,7 +752,7 @@ class Runner:
                                 # if self.wandb is not None:
                                 #     self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
                                 # if self.writer is not None:
-                                #     self.writer.add_scalar(metric_key, val_lpips_metrics[network], i)
+                                #     self.writer.add_scalar('val_rgbs/lpips/{}'.format(network), val_lpips_metrics[network], i)
 
                                 val_metrics[agg_key] += val_lpips_metrics[network]
                         #  calculate psnr  ssim  lpips ******************************:
@@ -820,7 +820,7 @@ class Runner:
                             # img.save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
                             
                             if self.writer is not None:
-                                self.writer.add_image('val/{}'.format(i), img.byte(), train_index)
+                                self.writer.add_image('val_images/{}'.format(i), img.byte(), train_index)
                             if self.wandb is not None:
                                 Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
                                 self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
@@ -832,7 +832,7 @@ class Runner:
                                 Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
                                 self.wandb.log({"images_val/{}".format(train_index): Img})
                             if self.writer is not None:
-                                self.writer.add_image('val/{}'.format(i), T.ToTensor()(img), train_index)
+                                self.writer.add_image('val_images/{}'.format(i), T.ToTensor()(img), train_index)
                             img.save(str(experiment_path_current / 'val_rgbs' / '{}.jpg'.format(i)))
 
                         if val_type == 'val':
@@ -857,7 +857,7 @@ class Runner:
                                 #     Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
                                 #     self.wandb.log({"images_fg_bg/{}".format(train_index): Img})
                                 # if self.writer is not None:
-                                #     self.writer.add_image('val/{}_fg_bg'.format(i), T.ToTensor()(img), train_index)
+                                #     self.writer.add_image('val_images/{}_fg_bg'.format(i), T.ToTensor()(img), train_index)
                             ################################## 
 
                                             # mIoU
@@ -881,8 +881,8 @@ class Runner:
                                         self.wandb.log({f'val/mIoU_each_class/{train_index}_{class_name}': iou, 'epoch':i})
                                         self.wandb.log({'val/FW_IoU_each_images/{}'.format(train_index): FW_IoU, 'epoch':i})
                                     if self.writer is not None:
-                                        self.writer.add_scalar(f'val/mIoU_each_class/{train_index}_{class_name}', iou, i)
-                                        self.writer.add_scalar('val/FW_IoU_each_images/{}'.format(train_index), FW_IoU, i)
+                                        self.writer.add_scalar(f'val_each/mIoU_each_class/{train_index}_{class_name}', iou, i)
+                                        self.writer.add_scalar('val_each/FW_IoU_each_images/{}'.format(train_index), FW_IoU, i)
 
                                 self.metrics_val_each.reset()
                         del results
@@ -936,9 +936,9 @@ class Runner:
                     self.wandb.log({'val/F1': F1, 'epoch':train_index})
                     # self.wandb.log({'val/OA': OA, 'epoch':train_index})
                 if self.writer is not None:
-                    self.writer.add_scalar('val/mIoU', mIoU, train_index)
-                    self.writer.add_scalar('val/FW_IoU', FW_IoU, train_index)
-                    self.writer.add_scalar('val/F1', F1, train_index)
+                    self.writer.add_scalar('val_semantic/mIoU', mIoU, train_index)
+                    self.writer.add_scalar('val_semantic/FW_IoU', FW_IoU, train_index)
+                    self.writer.add_scalar('val_semantic/F1', F1, train_index)
                     # self.writer.add_scalar('val/OA', OA, train_index)
 
 
@@ -946,26 +946,6 @@ class Runner:
                 self.writer.close()
 
                 self.metrics_val.reset()
-
-                if 'RANK' in os.environ:
-                    dist.barrier()
-                    if self.writer is not None:
-                        for metric_file in metric_path.iterdir():
-                            metric = torch.load(metric_file, map_location='cpu')
-                            self.writer.add_scalar(metric['metric_key'], metric['value'], train_index)
-
-
-                            val_metrics[metric['agg_key']] += metric['value']
-                        for image_file in image_path.iterdir():
-                            img = Image.open(str(image_file))
-                            self.writer.add_image('val/{}'.format(image_file.stem), T.ToTensor()(img), train_index)
-                        for key in val_metrics:
-                            avg_val = val_metrics[key] / len(self.val_items)
-                            self.writer.add_scalar('{}/avg'.format(key), avg_val, 0)
-
-
-
-                    dist.barrier()
 
                 self.nerf.train()
             finally:
