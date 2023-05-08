@@ -20,12 +20,13 @@ def fc_block(in_f, out_f):
         torch.nn.ReLU(out_f)
     )
 
-def semantic_mlp(in_f, out_f, dim_mlp):
+def semantic_mlp(in_f, out_f, dim_mlp, num_hidden):
     semantic_linears = [torch.nn.Linear(in_f, dim_mlp)]
     semantic_linears.append(torch.nn.ReLU(inplace=True))
 
-    semantic_linears.append(torch.nn.Linear(dim_mlp, dim_mlp))
-    semantic_linears.append(torch.nn.ReLU(inplace=True))
+    for i in range(num_hidden):
+        semantic_linears.append(torch.nn.Linear(dim_mlp, dim_mlp))
+        semantic_linears.append(torch.nn.ReLU(inplace=True))
     
     semantic_linears.append(torch.nn.Linear(dim_mlp, out_f))
     return torch.nn.Sequential(*semantic_linears)
@@ -61,6 +62,7 @@ class NeRF(nn.Module):
         self.separate_semantic = hparams.separate_semantic
         self.embedding_xyz = Embedding(pos_xyz_dim)
         in_channels_xyz = xyz_dim + xyz_dim * pos_xyz_dim * 2
+        self.num_layers_semantic_hidden = hparams.num_layers_semantic_hidden
         print("semantic layer_dim: {}".format(self.semantic_layer_dim))
 
         #semantic
@@ -70,8 +72,8 @@ class NeRF(nn.Module):
         if self.enable_semantic:
             if self.separate_semantic:
                 print('separate the semantic mlp from nerf')
-                self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim)
-                self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim)
+                self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
             else:
                 print('add the semantic head to nerf')
                 self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
@@ -188,8 +190,8 @@ class NeRF(nn.Module):
         if self.enable_semantic:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
             if self.separate_semantic:
-                sem_feature = self.semantic_linear[0:4](input_xyz)
-                sem_logits = self.semantic_linear[4](sem_feature)
+                sem_feature = self.semantic_linear[:-1](input_xyz)
+                sem_logits = self.semantic_linear[-1](sem_feature)
             else:
                 if self.stop_semantic_grad:
                     h_stop = h.detach()
@@ -234,8 +236,8 @@ class NeRF(nn.Module):
         if self.enable_semantic:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
             if self.separate_semantic:
-                sem_feature = self.semantic_linear_bg[0:4](input_xyz)
-                sem_logits = self.semantic_linear_bg[4](sem_feature)
+                sem_feature = self.semantic_linear_bg[:-1](input_xyz)
+                sem_logits = self.semantic_linear_bg[-1](sem_feature)
             else:
                 if self.stop_semantic_grad:
                     h_stop = h.detach()

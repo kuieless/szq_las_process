@@ -23,6 +23,8 @@ def get_opts_base():
     parser.add_argument('--wgt_group_loss', default=1e-2, type=float, help='')
     parser.add_argument('--sampling_mode', type=str, default='per_mask', choices=['per_mask', 'whole_image'])
 
+    parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
+
 
     #sdf 
     parser.add_argument('--gradient_error_weight', default=0.005, type=float, help='')
