@@ -11,7 +11,7 @@ import cv2
 class ImageMetadata:
     #zyq : add label_path for semantic 
     def __init__(self, image_path: Path, c2w: torch.Tensor, W: int, H: int, intrinsics: torch.Tensor, image_index: int,
-                 mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None):
+                 mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None, normal_path=None, depth_path=None):
         self.image_path = image_path
         self.c2w = c2w
         self.W = W
@@ -22,6 +22,8 @@ class ImageMetadata:
         self.is_val = is_val
         self.label_path = label_path
         self.sam_feature_path = sam_feature_path
+        self.normal_path = normal_path
+        self.depth_path = depth_path
 
     def load_image(self) -> torch.Tensor:
         rgbs = Image.open(self.image_path).convert('RGB')
@@ -78,6 +80,20 @@ class ImageMetadata:
        
         return torch.from_numpy(feature)
         
+    def load_normal(self) -> torch.Tensor:
+        normal = np.load(self.normal_path)
+        if 'sci-art' in self.normal_path:
+            normal = np.moveaxis(normal, [0, 1, 2], [1, 2, 0]) # bug: from H*3*W to H*W*3
+        else:
+            normal = np.moveaxis(normal, [0, 1, 2], [2, 0, 1]) # from 3*H*W to H*W*3
+        normal = 2.0 * normal - 1.0 # from [0,1] to [-1,1]
+        normal[:, :, 1:] = normal[:, :, 1:] * -1 # from right-down-forward to right-up-back
+        return torch.FloatTensor(np.asarray(normal)).contiguous()
+
+    def load_depth(self):
+        depth = np.load(self.depth_path)
+        return torch.HalfTensor(depth)
+    
     
     
 

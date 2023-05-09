@@ -30,16 +30,16 @@ def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, wr
         writer.add_scalar('3_val_each_image/ssim/{}'.format(train_index), val_ssim, i)
     val_metrics['val/ssim'] += val_ssim
 
-    val_lpips_metrics = lpips(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs)
-    for network in val_lpips_metrics:
-        agg_key = 'val/lpips/{}'.format(network)
-        metric_key = '{}/{}'.format(agg_key, train_index)
-        # TODO: 暂时不放lpips
-        # if self.wandb is not None:
-        #     self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
-        # if self.writer is not None:
-        #     self.writer.add_scalar('3_val_each_image/lpips/{}'.format(network), val_lpips_metrics[network], i)
-        val_metrics[agg_key] += val_lpips_metrics[network]
+    #val_lpips_metrics = lpips(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs)
+    #for network in val_lpips_metrics:
+    #    agg_key = 'val/lpips/{}'.format(network)
+    #    metric_key = '{}/{}'.format(agg_key, train_index)
+    #    # TODO: 暂时不放lpips
+    #    # if self.wandb is not None:
+    #    #     self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
+    #    # if self.writer is not None:
+    #    #     self.writer.add_scalar('3_val_each_image/lpips/{}'.format(network), val_lpips_metrics[network], i)
+    #    val_metrics[agg_key] += val_lpips_metrics[network]
     return val_metrics
 
 def get_depth_vis(results, typ):
@@ -174,3 +174,57 @@ def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current,
         writer.add_scalar('2_val_metric_average/FW_IoU', FW_IoU, train_index)
         writer.add_scalar('2_val_metric_average/F1', F1, train_index)
         # self.writer.add_scalar('val/OA', OA, train_index)
+
+def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, visualize_scalars):
+    depth_map = None
+    H, W = metadata_item.H, metadata_item.W
+    if f'depth_{typ}' in results:
+        depth_map = results[f'depth_{typ}']
+        if f'fg_depth_{typ}' in results:
+            to_use = results[f'fg_depth_{typ}'].view(-1)
+            while to_use.shape[0] > 2 ** 24:
+                to_use = to_use[::2]
+            ma = torch.quantile(to_use, 0.95)
+            depth_clamp = depth_map.clamp_max(ma)
+        else:
+            depth_clamp = depth_map
+
+        depth_vis = torch.from_numpy(visualize_scalars(
+                torch.log(depth_clamp + 1e-8).view(H, W).cpu()))
+        img_list.append(depth_vis)
+
+    if hparams.depth_loss:  # GT depth
+        depth_cue = metadata_item.load_depth().float()
+        depth_cue = torch.from_numpy(visualize_scalars(depth_cue))
+        img_list.append(depth_cue)
+
+
+    if f'normal_map_{typ}' in results:
+        # world -> camera 
+        w2c = torch.linalg.inv(torch.cat((metadata_item.c2w,torch.tensor([[0,0,0,1]])), 0))
+        normal_map = results[f'normal_map_{typ}']
+        # normal_map = torch.mm(normal_map, w2c[:3,:3])# + w2c[:3,3]
+        normal_map = torch.mm(w2c[:3,:3], normal_map.T).T
+        # normalize 
+        normal_map = normal_map / (1e-5 + torch.linalg.norm(normal_map, ord = 2, dim=-1, keepdim=True))
+
+        if 'sdf' not in self.hparams.network_type:
+            normal_map = normal_map * -1
+        normal_map = normal_map.view(H, W, 3).cpu()
+        
+        normal_viz = (normal_map + 1)*0.5*255
+        img_list.append(normal_viz)
+
+
+    if hparams.normal_loss:
+        normal_cue = metadata_item.load_normal()
+        normal_cue = (normal_cue + 1) * 0.5 * 255
+        img_list.append(normal_cue)
+
+
+    if 'bg_lambda_fine' in results:
+        fg_mask = (results['bg_lambda_fine'] < 0.01).reshape(H, W, 1)
+        fg_mask = fg_mask.repeat(1, 1, 3) * 255
+        img_list.append(fg_mask)
+    return
+

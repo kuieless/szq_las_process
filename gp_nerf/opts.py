@@ -14,7 +14,7 @@ def get_opts_base():
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['filesystem', 'memory', 'sam'],
+    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['filesystem', 'memory', 'sam', 'file_normal', 'memory_depth'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
     #sam 
@@ -31,6 +31,18 @@ def get_opts_base():
     parser.add_argument('--gradient_error_weight_increase', default=True, type=eval, choices=[True, False])
     parser.add_argument('--cos_iterations', type=int, default=50000, help='training iterations')
     parser.add_argument('--normal_iterations', type=int, default=50000, help='training iterations')
+
+    # normal and depth
+    parser.add_argument('--visual_normal', default=False, type=eval, choices=[True, False], help='supervise normal')
+    parser.add_argument('--normal_loss', default=False, type=eval, choices=[True, False], help='supervise normal')
+    parser.add_argument('--wgt_nl1_loss', default=1e-4, type=float, help='')
+    parser.add_argument('--wgt_ncos_loss', default=1e-4, type=float, help='')
+    parser.add_argument('--depth_loss', default=False, type=eval, choices=[True, False], help='supervise normal')
+    parser.add_argument('--wgt_depth_loss', default=0.000, type=float, help='')
+    parser.add_argument('--auto_grad', default=False, type=eval, choices=[True, False], help='supervise normal')
+    parser.add_argument('--decay_min', default=0.1, type=float, help='')
+    parser.add_argument('--sample_ray_num', default=4096, type=int, help='')
+    parser.add_argument('--save_depth', default=False, type=eval, choices=[True, False], help='supervise normal')
 
     # semantic
     parser.add_argument('--stop_semantic_grad', default=True, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
