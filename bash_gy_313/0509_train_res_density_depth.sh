@@ -1,10 +1,10 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-gpu=${1:-6}
+gpu=${1:-7}
 exp=${2:-''}
 export CUDA_VISIBLE_DEVICES=${gpu}
 
-exp_name='logs_313/0509_resi_normal'_${exp}
+exp_name='logs_313/0509_resi_depth'_${exp}
 dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2="residence" # 'sci-art'  "building"  "rubble"  "quad"   "sci-art"  "campus"
 wandb_id=None  #gpnerf_semantic   None
@@ -15,27 +15,30 @@ enable_semantic=True
 network_type='gpnerf'  #  gpnerf  sdf
 label_name='merge_new'
 
-batch_size=16384 #25600 # 128*128
+batch_size=16 #4 #25600 # 128*128
+sample_ray_num=2304 # =16*32*32 1024
+#batch_size=16384 #25600 # 128*128
+#batch_size=16384 # 128*128
 train_iterations=200000
 val_interval=20000
 ckpt_interval=20000
 pos_xyz_dim=10
 
-dataset_type='file_normal'
-wgt_depth_loss=0.0000
+dataset_type='memory_depth'
+wgt_depth_loss=0.0001
 
-#chunk_path=/data/yuqi/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name-down4
-chunk_path=/data/guanying/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name-down4_0503
+args=""
+chunk_path=/data/yuqi/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name-down4
+ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G3_geo_residence/0/models/200000.pt
+args=${args}"--ckpt_path $ckpt_path --no_resume_ckpt_state"
 
-#ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G3_geo_residence/0/models/200000.pt
-
-debug=True
+debug=False
 #debug=True
-args="--normal_loss True  --depth_loss False "
+args=${args}" --normal_loss False  --depth_loss False "
 if [[ $debug == 'True' ]]; then
     echo Deubg
     exp_name=${exp_name}_debug
-    args=$args" --val_interval 10"
+    args=$args" --debug True --val_interval 10 --logger_interval 5"
 fi
 echo DEBUG=$debug
 

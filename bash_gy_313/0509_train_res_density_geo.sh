@@ -15,30 +15,27 @@ enable_semantic=True
 network_type='gpnerf'  #  gpnerf  sdf
 label_name='merge_new'
 
-batch_size=16 #4 #25600 # 128*128
-sample_ray_num=1024
-#batch_size=16384 #25600 # 128*128
-#batch_size=16384 # 128*128
+batch_size=16384 #25600 # 128*128
 train_iterations=200000
 val_interval=20000
 ckpt_interval=20000
 pos_xyz_dim=10
 
-dataset_type='memory_depth'
+dataset_type='file_normal'
 wgt_depth_loss=0.0000
 
-args=""
-chunk_path=/data/yuqi/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name-down4
-ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G3_geo_residence/0/models/200000.pt
-args=${args}"--ckpt_path $ckpt_path --no_resume_ckpt_state"
+#chunk_path=/data/yuqi/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name-down4
+chunk_path=/data/guanying/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name-down4_0503
 
-#debug=False
+#ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G3_geo_residence/0/models/200000.pt
+
 debug=True
-args=${args}" --normal_loss False  --depth_loss False "
+#debug=True
+args="--normal_loss True  --depth_loss False "
 if [[ $debug == 'True' ]]; then
     echo Deubg
     exp_name=${exp_name}_debug
-    args=$args" --debug True --val_interval 10 --logger_interval 5"
+    args=$args" --val_interval 10"
 fi
 echo DEBUG=$debug
 
@@ -50,3 +47,5 @@ python gp_nerf/train.py  --network_type   $network_type --enable_semantic  $enab
     --wandb_id  $wandb_id   --wandb_run_name  $wandb_run_name   \
     --wgt_depth_loss $wgt_depth_loss --sample_ray_num $sample_ray_num \
     $args 
+
+
