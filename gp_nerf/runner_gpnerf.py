@@ -807,16 +807,17 @@ class Runner:
                     metadata_item = self.train_items[i]
                 viz_rgbs = metadata_item.load_image().float() / 255.
 
-                save_dir = f'zyq/val_{metadata_item.image_path.stem}_v3'
+                save_dir = f'zyq/val_{metadata_item.image_path.stem}_v4'
+                print('save_dir %s' % save_dir)
                 if os.path.exists(save_dir):
                     shutil.rmtree(save_dir)
                 results, _ = self.render_image(metadata_item, train_index)
                 typ = 'fine' if 'rgb_fine' in results else 'coarse'
                 viz_rgbs = metadata_item.load_image().float() / 255.
                 
-                viz_depth = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1])
+                depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1])
 
-                H, W = viz_depth.shape
+                H, W = depth_map.shape
 
                 directions = get_ray_directions(W,
                                                 H,
@@ -827,10 +828,9 @@ class Runner:
                                                 self.hparams.center_pixels,
                                                 'cpu')
                 depth_scale = torch.abs(directions[:, :, 2]) # z-axis's values
-                viz_depth *= depth_scale
-                viz_depth = viz_depth.numpy()
+                depth_map = (depth_map * depth_scale).numpy()
 
-                x, y = int(W * 2/4), int(H * 2/4)
+                x, y = int(W * 1/4), int(H * 1/4)
                 #x, y = W // 2, H // 2
                 K1 = metadata_item.intrinsics
                 #K1 = np.array([[K1[0], 0, K1[2]],[0, -K1[1], K1[3]],[0,0,-1]])
@@ -839,7 +839,7 @@ class Runner:
                 E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
                 print('camera c2w', metadata_item.c2w)
                 print('camera intrinsic', metadata_item.intrinsics)
-                depth = viz_depth[y, x]   #* 0.5
+                depth = depth_map[y, x]   #* 0.5
                 pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
                 pt_3d = np.append(pt_3d, 1)
                 print('3d point in camera space', pt_3d)
@@ -855,15 +855,19 @@ class Runner:
                 world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
                 print('point in world ', world_point)
 
+                #for j in [30]:
                 for j in np.arange(len(self.train_items[:])):
+
+                    """ Compute occlusion """
+
                     train_item = self.train_items[j]
+
+
                     E2 = np.array(train_item.c2w)
                     E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
                     w2c = np.linalg.inv(np.concatenate((E2, [[0,0,0,1]]), 0))
                     pt_3d_trans = np.dot(w2c, world_point)
-                    #pt_3d_trans[1] = - pt_3d_trans[1]
-                    # pt_3d_trans[0] = - pt_3d_trans[0]
-                    #pt_2d_trans = np.dot(K1, pt_3d_trans[:3]) / pt_3d_trans[2]
+
                     pt_2d_trans = np.dot(K1, pt_3d_trans[:3]) 
                     pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
                     print('%d, camera point in %s' % (j, train_item.image_path.stem), pt_3d_trans, pt_2d_trans)
@@ -871,12 +875,21 @@ class Runner:
                     h2, w2 = H, W
                     x2, y2 = int(pt_2d_trans[0]), int(pt_2d_trans[1])
                     if x2 >= 0 and x2 < w2 and y2 >= 0 and y2 < h2:
-                        print('Projected point is on image2')
+                        results2, _ = self.render_image(train_item, train_index)
+                        depth_map2 = results2[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1])
+                        depth_map2 = (depth_map2 * depth_scale).numpy()
+                        depth2 = depth_map2[y2, x2]
                         img2 = cv2.imread(str(train_item.image_path))
                         pt2 = (int(pt_2d_trans[0]), int(pt_2d_trans[1]))
+                        depth_diff = np.abs(depth2 - pt_3d_trans[2])
+                        print('Project inside image 2', depth, depth2, depth_diff)
                         radius = 5
                         color = (0, 0, 255)
                         thickness = 2
+                        if depth_diff > 0.01:
+                            print('occluded points!!')
+                            color = (0, 255, 0)
+
                         img2 = cv2.circle(img2, pt2, radius, color, thickness)
                         cv2.imwrite(f"{save_dir}/{train_item.image_path.stem}.jpg", img2)
                     # else:
