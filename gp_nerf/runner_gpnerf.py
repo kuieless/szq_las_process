@@ -781,82 +781,74 @@ class Runner:
             experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
             Path(str(experiment_path_current)).mkdir()
             Path(str(experiment_path_current / 'val_rgbs')).mkdir()
-
-            for i in main_tqdm(indices_to_eval):
+            
+            for i in indices_to_eval[0:1]:
                 if val_type == 'val':
                     metadata_item = self.val_items[i]
                 elif val_type == 'train':
                     metadata_item = self.train_items[i]
                 viz_rgbs = metadata_item.load_image().float() / 255.
 
+                save_dir = f'zyq/val_{metadata_item.image_path.stem}_v3'
+                if os.path.exists(save_dir):
+                    shutil.rmtree(save_dir)
                 results, _ = self.render_image(metadata_item, train_index)
                 typ = 'fine' if 'rgb_fine' in results else 'coarse'
                 viz_rgbs = metadata_item.load_image().float() / 255.
                 
-                viz_depth = results[f'depth_{typ}']
-                # to_use = viz_depth.view(-1)
-                # while to_use.shape[0] > 2 ** 24:
-                #     to_use = to_use[::2]
-                # mi = torch.quantile(to_use, 0.05)
-                # ma = torch.quantile(to_use, 0.95)
-                # viz_depth = (viz_depth - mi) / max(ma - mi, 1e-8)  # normalize to 0~1
-                # viz_depth = viz_depth.clamp_(0, 1)
+                viz_depth = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1])
 
-                viz_depth = viz_depth.view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy()
                 H, W = viz_depth.shape
-                x, y = W // 2, H // 2
+
+                directions = get_ray_directions(W,
+                                                H,
+                                                metadata_item.intrinsics[0],
+                                                metadata_item.intrinsics[1],
+                                                metadata_item.intrinsics[2],
+                                                metadata_item.intrinsics[3],
+                                                self.hparams.center_pixels,
+                                                'cpu')
+                depth_scale = torch.abs(directions[:, :, 2]) # z-axis's values
+                viz_depth *= depth_scale
+                viz_depth = viz_depth.numpy()
+
+                x, y = int(W * 2/4), int(H * 2/4)
+                #x, y = W // 2, H // 2
                 K1 = metadata_item.intrinsics
+                #K1 = np.array([[K1[0], 0, K1[2]],[0, -K1[1], K1[3]],[0,0,-1]])
                 K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
                 E1 = np.array(metadata_item.c2w)
-                depth = viz_depth[y, x] 
+                E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+                print('camera c2w', metadata_item.c2w)
+                print('camera intrinsic', metadata_item.intrinsics)
+                depth = viz_depth[y, x]   #* 0.5
                 pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
                 pt_3d = np.append(pt_3d, 1)
-                (Path(f"zyq/val_{metadata_item.image_path.stem}")).mkdir(exist_ok=True)
+                print('3d point in camera space', pt_3d)
+                (Path(f"{save_dir}")).mkdir(exist_ok=True)
                 img1= cv2.imread(f"{str(metadata_item.image_path)}")
                 pt2 = (int(x), int(y))
                 radius = 5
                 color = (0, 0, 255)
                 thickness = 2
                 cv2.circle(img1, pt2, radius, color, thickness)
-                cv2.imwrite(f"zyq/val_{metadata_item.image_path.stem}/000000_{metadata_item.image_path.stem}.png", img1)
-                # directions = get_ray_directions(metadata_item.W,
-                #                         metadata_item.H,
-                #                         metadata_item.intrinsics[0],
-                #                         metadata_item.intrinsics[1],
-                #                         metadata_item.intrinsics[2],
-                #                         metadata_item.intrinsics[3],
-                #                         self.hparams.center_pixels,
-                #                         self.device)
-
-                # rays = get_rays(directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
-                # img_3 = cv2.imread('/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-labels/train/rgbs/000031.JPG')
-                # cv2.imwrite(f"zyq/val_{metadata_item.image_path.stem}/000000_000031.png", img_3)
-
-                # train_item = self.train_items[31]
-                # E2 = np.array(train_item.c2w)
-                # pt_3d_trans = np.dot(np.linalg.pinv(E2), np.dot(E1, pt_3d))
-                # # pt_3d_trans = np.dot(E2, np.dot(np.linalg.pinv(E1), pt_3d))
-                # pt_2d_trans = np.dot(K1, pt_3d_trans[:3]) / pt_3d_trans[2]
-                # h2, w2 = H, W
-                # x2, y2 = int(pt_2d_trans[0]), int(pt_2d_trans[1])
-                # if x2 >= 0 and x2 < w2 and y2 >= 0 and y2 < h2:
-                #     print('Projected point is on image2')
-                #     img2 = cv2.imread(str(train_item.image_path))
-                #     pt2 = (int(pt_2d_trans[0]), int(pt_2d_trans[1]))
-                #     radius = 5
-                #     color = (0, 0, 255)
-                #     thickness = 2
-                #     img2 = cv2.circle(img2, pt2, radius, color, thickness)
-                #     cv2.imwrite(f"zyq/val_{metadata_item.image_path.stem}/{train_item.image_path.stem}.png", img2)
+                cv2.imwrite(f"{save_dir}/000000_{metadata_item.image_path.stem}.jpg", img1)
                 
-                for j in main_tqdm(np.arange(len(self.train_items))):
+                world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
+                print('point in world ', world_point)
+
+                for j in np.arange(len(self.train_items[:])):
                     train_item = self.train_items[j]
                     E2 = np.array(train_item.c2w)
-                    pt_3d_trans = np.dot(np.linalg.inv(np.concatenate((E2, [[0,0,0,1]]), 0)), np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d))
-                    print(pt_3d_trans)
-                    pt_3d_trans[1] = - pt_3d_trans[1]
+                    E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
+                    w2c = np.linalg.inv(np.concatenate((E2, [[0,0,0,1]]), 0))
+                    pt_3d_trans = np.dot(w2c, world_point)
+                    #pt_3d_trans[1] = - pt_3d_trans[1]
                     # pt_3d_trans[0] = - pt_3d_trans[0]
-                    pt_2d_trans = np.dot(K1, pt_3d_trans[:3]) / pt_3d_trans[2]
+                    #pt_2d_trans = np.dot(K1, pt_3d_trans[:3]) / pt_3d_trans[2]
+                    pt_2d_trans = np.dot(K1, pt_3d_trans[:3]) 
+                    pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
+                    print('%d, camera point in %s' % (j, train_item.image_path.stem), pt_3d_trans, pt_2d_trans)
                     
                     h2, w2 = H, W
                     x2, y2 = int(pt_2d_trans[0]), int(pt_2d_trans[1])
@@ -868,7 +860,7 @@ class Runner:
                         color = (0, 0, 255)
                         thickness = 2
                         img2 = cv2.circle(img2, pt2, radius, color, thickness)
-                        cv2.imwrite(f"zyq/val_{metadata_item.image_path.stem}/{train_item.image_path.stem}.png", img2)
+                        cv2.imwrite(f"{save_dir}/{train_item.image_path.stem}.jpg", img2)
                     # else:
                         # print('Projected point is not on image2')
                         
