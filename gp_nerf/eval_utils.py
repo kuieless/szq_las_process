@@ -2,7 +2,7 @@
 from mega_nerf.metrics import psnr, ssim, lpips
 from mega_nerf.misc_utils import main_print, main_tqdm
 import torch
-from tools.unetformer.uavid2rgb import custom2rgb, remapping
+from tools.unetformer.uavid2rgb import custom2rgb
 import numpy as np
 
 def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, writer, val_metrics, i, f):                            
@@ -55,7 +55,7 @@ def get_depth_vis(results, typ):
     else: 
         viz_depth = None
 
-def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ):
+def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping):
     sem_logits = results[f'sem_map_{typ}']
     if val_type == 'val':
             gt_label = metadata_item.load_gt()

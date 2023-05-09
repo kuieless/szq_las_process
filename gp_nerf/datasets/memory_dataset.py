@@ -23,8 +23,8 @@ class MemoryDataset(Dataset):
 
         main_print('Loading data')
 
-        # for metadata_item in main_tqdm(metadata_items):
-        for metadata_item in main_tqdm(metadata_items[:40]):
+        for metadata_item in main_tqdm(metadata_items):
+        # for metadata_item in main_tqdm(metadata_items[:40]):
             image_data = get_rgb_index_mask(metadata_item)
 
             if image_data is None:
@@ -47,7 +47,7 @@ class MemoryDataset(Dataset):
             if image_keep_mask is not None:
                 image_rays = image_rays[image_keep_mask == True]
 
-            rgbs.append(image_rgbs.float() / 255.)
+            rgbs.append(image_rgbs)
             rays.append(image_rays)
             indices.append(image_indices)
             labels.append(torch.tensor(label, dtype=torch.int))
@@ -63,8 +63,8 @@ class MemoryDataset(Dataset):
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         return {
-            'rgbs': self._rgbs[idx],
+            'rgbs': self._rgbs[idx].float() / 255.,
             'rays': self._rays[idx],
             'img_indices': self._img_indices[idx],
-            'labels': self._labels[idx]
+            'labels': self._labels[idx].int()
         }

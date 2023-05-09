@@ -21,7 +21,8 @@ def get_opts_base():
     parser.add_argument('--sam_sample_total', type=int, default=20480, help='')
     parser.add_argument('--sam_sample_each', type=int, default=1024, help='')
     parser.add_argument('--wgt_group_loss', default=1e-2, type=float, help='')
-    parser.add_argument('--sampling_mode', type=str, default='per_mask', choices=['per_mask', 'whole_image'])
+    parser.add_argument('--sampling_mode', type=str, default='per_mask', choices=['per_mask', 'per_mask_threshold', 'whole_image'])
+    parser.add_argument('--sam_loss', type=str, default='MSELoss', choices=['MSELoss', 'CSLoss'])
 
     parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
 

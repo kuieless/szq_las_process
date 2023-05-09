@@ -67,7 +67,11 @@ class Runner:
             self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
             self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
             if hparams.dataset_type == 'sam':
-                self.loss_feat = lambda pred, target: nn.MSELoss()(pred, target)
+                if hparams.sam_loss == 'MSELoss':
+                    self.loss_feat = lambda pred, target: nn.MSELoss()(pred, target)
+                elif hparams.sam_loss == 'CSLoss':
+                    self.loss_feat = lambda pred, target: nn.CosineSimilarity(dim=1)(pred, target)
+
 
         if hparams.ckpt_path is not None:
             checkpoint = torch.load(hparams.ckpt_path, map_location='cpu')
@@ -363,7 +367,7 @@ class Runner:
                         if self.hparams.dataset_type == 'sam':
                             #如果用sam一张张读取，则不需要这么多，repeat就行
                             image_indices = item['img_indices'].to(self.device, non_blocking=True)
-                            image_indices = image_indices.repeat(labels.shape[-1])
+                            image_indices = image_indices.repeat(1, labels.shape[-1])
                         else:
                             image_indices = item['img_indices'].to(self.device, non_blocking=True)
                     else:
@@ -371,27 +375,35 @@ class Runner:
 
                     
                     if self.hparams.dataset_type == 'sam':
-                        # 这里得到ray
-                        selected_points = item['selected_points'].to(self.device, non_blocking=True).squeeze(0)
-                        idx = image_indices[0].item()
-                        metadata_item = self.train_items[idx]
-                        directions = get_ray_directions(metadata_item.W,
-                                                        metadata_item.H,
-                                                        metadata_item.intrinsics[0],
-                                                        metadata_item.intrinsics[1],
-                                                        metadata_item.intrinsics[2],
-                                                        metadata_item.intrinsics[3],
-                                                        self.hparams.center_pixels,
-                                                        self.device)
-                        image_rays = get_rays(directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
-                        rays = image_rays[selected_points[:, 0], selected_points[:, 1], :]
+                        # # 这里得到ray
+                        # selected_points = item['selected_points'].to(self.device, non_blocking=True).squeeze(0)
+                        # idx = image_indices[0].item()
+                        # metadata_item = self.train_items[idx]
+                        # directions = get_ray_directions(metadata_item.W,
+                        #                                 metadata_item.H,
+                        #                                 metadata_item.intrinsics[0],
+                        #                                 metadata_item.intrinsics[1],
+                        #                                 metadata_item.intrinsics[2],
+                        #                                 metadata_item.intrinsics[3],
+                        #                                 self.hparams.center_pixels,
+                        #                                 self.device)
+                        # image_rays = get_rays(directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+                        # rays = image_rays[selected_points[:, 0], selected_points[:, 1], :]
                         # 'rays': self._rays[idx, selected_points[:, 0], selected_points[:, 1], :],
-
+                        # groups = item['groups'].to(self.device, non_blocking=True)
+                        # metrics, bg_nerf_rays_present = self._training_step(
+                        # None, rays, image_indices, labels.squeeze(0), groups.squeeze(0), train_iterations)
+                        rays = item['rays']
                         groups = item['groups'].to(self.device, non_blocking=True)
+
+                        rays = rays.view(-1, rays.size(-1))
+                        image_indices = image_indices.view(-1)
+                        labels = labels.view(-1)
+                        groups = groups.view(-1)
+
                         metrics, bg_nerf_rays_present = self._training_step(
-                        None, rays, image_indices, labels.squeeze(0), groups.squeeze(0), train_iterations)
-                        # item['rgbs'].squeeze(0).to(self.device, non_blocking=True),
-                        # item['rays'].squeeze(0).to(self.device, non_blocking=True),
+                        None, rays.to(self.device, non_blocking=True), 
+                        image_indices, labels, groups, train_iterations)
                         
                     else:
                         groups = None
@@ -425,6 +437,8 @@ class Runner:
                         lr_temp = optimizer.param_groups[0]['lr']
                         if self.wandb is not None and train_iterations % self.hparams.logger_interval == 0:
                             self.wandb.log({"train/optimizer_{}_lr".format(key): lr_temp, 'epoch':train_iterations})
+                        if self.writer is not None and train_iterations % self.hparams.logger_interval == 0:
+                            self.writer.add_scalar('1_train/optimizer_{}_lr'.format(key), lr_temp, train_iterations)
                         scaler.step(optimizer)
 
                 scaler.update()
@@ -585,7 +599,11 @@ class Runner:
                     feature_group = semantic_feature[counts:counts+cur_counts.item()]
                     f_detach = feature_group.detach()
                     feature_group_mean = f_detach.mean(dim=0).repeat(feature_group.shape[0],1)
-                    group_loss_each += (self.loss_feat(feature_group, feature_group_mean))
+                    if self.hparams.sam_loss == 'MSELoss':
+                        group_loss_each += (self.loss_feat(feature_group, feature_group_mean))
+                    elif self.hparams.sam_loss == 'CSLoss':
+                        cs_loss = self.loss_feat(feature_group, feature_group_mean)
+                        group_loss_each += cs_loss.mean()
                     counts += cur_counts.item()
                 group_loss = group_loss_each / len(group_counts) #/ semantic_feature.shape[-1]
                 metrics['sam_group_loss'] = group_loss
@@ -689,7 +707,7 @@ class Runner:
 
                         # get_semantic  gt  &  pred
                         if self.hparams.enable_semantic:
-                            gt_label, sem_label, gt_label_rgb, visualize_sem = get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ)
+                            gt_label, sem_label, gt_label_rgb, visualize_sem = get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping)
                             self.metrics_val.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
                             self.metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
                             pseudo_gt_label_rgb, gt_label_rgb = get_semantic_gt_pred_visualize(val_type, gt_label_rgb, metadata_item, viz_rgbs)
