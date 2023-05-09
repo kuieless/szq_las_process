@@ -4,6 +4,8 @@ from mega_nerf.misc_utils import main_print, main_tqdm
 import torch
 from tools.unetformer.uavid2rgb import custom2rgb
 import numpy as np
+from PIL import Image
+
 
 def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, writer, val_metrics, i, f):                            
     eval_rgbs = viz_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
@@ -55,31 +57,39 @@ def get_depth_vis(results, typ):
     else: 
         viz_depth = None
 
-def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping):
-    sem_logits = results[f'sem_map_{typ}']
-    if val_type == 'val':
-            gt_label = metadata_item.load_gt()
-    elif val_type == 'train':
-        gt_label = metadata_item.load_label()
-    gt_label = remapping(gt_label)
-    gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, 
+                         metrics_val, metrics_val_each, img_list, experiment_path_current, i):
+    if f'sem_map_{typ}' in results:
+        sem_logits = results[f'sem_map_{typ}']
+        if val_type == 'val':
+                gt_label = metadata_item.load_gt()
+        elif val_type == 'train':
+            gt_label = metadata_item.load_label()
+        gt_label = remapping(gt_label)
+        gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
 
-    sem_label = logits_2_label(sem_logits)
-    sem_label = remapping(sem_label)
-    visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+        sem_label = logits_2_label(sem_logits)
+        sem_label = remapping(sem_label)
+        visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+        
+        metrics_val.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+        metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+        
+        if val_type == 'val':
+            gt_label_rgb = torch.from_numpy(gt_label_rgb)
+            pseudo_gt_label_rgb = metadata_item.load_label()
+            pseudo_gt_label_rgb = custom2rgb(pseudo_gt_label_rgb.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+            pseudo_gt_label_rgb = torch.from_numpy(pseudo_gt_label_rgb)
+        elif val_type == 'train':
+            pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
+            gt_label_rgb = None
 
-    return gt_label, sem_label, gt_label_rgb, visualize_sem
+        img_list.append(pseudo_gt_label_rgb)
+        img_list.append(gt_label_rgb)
+        img_list.append(torch.from_numpy(visualize_sem))
+        Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / '{}_pred_label.jpg'.format(i)))
 
-def get_semantic_gt_pred_visualize(val_type, gt_label_rgb, metadata_item, viz_rgbs):
-    if val_type == 'val':
-        gt_label_rgb = torch.from_numpy(gt_label_rgb)
-        pseudo_gt_label_rgb = metadata_item.load_label()
-        pseudo_gt_label_rgb = custom2rgb(pseudo_gt_label_rgb.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-        pseudo_gt_label_rgb = torch.from_numpy(pseudo_gt_label_rgb)
-    elif val_type == 'train':
-        pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
-        gt_label_rgb = None
-    return  pseudo_gt_label_rgb, gt_label_rgb
+    return
 
 
 def get_sdf_normal_map(metadata_item, results, typ, viz_rgbs):

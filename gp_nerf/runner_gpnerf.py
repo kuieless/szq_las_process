@@ -28,7 +28,6 @@ from tqdm import tqdm
 
 from gp_nerf.datasets.filesystem_dataset import FilesystemDataset
 from gp_nerf.datasets.memory_dataset import MemoryDataset
-from gp_nerf.datasets.memory_dataset_sam import MemoryDataset_SAM
 
 from gp_nerf.image_metadata import ImageMetadata
 from mega_nerf.metrics import psnr, ssim, lpips
@@ -45,7 +44,7 @@ from tools.unetformer.metric import Evaluator
 
 import pandas as pd
 
-from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_semantic_gt_pred_visualize, get_sdf_normal_map 
+from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map 
 from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folder_logger, save_semantic_metric
 from gp_nerf.eval_utils import prepare_depth_normal_visual
 def get_n_params(model):
@@ -63,15 +62,15 @@ class Runner:
     def __init__(self, hparams: Namespace, set_experiment_path: bool = True):
         faulthandler.register(signal.SIGUSR1)
 
-        if hparams.enable_semantic:
-            CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
-            self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
-            self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
-            if hparams.dataset_type == 'sam':
-                if hparams.sam_loss == 'MSELoss':
-                    self.loss_feat = lambda pred, target: nn.MSELoss()(pred, target)
-                elif hparams.sam_loss == 'CSLoss':
-                    self.loss_feat = lambda pred, target: nn.CosineSimilarity(dim=1)(pred, target)
+        
+        CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
+        self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
+        self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
+        if hparams.dataset_type == 'sam':
+            if hparams.sam_loss == 'MSELoss':
+                self.loss_feat = lambda pred, target: nn.MSELoss()(pred, target)
+            elif hparams.sam_loss == 'CSLoss':
+                self.loss_feat = lambda pred, target: nn.CosineSimilarity(dim=1)(pred, target)
 
 
         if hparams.depth_loss:
@@ -316,6 +315,7 @@ class Runner:
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device)
         elif self.hparams.dataset_type == 'sam':
+            from gp_nerf.datasets.memory_dataset_sam import MemoryDataset_SAM
             dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'file_normal':
@@ -388,6 +388,15 @@ class Runner:
                     else:
                         labels = None
 
+                    
+                    if self.hparams.appearance_dim > 0:
+                        image_indices = item['img_indices'].to(self.device, non_blocking=True)                            
+                    else:
+                        image_indices = None
+
+                    if self.hparams.normal_loss:
+                        item['c2w_rots'] = c2w_rots
+                    
                     if self.hparams.dataset_type == 'memory_depth':
                         self.train_img_num = item['rgbs'].shape[0]
                         for key in item.keys():
@@ -396,21 +405,9 @@ class Runner:
                                 item[key] = item[key].reshape(-1)
                             elif item[key].dim() == 3:
                                 item[key] = item[key].reshape(-1, *item[key].shape[2:])
-                        labels = labels.reshape(-1)
-                            
-                    if self.hparams.appearance_dim > 0:
-                        if self.hparams.dataset_type == 'sam':
-                            #如果用sam一张张读取，则不需要这么多，repeat就行
-                            image_indices = item['img_indices'].to(self.device, non_blocking=True)
-                            image_indices = image_indices.repeat(1, labels.shape[-1])
-                        else:
-                            image_indices = item['img_indices'].to(self.device, non_blocking=True)
-                    else:
-                        image_indices = None
+                        if self.hparams.enable_semantic:
+                            labels = labels.reshape(-1)
 
-                    if self.hparams.normal_loss:
-                        item['c2w_rots'] = c2w_rots
-                    
                     if self.hparams.dataset_type == 'sam':
                         # # 这里得到ray
                         # selected_points = item['selected_points'].to(self.device, non_blocking=True).squeeze(0)
@@ -434,6 +431,7 @@ class Runner:
                         groups = item['groups'].to(self.device, non_blocking=True)
 
                         rays = rays.view(-1, rays.size(-1))
+                        image_indices = image_indices.repeat(1, labels.shape[-1])
                         image_indices = image_indices.view(-1)
                         labels = labels.view(-1)
                         groups = groups.view(-1)
@@ -444,11 +442,11 @@ class Runner:
                         
                     else:
                         groups = None
-                    
                         metrics, bg_nerf_rays_present = self._training_step(
                             item['rgbs'].to(self.device, non_blocking=True),
                             item['rays'].to(self.device, non_blocking=True),
-                            image_indices, labels, groups, train_iterations, item)
+                            item['img_indices'].to(self.device, non_blocking=True), 
+                            labels, groups, train_iterations, item)
 
                     with torch.no_grad():
                         for key, val in metrics.items():
@@ -621,13 +619,17 @@ class Runner:
             metrics = {}
             photo_loss = 0
             metrics['photo_loss'] = photo_loss
-        
+        metrics['loss'] = photo_loss
+
         #semantic loss
         if self.hparams.enable_semantic:
             sem_logits = results[f'sem_map_{typ}']
             semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
             metrics['semantic_loss'] = semantic_loss
+            metrics['loss'] += self.hparams.wgt_sem_loss * semantic_loss
+            
             if self.hparams.dataset_type == 'sam':
+                # group loss
                 semantic_feature  = results[f'semantic_feature_{typ}']
                 group_id, group_counts = torch.unique(groups, return_counts=True)
                 counts = 0
@@ -644,11 +646,7 @@ class Runner:
                     counts += cur_counts.item()
                 group_loss = group_loss_each / len(group_counts) #/ semantic_feature.shape[-1]
                 metrics['sam_group_loss'] = group_loss
-                metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss + self.hparams.wgt_group_loss * group_loss
-
-            else:
-                metrics['loss'] = photo_loss + self.hparams.wgt_sem_loss * semantic_loss
-
+                metrics['loss'] += self.hparams.wgt_group_loss * group_loss
             
             with torch.no_grad():
                 if train_iterations % 1000 == 0:
@@ -659,8 +657,6 @@ class Runner:
                         # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
                     if self.wandb is not None:
                         self.wandb.log({'train/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
-        else:
-            metrics['loss'] = photo_loss
 
         if self.hparams.depth_loss or self.hparams.normal_loss:
             decay_min = 0.00 # arrive decay_min in 1/4 training iterationsc
@@ -710,7 +706,7 @@ class Runner:
                 gradient_error_weight = 0.1
             else:
                 gradient_error_weight = self.hparams.gradient_error_weight
-            metrics['loss'] = metrics['loss'] + gradient_error_weight * results[f'gradient_error_{typ}'] + 0.1 * results[f'curvature_error_{typ}']
+            metrics['loss'] += gradient_error_weight * results[f'gradient_error_{typ}'] + 0.1 * results[f'curvature_error_{typ}']
             if self.wandb is not None:
                 self.wandb.log({"train/inv_s": 1.0 / results['inv_s'], 'epoch': train_iterations})
             if self.writer is not None:
@@ -788,17 +784,11 @@ class Runner:
                             val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f)
                         viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
                         
+                        # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                        img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
 
-                        # get_semantic  gt  &  pred
-                        if self.hparams.enable_semantic:
-                            gt_label, sem_label, gt_label_rgb, visualize_sem = get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping)
-                            self.metrics_val.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
-                            self.metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
-                            pseudo_gt_label_rgb, gt_label_rgb = get_semantic_gt_pred_visualize(val_type, gt_label_rgb, metadata_item, viz_rgbs)
-                            
-                            # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
-                            # visualize all images 
-                            img_list = [viz_rgbs * 255, gt_label_rgb, pseudo_gt_label_rgb, viz_result_rgbs * 255, torch.from_numpy(visualize_sem)]
+                        get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
+                                            self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i)
                             
                         prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
                             
@@ -817,23 +807,12 @@ class Runner:
                             Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
                             self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
                         
-                        ## NOTE： 这里的else是原始的GPNeRF可视化
-                        #else:
-                        #    img = Runner._create_result_image(viz_rgbs, viz_result_rgbs, depth_vis)
-                        #    if self.wandb is not None:
-                        #        Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
-                        #        self.wandb.log({"images_val/{}".format(train_index): Img})
-                        #    if self.writer is not None:
-                        #        self.writer.add_image('5_val_images/{}'.format(i), T.ToTensor()(img), train_index)
-                        #    img.save(str(experiment_path_current / 'val_rgbs' / '{}.jpg'.format(i)))
 
 
                         if val_type == 'val':
                             #save  [pred_label, pred_rgb, fg_bg] to the folder 
                             Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
                                 str(experiment_path_current / 'val_rgbs' / '{}_pred_rgb.jpg'.format(i)))
-                            if self.hparams.enable_semantic:
-                                Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / '{}_pred_label.jpg'.format(i)))
                             if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
                                 img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
                                                                  results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
