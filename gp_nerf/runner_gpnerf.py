@@ -47,6 +47,7 @@ import pandas as pd
 
 from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_semantic_gt_pred_visualize, get_sdf_normal_map 
 from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folder_logger, save_semantic_metric
+from gp_nerf.eval_utils import prepare_depth_normal_visual
 def get_n_params(model):
     pp=0
     for p in list(model.parameters()):
@@ -72,6 +73,14 @@ class Runner:
                 elif hparams.sam_loss == 'CSLoss':
                     self.loss_feat = lambda pred, target: nn.CosineSimilarity(dim=1)(pred, target)
 
+
+        if hparams.depth_loss:
+            from gp_nerf.loss_monosdf import ScaleAndShiftInvariantLoss
+            self.depth_loss = ScaleAndShiftInvariantLoss(alpha=0.5, scales=1)
+
+        if hparams.normal_loss:
+            from gp_nerf.loss_monosdf import get_l1_normal_loss
+            self.normal_loss = get_l1_normal_loss
 
         if hparams.ckpt_path is not None:
             checkpoint = torch.load(hparams.ckpt_path, map_location='cpu')
@@ -309,6 +318,19 @@ class Runner:
         elif self.hparams.dataset_type == 'sam':
             dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
+        elif self.hparams.dataset_type == 'file_normal':
+            from gp_nerf.datasets.filesystem_dataset_normal import FilesystemDatasetNormal
+            dataset = FilesystemDatasetNormal(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                        self.hparams.center_pixels, self.device,
+                                        [Path(x) for x in sorted(self.hparams.chunk_paths)], self.hparams.num_chunks,
+                                        self.hparams.train_scale_factor, self.hparams.disk_flush_size,self.hparams.desired_chunks)
+            # Transform world normal to camera normal
+            w2c_rots = torch.linalg.inv(dataset._c2ws[:, :3, :3]).to(self.device, non_blocking=True)
+
+        elif self.hparams.dataset_type == 'memory_depth':
+            from gp_nerf.datasets.memory_dataset_depth import MemoryDataset
+            dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
         else:
             raise Exception('Unrecognized dataset type: {}'.format(self.hparams.dataset_type))
 
@@ -340,6 +362,9 @@ class Runner:
                 if self.hparams.dataset_type == 'sam':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
                                                 pin_memory=False)
+                elif self.hparams.dataset_type == 'memory_depth':
+                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
+                                                pin_memory=False)
                 else:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=4,
                                                 pin_memory=False)
@@ -363,6 +388,16 @@ class Runner:
                     else:
                         labels = None
 
+                    if self.hparams.dataset_type == 'memory_depth':
+                        self.train_img_num = item['rgbs'].shape[0]
+                        for key in item.keys():
+                            #print(key, item[key].shape)
+                            if item[key].dim() == 2:
+                                item[key] = item[key].reshape(-1)
+                            elif item[key].dim() == 3:
+                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                        labels = labels.reshape(-1)
+                            
                     if self.hparams.appearance_dim > 0:
                         if self.hparams.dataset_type == 'sam':
                             #如果用sam一张张读取，则不需要这么多，repeat就行
@@ -373,6 +408,8 @@ class Runner:
                     else:
                         image_indices = None
 
+                    if self.hparams.normal_loss:
+                        item['c2w_rots'] = c2w_rots
                     
                     if self.hparams.dataset_type == 'sam':
                         # # 这里得到ray
@@ -407,11 +444,11 @@ class Runner:
                         
                     else:
                         groups = None
-
+                    
                         metrics, bg_nerf_rays_present = self._training_step(
                             item['rgbs'].to(self.device, non_blocking=True),
                             item['rays'].to(self.device, non_blocking=True),
-                            image_indices, labels, groups, train_iterations)
+                            image_indices, labels, groups, train_iterations, item)
 
                     with torch.no_grad():
                         for key, val in metrics.items():
@@ -537,7 +574,7 @@ class Runner:
             self.wandb = wandb.init(project=self.hparams.wandb_id, entity="mega-ingp", name=self.hparams.wandb_run_name, dir=self.experiment_path)
             
 
-    def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], groups: Optional[torch.Tensor], train_iterations = -1) \
+    def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], groups: Optional[torch.Tensor], train_iterations = -1, item=None) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
         if self.hparams.network_type == 'sdf':
             from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
@@ -625,6 +662,46 @@ class Runner:
         else:
             metrics['loss'] = photo_loss
 
+        if self.hparams.depth_loss or self.hparams.normal_loss:
+            decay_min = 0.00 # arrive decay_min in 1/4 training iterationsc
+            nloss_decay = (1 - decay_min) * (1 - train_iterations / (self.hparams.train_iterations/4.)) + decay_min
+            nloss_decay = max(nloss_decay, 0)
+            fg_mask = results['bg_lambda_fine'].detach() < 0.01
+
+            if self.hparams.depth_loss:
+                batch_size = self.train_img_num # batch_size is the number of image
+                # TODO: add depth scale
+                gt_depths = item['depths'].to(self.device, non_blocking=True)
+                pred_depths = results['depth_fine'] * item['depth_scale']
+                ray_num = pred_depths.shape[0] // batch_size
+                sqrt_num = int(np.sqrt(ray_num))
+                if sqrt_num**2 != int(ray_num):
+                    raise Exception('ray_num not N*N, %d %d' % (ray_num, sqrt_num))
+                depth_loss = self.depth_loss(pred_depths.reshape(batch_size, sqrt_num, sqrt_num), 
+                                            (gt_depths * 50 + 0.5).reshape(batch_size, sqrt_num, sqrt_num), 
+                                            fg_mask.reshape(batch_size, sqrt_num, sqrt_num))
+                metrics['depth_loss'] = depth_loss
+                metrics['loss'] += nloss_decay * self.hparams.wgt_depth_loss * depth_loss
+
+            if self.hparams.normal_loss:
+                gt_normals = item['normals'].to(self.device, non_blocking=True)
+                w2c_rots = item['w2c_rots']
+                w2c_rot = w2c_rots[image_indices.long()]
+                pred_normals = results[f'normal_map_fine']
+                cam_normals = torch.bmm(w2c_rot, pred_normals[:,:,None])[:, :, 0]
+                if 'sdf' not in self.hparams.network_type:
+                    cam_normals = cam_normals * -1 # flip x, y, z axis
+                if fg_mask.sum() > 0:
+                    normal_l1 = get_normal_loss(cam_normals[fg_mask], gt_normals[fg_mask])
+                    metrics['n_l1_loss'] = normal_l1
+                    metrics['loss'] += nloss_decay * self.hparams.wgt_nl1_loss * normal_l1
+                else:
+                    metrics['n_l1_loss'] = metrics['n_cos_loss'] = 0
+
+            if self.writer is not None:
+                self.writer.add_scalar('1_train/nloss_decay', nloss_decay, train_iterations)
+
+
         if self.hparams.network_type == 'sdf':
             # sdf 
             metrics['gradient_error'] = results[f'gradient_error_{typ}']
@@ -666,7 +743,8 @@ class Runner:
                     # self.val_items=self.val_items[:2]
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
-                    indices_to_eval = np.arange(0, len(self.train_items), 100)  #np.arange(len(self.train_items))
+                    ##indices_to_eval = np.arange(0, len(self.train_items), 100)  
+                    indices_to_eval = np.arange(len(self.train_items))  
                 
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
@@ -694,6 +772,14 @@ class Runner:
 
                         results, _ = self.render_image(metadata_item, train_index)
                         typ = 'fine' if 'rgb_fine' in results else 'coarse'
+
+                        if self.hparams.save_depth:
+                            save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
+                            if not os.path.exists(save_depth_dir):
+                                os.makedirs(save_depth_dir)
+                            depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy().astype(np.float16)
+                            np.save(os.path.join(save_depth_dir, metadata_item.image_path.stem + '.npy'), depth_map)
+                            continue
                         
                         # get rendering rgbs and depth
                         viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
@@ -702,8 +788,6 @@ class Runner:
                             val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f)
                         viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
                         
-                        #get depth visualization
-                        depth_vis = get_depth_vis(results, typ)
 
                         # get_semantic  gt  &  pred
                         if self.hparams.enable_semantic:
@@ -716,39 +800,32 @@ class Runner:
                             # visualize all images 
                             img_list = [viz_rgbs * 255, gt_label_rgb, pseudo_gt_label_rgb, viz_result_rgbs * 255, torch.from_numpy(visualize_sem)]
                             
-                            # visualize (1. sdf normal   2. depth_vis)
-                            if self.hparams.network_type == 'sdf':
-                                normal_viz = get_sdf_normal_map()
-                                img_list.append(normal_viz)
-                            else:
-                                if depth_vis is not None:
-                                    depth_vis = torch.from_numpy(Runner.visualize_scalars(torch.log(depth_vis + 1e-8).view(viz_rgbs.shape[0], viz_rgbs.shape[1]).cpu()))
-                                    img_list.append(depth_vis)
+                        prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
                             
-                            # NOTE: 对需要可视化的list进行处理
-                            # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
-                            # 将None元素转换为zeros矩阵
-                            img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
-                            img_list = torch.stack(img_list).permute(0,3,1,2)
-                            img = make_grid(img_list, nrow=3)
-                            img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                            Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
+                        # NOTE: 对需要可视化的list进行处理
+                        # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                        # 将None元素转换为zeros矩阵
+                        img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                        img_list = torch.stack(img_list).permute(0,3,1,2)
+                        img = make_grid(img_list, nrow=3)
+                        img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                        Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
 
-                            if self.writer is not None:
-                                self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
-                            if self.wandb is not None:
-                                Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
-                                self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
+                        if self.writer is not None:
+                            self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
+                        if self.wandb is not None:
+                            Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
+                            self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
                         
-                        # NOTE： 这里的else是原始的GPNeRF可视化
-                        else:
-                            img = Runner._create_result_image(viz_rgbs, viz_result_rgbs, depth_vis)
-                            if self.wandb is not None:
-                                Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
-                                self.wandb.log({"images_val/{}".format(train_index): Img})
-                            if self.writer is not None:
-                                self.writer.add_image('5_val_images/{}'.format(i), T.ToTensor()(img), train_index)
-                            img.save(str(experiment_path_current / 'val_rgbs' / '{}.jpg'.format(i)))
+                        ## NOTE： 这里的else是原始的GPNeRF可视化
+                        #else:
+                        #    img = Runner._create_result_image(viz_rgbs, viz_result_rgbs, depth_vis)
+                        #    if self.wandb is not None:
+                        #        Img = wandb.Image(T.ToTensor()(img), caption="ckpt {}: {} th".format(train_index, i))
+                        #        self.wandb.log({"images_val/{}".format(train_index): Img})
+                        #    if self.writer is not None:
+                        #        self.writer.add_image('5_val_images/{}'.format(i), T.ToTensor()(img), train_index)
+                        #    img.save(str(experiment_path_current / 'val_rgbs' / '{}.jpg'.format(i)))
 
 
                         if val_type == 'val':
@@ -1113,6 +1190,16 @@ class Runner:
                 sam_feature_path = candidate
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, sam_feature_path)
+        elif self.hparams.normal_loss:
+            normal_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_normal.npy' % metadata_path.stem) 
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, normal_path=normal_path)
+
+        elif self.hparams.depth_loss:
+            depth_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_depth.npy' % metadata_path.stem) 
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_path=depth_path)
+
         else:
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path)

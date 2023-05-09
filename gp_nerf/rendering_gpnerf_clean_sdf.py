@@ -437,6 +437,7 @@ def _get_results(point_type,
     results[f'normal_map_{typ}'] = normal_map
     results[f'gradient_error_{typ}'] = gradient_error.unsqueeze(0)
     results[f'curvature_error_{typ}'] = curvature_error.unsqueeze(0)
+    results['sdf'] = sdf.detach()
 
     return results #depth, image, normal_map, gradient_error, curvature_error
 

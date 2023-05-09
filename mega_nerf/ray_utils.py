@@ -63,8 +63,8 @@ def _get_rays_inner(rays_o: torch.Tensor, rays_d: torch.Tensor, near: float, far
 
 def _truncate_with_plane_intersection(rays_o: torch.Tensor, rays_d: torch.Tensor, altitude: float,
                                       default_bounds: torch.Tensor) -> None:
-    starts_before = rays_o[:, :, 0] < altitude
-    goes_down = rays_d[:, :, 0] > 0
+    starts_before = rays_o[..., 0] < altitude
+    goes_down = rays_d[..., 0] > 0
     boundable_rays = torch.minimum(starts_before, goes_down)
 
     ray_points = rays_o[boundable_rays]

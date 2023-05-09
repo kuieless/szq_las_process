@@ -174,8 +174,11 @@ class NeRF(nn.Module):
         h = self.encoder(position, bound=self.fg_bound)
         
         if self.use_scaling:
-            position[:, 0] = (position[:, 0]-self.scaling_factor_altitude_bottom)/self.scaling_factor_altitude_range
-            position[:, 1:] = position[:, 1:] / self.scaling_factor_ground
+            px = (position[:, 0:1] - self.scaling_factor_altitude_bottom)/self.scaling_factor_altitude_range
+            py = position[:, 1:] / self.scaling_factor_ground
+            position = torch.cat([px, py], dim=-1)
+            # position[:, 0] = (position[:, 0]-self.scaling_factor_altitude_bottom)/self.scaling_factor_altitude_range
+            # position[:, 1:] = position[:, 1:] / self.scaling_factor_ground
         plane_feat = self.plane_encoder(position, bound=self.fg_bound)
         h = torch.cat([h, plane_feat], dim=-1)
 
@@ -185,6 +188,9 @@ class NeRF(nn.Module):
                 h = F.relu(h, inplace=True)
         sigma = trunc_exp(h[..., 0])
         geo_feat = h[..., 1:]
+
+        if sigma_only:
+            return sigma
 
         # semantic 
         if self.enable_semantic:
@@ -266,6 +272,53 @@ class NeRF(nn.Module):
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
         else:
             return torch.cat([color, sigma.unsqueeze(1)], -1)
+
+
+    def auto_gradient(self, x, tflag=True):
+        with torch.set_grad_enabled(True):
+            x.requires_grad_(True)
+            y = self.forward_fg('fg', x, sigma_only=True)
+            #y = y[:, :1]
+            d_output = torch.ones_like(y, requires_grad=False, device=y.device)
+            gradients = torch.autograd.grad(
+                outputs=y,
+                inputs=x,
+                grad_outputs=d_output,
+                create_graph=tflag,
+                retain_graph=tflag,
+                only_inputs=True)[0]
+        return gradients #.unsqueeze(1)
+
+    #instant nsr
+    def gradient(self, x, epsilon=0.0005):
+        #not allowed auto gradient, using fd instead
+        return self.finite_difference_normals_approximator(x, epsilon)
+
+    def finite_difference_normals_approximator(self, x, epsilon = 0.0005):
+        # finite difference
+        # f(x+h, y, z), f(x, y+h, z), f(x, y, z+h) - f(x-h, y, z), f(x, y-h, z), f(x, y, z-h)
+        pos_x = x + torch.tensor([[epsilon, 0.00, 0.00]], device=x.device)
+        dist_dx_pos = self.forward_fg('fg', pos_x, sigma_only=True)
+        dist_dx_pos = dist_dx_pos[:, None]
+        pos_y = x + torch.tensor([[0.00, epsilon, 0.00]], device=x.device)
+        dist_dy_pos = self.forward_fg('fg', pos_y, sigma_only=True)
+        dist_dy_pos = dist_dy_pos[:,None]
+        pos_z = x + torch.tensor([[0.00, 0.00, epsilon]], device=x.device)
+        dist_dz_pos = self.forward_fg('fg', pos_z, sigma_only=True)
+        dist_dz_pos = dist_dz_pos[:,None]
+
+        neg_x = x + torch.tensor([[-epsilon, 0.00, 0.00]], device=x.device)
+        dist_dx_neg = self.forward_fg('fg', neg_x, sigma_only=True)
+        dist_dx_neg = dist_dx_neg[:,None]
+        neg_y = x + torch.tensor([[0.00, -epsilon, 0.00]], device=x.device)
+        dist_dy_neg = self.forward_fg('fg', neg_y, sigma_only=True)
+        dist_dy_neg = dist_dy_neg[:,None]
+        neg_z = x + torch.tensor([[0.00, 0.00, -epsilon]], device=x.device)
+        dist_dz_neg = self.forward_fg('fg', neg_z, sigma_only=True)
+        dist_dz_neg = dist_dz_neg[:,None]
+
+
+        return torch.cat([0.5*(dist_dx_pos - dist_dx_neg) / epsilon, 0.5*(dist_dy_pos - dist_dy_neg) / epsilon, 0.5*(dist_dz_pos - dist_dz_neg) / epsilon], dim=-1)
 
 
 class Embedding(nn.Module):

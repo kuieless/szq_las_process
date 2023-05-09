@@ -306,6 +306,11 @@ def _inference(point_type,
 
     rgbs = out[..., :3]  # (N_rays, N_samples_, 3)
     sigmas = out[..., 3]  # (N_rays, N_samples_)
+
+    gradient, normals = None, None
+    if point_type == 'fg' and (hparams.visual_normal or hparams.normal_loss): # for surface normal extraction
+        gradient, normals = extract_gradients(nerf, xyz_, train_iterations, hparams)
+
     if hparams.enable_semantic:
         out_semantic = torch.cat(out_semantic_chunk, 0)
         out = out_semantic.view(N_rays_, N_samples_, out_semantic.shape[-1])
@@ -327,6 +332,8 @@ def _inference(point_type,
                 ordering_Cc = ordering.view(ordering.shape[0], ordering.shape[1], 1).repeat(1,1,sem_feature.shape[-1])
                 sem_feature = torch.gather(torch.cat((sem_feature, results['raw_sem_feature_coarse']), 1), 1, ordering_Cc)
             
+        if point_type == 'fg' and normals is not None:
+            normals = torch.gather(torch.cat((normals, results['raw_rgb_coarse']), 1), 1, ordering_3c)
 
 
         if depth_real is not None:
@@ -363,6 +370,10 @@ def _inference(point_type,
             else:
                 sem_map = torch.sum(weights[..., None] * sem_logits, -2)
             results[f'sem_map_{typ}'] = sem_map
+        if point_type == 'fg' and normals is not None:
+            normal_map = (weights.unsqueeze(-1) * normals).sum(dim=1)
+            # normal_map[:, 1:] = normal_map[:, 1:] * -1 # flip normal map
+            results[f'normal_map_{typ}'] = normal_map
     else:
         results[f'zvals_{typ}'] = z_vals
         results[f'raw_rgb_{typ}'] = rgbs
@@ -375,20 +386,32 @@ def _inference(point_type,
                 results[f'raw_sem_feature_{typ}'] = sem_feature
                 
         
+        if point_type == 'fg' and normals is not None:
+            results[f'raw_normal_{typ}'] = normals
+        
+    if hparams.depth_loss:
+        depth_map = (weights * z_vals).sum(dim=1)  # n1 n2 -> n1
+        results[f'depth_{typ}'] = depth_map
 
-    with torch.no_grad():
-        if get_depth or get_depth_variance:
-            if depth_real is not None:
-                depth_map = (weights * depth_real).sum(dim=1)  # n1 n2 -> n1
-            else:
-                depth_map = (weights * z_vals).sum(dim=1)  # n1 n2 -> n1
+        with torch.no_grad():
+            if get_depth_variance:# coarse = False, fine = True
+                results[f'depth_variance_{typ}'] = (weights * (z_vals - depth_map.unsqueeze(1)).square()).sum(
+                    axis=-1)
 
-        if get_depth: # always False
-            results[f'depth_{typ}'] = depth_map
+    else:
+        with torch.no_grad():
+            if get_depth or get_depth_variance:
+                if depth_real is not None:
+                    depth_map = (weights * depth_real).sum(dim=1)  # n1 n2 -> n1
+                else:
+                    depth_map = (weights * z_vals).sum(dim=1)  # n1 n2 -> n1
 
-        if get_depth_variance:# coarse = False, fine = True
-            results[f'depth_variance_{typ}'] = (weights * (z_vals - depth_map.unsqueeze(1)).square()).sum(
-                axis=-1)
+            if get_depth: # always False
+                results[f'depth_{typ}'] = depth_map
+
+            if get_depth_variance:# coarse = False, fine = True
+                results[f'depth_variance_{typ}'] = (weights * (z_vals - depth_map.unsqueeze(1)).square()).sum(
+                    axis=-1)
 
 def _intersect_sphere(rays_o: torch.Tensor, rays_d: torch.Tensor, sphere_center: torch.Tensor,
                       sphere_radius: torch.Tensor) -> torch.Tensor:
@@ -531,3 +554,23 @@ def _sample_cdf(bins: torch.Tensor, cdf: torch.Tensor, fine_samples: int, det: b
 
     samples = bins_g[..., 0] + (u - cdf_g[..., 0]) / denom * (bins_g[..., 1] - bins_g[..., 0])
     return samples
+
+def extract_gradients(nerf, xyz_, train_iterations, hparams):
+    normal_epsilon_ratio = min((train_iterations) / hparams.train_iterations, 0.50)
+    if hparams.normal_loss:
+        if hparams.auto_grad:
+            gradient = nerf.auto_gradient(xyz_)
+        else:
+            gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
+    elif hparams.visual_normal:
+        with torch.no_grad():
+            if hparams.auto_grad:
+                gradient = nerf.auto_gradient(xyz_)#.squeeze()
+            else:
+                gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
+
+    if gradient is not None:
+        normals = gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))
+        #print('xyz, normal', xyz_.shape, normals.shape, results[f'rgb_{typ}'].shape)
+        normals = normals.view(N_rays_, N_samples_, 3)
+    return gradient, normals
