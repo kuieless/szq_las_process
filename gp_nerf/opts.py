@@ -9,7 +9,7 @@ def get_opts_base():
 
     parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
     parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train'], help='')
-    parser.add_argument('--logger_interval', type=int, default=100, help='training iterations')
+    parser.add_argument('--logger_interval', type=int, default=10, help='training iterations')
     
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
@@ -18,13 +18,15 @@ def get_opts_base():
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
    
-    parser.add_argument('--sample_random_num', type=int, default=1024, help='')
+    parser.add_argument('--sample_random_num', type=int, default=4096, help='')
+    parser.add_argument('--add_random_rays', type=eval, default=False, help='shuffle=False and ignore the trained data')
+
    
     #sam 
-    parser.add_argument('--sam_sample_total', type=int, default=20480, help='')
-    parser.add_argument('--sam_sample_each', type=int, default=1024, help='')
+
+    parser.add_argument('--sam_sample_each', type=int, default=256, help='')
     parser.add_argument('--wgt_group_loss', default=1e-2, type=float, help='')
-    parser.add_argument('--sampling_mode', type=str, default='per_mask', choices=['per_mask', 'per_mask_threshold', 'whole_image'])
+    parser.add_argument('--sampling_mode', type=str, default='per_mask_threshold', choices=['per_mask', 'per_mask_threshold', 'whole_image'])
     parser.add_argument('--sam_loss', type=str, default='MSELoss', choices=['MSELoss', 'CSLoss'])
 
     parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
@@ -37,6 +39,7 @@ def get_opts_base():
     parser.add_argument('--normal_iterations', type=int, default=50000, help='training iterations')
 
     # normal and depth
+    parser.add_argument('--sample_ray_num', default=1024, type=int, help='')
     parser.add_argument('--visual_normal', default=False, type=eval, choices=[True, False], help='supervise normal')
     parser.add_argument('--normal_loss', default=False, type=eval, choices=[True, False], help='supervise normal')
     parser.add_argument('--wgt_nl1_loss', default=1e-4, type=float, help='')
@@ -45,7 +48,6 @@ def get_opts_base():
     parser.add_argument('--wgt_depth_loss', default=0.000, type=float, help='')
     parser.add_argument('--auto_grad', default=False, type=eval, choices=[True, False], help='supervise normal')
     parser.add_argument('--decay_min', default=0.1, type=float, help='')
-    parser.add_argument('--sample_ray_num', default=4096, type=int, help='')
     parser.add_argument('--save_depth', default=False, type=eval, choices=[True, False], help='supervise normal')
 
     # semantic

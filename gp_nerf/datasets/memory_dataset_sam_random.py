@@ -12,6 +12,7 @@ from tools.segment_anything import sam_model_registry, SamPredictor
 import numpy as np
 import cv2
 import sys
+import random
 
 def init(device):
     # sam_checkpoint = "samnerf/segment_anything/sam_vit_h_4b8939.pth"
@@ -30,6 +31,8 @@ class MemoryDataset_SAM(Dataset):
                  center_pixels: bool, device: torch.device, hparams):
         super(MemoryDataset_SAM, self).__init__()
 
+        self.sample_random_num_each = hparams.sample_random_num_each
+
         # sam
         self.device = device # device 'cpu'
         self.predictor = init(self.device)
@@ -40,12 +43,12 @@ class MemoryDataset_SAM(Dataset):
         self.H = metadata_items[0].H
         self.sampling_mode = hparams.sampling_mode
         #get ray
+        self.metadata_items = metadata_items
         self.near = near
         self.far = far
-        self.metadata_items = metadata_items
         self.ray_altitude_range = ray_altitude_range
         metadata_item=metadata_items[0]
-        self.directions = get_ray_directions(metadata_item.W,
+        self._directions = get_ray_directions(metadata_item.W,
                                             metadata_item.H,
                                             metadata_item.intrinsics[0],
                                             metadata_item.intrinsics[1],
@@ -61,6 +64,11 @@ class MemoryDataset_SAM(Dataset):
         sam_features = []
         is_vals =[]
 
+        all_rays = []
+        all_img_indices = []
+        all_rgbs = []
+        all_labels = []
+
         main_print('Loading data')
         if hparams.debug:
             metadata_items = metadata_items[:40]
@@ -72,6 +80,12 @@ class MemoryDataset_SAM(Dataset):
             
             #zyq : add labels
             image_rgbs, image_indices, image_keep_mask, label, sam_feature, is_val = image_data
+            if not is_val:
+                image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1,8).cpu()
+                all_rays.append(image_rays[::10])
+                all_rgbs.append(image_rgbs.view(-1, 3)[::10])
+                all_labels.append(label.int().view(-1)[::10])
+                all_img_indices.append(image_indices * torch.ones(label.view(-1)[::10].shape[0], dtype=torch.int32))
 
             indices.append(image_indices)
             labels.append(torch.tensor(label, dtype=torch.int))
@@ -80,11 +94,17 @@ class MemoryDataset_SAM(Dataset):
         
         main_print('Finished loading data')
 
+        self._all_rgbs = torch.cat(all_rgbs)
+        self._all_rays = torch.cat(all_rays)
+        self._all_img_indices = torch.cat(all_img_indices)
+        self._all_labels = torch.cat(all_labels)
+
         self._img_indices = indices  #torch.stack(indices)
         self._labels = torch.stack(labels)
         self._sam_features = torch.stack(sam_features)
         self._is_vals = is_vals
 
+        self.all_sampling_idx = torch.randperm(self._all_rgbs.shape[0])
 
 
     def __len__(self) -> int:
@@ -228,9 +248,14 @@ class MemoryDataset_SAM(Dataset):
             raise ImportError
 
         metadata_item = self.metadata_items[idx]
-        image_rays = get_rays(self.directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+        image_rays = get_rays(self._directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range).cpu()
         img_indices = self._img_indices[idx] * torch.ones(selected_points.shape[0], dtype=torch.int32)
-        
+
+
+        # get random sampling
+        random_number = random.randint(0, self._all_rgbs.shape[0]-self.sample_random_num_each)
+        all_sampling_idx = self.all_sampling_idx[random_number:random_number+self.sample_random_num_each]
+
         item = {
             # 'rgbs': self._rgbs[idx, selected_points[:, 0], selected_points[:, 1], :],
             'rays': image_rays[selected_points[:, 0], selected_points[:, 1], :], 
@@ -239,4 +264,10 @@ class MemoryDataset_SAM(Dataset):
             'groups': selected_points_group,
             # 'selected_points': selected_points
         }
+
+        item['random_rgbs'] = self._all_rgbs[all_sampling_idx].float() / 255.
+        item['random_rays'] = self._all_rays[all_sampling_idx]
+        item['random_img_indices'] = self._all_img_indices[all_sampling_idx]
+        item['random_labels'] = self._all_labels[all_sampling_idx].int()
+
         return item

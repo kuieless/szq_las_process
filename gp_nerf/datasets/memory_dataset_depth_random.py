@@ -12,6 +12,7 @@ from mega_nerf.misc_utils import main_tqdm, main_print
 from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 import numpy as np
+import random
 
 class MemoryDataset(Dataset):
 
@@ -26,7 +27,7 @@ class MemoryDataset(Dataset):
         self.far = far
         self.ray_altitude_range = ray_altitude_range
         self._c2ws = torch.cat([x.c2w.unsqueeze(0) for x in metadata_items])
-        self.device= device
+        self.device = device
 
         rgbs = []
         indices = []
@@ -98,12 +99,13 @@ class MemoryDataset(Dataset):
             print('self.depths', self._depths[0].shape, self._depths[0].dtype)
         print('self._img_indices', len(self._img_indices))
         print('self._labels', self._labels[0].shape, self._labels[0].dtype)
+        self.all_sampling_idx = torch.randperm(self._all_rgbs.shape[0])
 
     def __len__(self) -> int:
         return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        
+        # print(idx)
         total_pixels = self._rgbs[idx].shape[0]
         sampling_idx = torch.randperm(total_pixels)[:self.sampling_size]
 
@@ -123,8 +125,8 @@ class MemoryDataset(Dataset):
         img_indices = self._img_indices[idx] * torch.ones(rays.shape[0], dtype=torch.int32)
         
         # get random sampling
-        all_total_pixels = self._all_rgbs.shape[0]
-        all_sampling_idx = torch.randperm(all_total_pixels)[:self.sample_random_num_each]
+        random_number = random.randint(0, self._all_rgbs.shape[0]-self.sample_random_num_each)
+        all_sampling_idx = self.all_sampling_idx[random_number:random_number+self.sample_random_num_each]
 
         item = {
             'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,

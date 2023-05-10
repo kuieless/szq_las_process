@@ -319,7 +319,10 @@ class Runner:
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device)
         elif self.hparams.dataset_type == 'sam':
-            from gp_nerf.datasets.memory_dataset_sam import MemoryDataset_SAM
+            if self.hparams.add_random_rays:
+                from gp_nerf.datasets.memory_dataset_sam_random import MemoryDataset_SAM
+            else:
+                from gp_nerf.datasets.memory_dataset_sam import MemoryDataset_SAM
             dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'file_normal':
@@ -332,7 +335,10 @@ class Runner:
             w2c_rots = torch.linalg.inv(dataset._c2ws[:, :3, :3]).to(self.device, non_blocking=True)
 
         elif self.hparams.dataset_type == 'memory_depth':
-            from gp_nerf.datasets.memory_dataset_depth_random import MemoryDataset
+            if self.hparams.add_random_rays:
+                from gp_nerf.datasets.memory_dataset_depth_random import MemoryDataset
+            else:
+                from gp_nerf.datasets.memory_dataset_depth import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
         else:
@@ -375,6 +381,7 @@ class Runner:
                 
             
             for dataset_index, item in enumerate(data_loader): #, start=10462):
+                # continue
                 # item = np.load('79972.npy',allow_pickle=True).item()
 
                 if dataset_index <= discard_index:
@@ -385,13 +392,6 @@ class Runner:
                 with torch.cuda.amp.autocast(enabled=self.hparams.amp):
 
                     #semantic 
-                    
-
-                    
-                    if self.hparams.appearance_dim > 0:
-                        image_indices = item['img_indices'].to(self.device, non_blocking=True)                            
-                    else:
-                        image_indices = None
 
                     if self.hparams.normal_loss:
                         item['c2w_rots'] = c2w_rots
@@ -399,18 +399,19 @@ class Runner:
                     if self.hparams.dataset_type == 'memory_depth':
                         # print(item['rays'].size())
                         self.train_img_num = item['rgbs'].shape[0]
-                        self.sample_random_num_current = item['rgbs'].shape[0] * self.hparams.sample_random_num_each
-                        for key in item.keys():
-                            #print(key, item[key].shape)
-                            if item[key].dim() == 2:
-                                item[key] = item[key].reshape(-1)
-                            elif item[key].dim() == 3:
-                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
-                        for key in item.keys():
-                            if 'random' in key:
-                                continue
-                            elif 'random_'+key in item.keys():
-                                item[key] = torch.cat((item[key], item['random_'+key]))
+                    
+                    self.sample_random_num_current = item['rays'].shape[0] * self.hparams.sample_random_num_each
+                    
+                    for key in item.keys():
+                        if item[key].dim() == 2:
+                            item[key] = item[key].reshape(-1)
+                        elif item[key].dim() == 3:
+                            item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                    for key in item.keys():
+                        if 'random' in key:
+                            continue
+                        elif 'random_'+key in item.keys():
+                            item[key] = torch.cat((item[key], item['random_'+key]))
                     
                     if self.hparams.enable_semantic:
                         labels = item['labels'].to(self.device, non_blocking=True)
@@ -420,44 +421,17 @@ class Runner:
                         labels = None
 
                     if self.hparams.dataset_type == 'sam':
-                        # # 这里得到ray
-                        # selected_points = item['selected_points'].to(self.device, non_blocking=True).squeeze(0)
-                        # idx = image_indices[0].item()
-                        # metadata_item = self.train_items[idx]
-                        # directions = get_ray_directions(metadata_item.W,
-                        #                                 metadata_item.H,
-                        #                                 metadata_item.intrinsics[0],
-                        #                                 metadata_item.intrinsics[1],
-                        #                                 metadata_item.intrinsics[2],
-                        #                                 metadata_item.intrinsics[3],
-                        #                                 self.hparams.center_pixels,
-                        #                                 self.device)
-                        # image_rays = get_rays(directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
-                        # rays = image_rays[selected_points[:, 0], selected_points[:, 1], :]
-                        # 'rays': self._rays[idx, selected_points[:, 0], selected_points[:, 1], :],
-                        # groups = item['groups'].to(self.device, non_blocking=True)
-                        # metrics, bg_nerf_rays_present = self._training_step(
-                        # None, rays, image_indices, labels.squeeze(0), groups.squeeze(0), train_iterations)
-                        rays = item['rays']
+                        rgbs = None
                         groups = item['groups'].to(self.device, non_blocking=True)
-
-                        rays = rays.view(-1, rays.size(-1))
-                        image_indices = image_indices.repeat(1, labels.shape[-1])
-                        image_indices = image_indices.view(-1)
-                        labels = labels.view(-1)
-                        groups = groups.view(-1)
-
-                        metrics, bg_nerf_rays_present = self._training_step(
-                        None, rays.to(self.device, non_blocking=True), 
-                        image_indices, labels, groups, train_iterations)
-                        
                     else:
+                        rgbs = item['rgbs'].to(self.device, non_blocking=True)
                         groups = None
-                        metrics, bg_nerf_rays_present = self._training_step(
-                            item['rgbs'].to(self.device, non_blocking=True),
-                            item['rays'].to(self.device, non_blocking=True),
-                            item['img_indices'].to(self.device, non_blocking=True), 
-                            labels, groups, train_iterations, item)
+
+                    metrics, bg_nerf_rays_present = self._training_step(
+                        rgbs,
+                        item['rays'].to(self.device, non_blocking=True),
+                        item['img_indices'].to(self.device, non_blocking=True), 
+                        labels, groups, train_iterations, item)
 
                     with torch.no_grad():
                         for key, val in metrics.items():
@@ -642,11 +616,11 @@ class Runner:
             if self.hparams.dataset_type == 'sam':
                 # group loss
                 semantic_feature  = results[f'semantic_feature_{typ}']
-                group_id, group_counts = torch.unique(groups, return_counts=True)
-                counts = 0
+                group_ids, group_counts = torch.unique(groups, return_counts=True)
                 group_loss_each = 0
-                for cur_counts in group_counts:
-                    feature_group = semantic_feature[counts:counts+cur_counts.item()]
+                for group_id in group_ids:
+                    group_index = (groups==group_id)
+                    feature_group = semantic_feature[group_index]
                     f_detach = feature_group.detach()
                     feature_group_mean = f_detach.mean(dim=0).repeat(feature_group.shape[0],1)
                     if self.hparams.sam_loss == 'MSELoss':
@@ -654,8 +628,7 @@ class Runner:
                     elif self.hparams.sam_loss == 'CSLoss':
                         cs_loss = self.loss_feat(feature_group, feature_group_mean)
                         group_loss_each += cs_loss.mean()
-                    counts += cur_counts.item()
-                group_loss = group_loss_each / len(group_counts) #/ semantic_feature.shape[-1]
+                group_loss = group_loss_each / len(group_ids) #/ semantic_feature.shape[-1]
                 metrics['sam_group_loss'] = group_loss
                 metrics['loss'] += self.hparams.wgt_group_loss * group_loss
             
@@ -673,13 +646,18 @@ class Runner:
             decay_min = 0.00 # arrive decay_min in 1/4 training iterationsc
             nloss_decay = (1 - decay_min) * (1 - train_iterations / (self.hparams.train_iterations/4.)) + decay_min
             nloss_decay = max(nloss_decay, 0)
-            fg_mask = (results['bg_lambda_fine'].detach() < 0.01)[:-self.sample_random_num_current]
+            fg_mask = (results['bg_lambda_fine'].detach() < 0.01)
+            if self.hparams.add_random_rays:
+                fg_mask = fg_mask[:-self.sample_random_num_current]
 
             if self.hparams.depth_loss:
                 batch_size = self.train_img_num # batch_size is the number of image
                 # TODO: add depth scale
                 gt_depths = item['depths'].to(self.device, non_blocking=True)
-                pred_depths = results['depth_fine'][:-self.sample_random_num_current] * item['depth_scale']
+                if self.hparams.add_random_rays:
+                    pred_depths = results['depth_fine'][:-self.sample_random_num_current] * item['depth_scale']
+                else:
+                    pred_depths = results['depth_fine'] * item['depth_scale']
                 ray_num = pred_depths.shape[0] // batch_size# + self.hparams.sample_random_num
                 sqrt_num = int(np.sqrt(ray_num))
                 if sqrt_num**2 != int(ray_num):

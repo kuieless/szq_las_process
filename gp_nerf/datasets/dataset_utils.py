@@ -43,6 +43,7 @@ def get_rgb_index_mask(metadata: ImageMetadata) -> Optional[
     assert metadata.image_index <= torch.iinfo(torch.int32).max
     return rgbs, metadata.image_index * torch.ones(rgbs.shape[0], dtype=torch.int32), keep_mask, labels
 
+# sam 是都读取，不mask一半，  在get_item时跳过val的数据
 def get_rgb_index_mask_sam(metadata: ImageMetadata) -> Optional[
     Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
     rgbs = metadata.load_image() #.view(-1, 3)
@@ -89,7 +90,6 @@ def get_rgb_index_mask_monocues(metadata: ImageMetadata) -> Optional[
     rgbs = metadata.load_image().view(-1, 3)
 
     keep_mask = metadata.load_mask()
-
 
     if metadata.is_val:
         if keep_mask is None:

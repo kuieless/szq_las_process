@@ -22,12 +22,13 @@ def fc_block(in_f, out_f):
 
 def semantic_mlp(in_f, out_f, dim_mlp, num_hidden):
     semantic_linears = [torch.nn.Linear(in_f, dim_mlp)]
-    semantic_linears.append(torch.nn.ReLU(inplace=True))
+    
 
     for i in range(num_hidden):
-        semantic_linears.append(torch.nn.Linear(dim_mlp, dim_mlp))
         semantic_linears.append(torch.nn.ReLU(inplace=True))
-    
+        semantic_linears.append(torch.nn.Linear(dim_mlp, dim_mlp))
+        
+    semantic_linears.append(torch.nn.ReLU(inplace=False))
     semantic_linears.append(torch.nn.Linear(dim_mlp, out_f))
     return torch.nn.Sequential(*semantic_linears)
 
@@ -196,8 +197,8 @@ class NeRF(nn.Module):
         if self.enable_semantic:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
             if self.separate_semantic:
-                sem_feature = self.semantic_linear[:-1](input_xyz)
-                sem_logits = self.semantic_linear[-1](sem_feature)
+                sem_feature = self.semantic_linear[:-2](input_xyz)
+                sem_logits = self.semantic_linear[-2:](sem_feature)
             else:
                 if self.stop_semantic_grad:
                     h_stop = h.detach()
@@ -242,8 +243,8 @@ class NeRF(nn.Module):
         if self.enable_semantic:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
             if self.separate_semantic:
-                sem_feature = self.semantic_linear_bg[:-1](input_xyz)
-                sem_logits = self.semantic_linear_bg[-1](sem_feature)
+                sem_feature = self.semantic_linear_bg[:-2](input_xyz)
+                sem_logits = self.semantic_linear_bg[-2](sem_feature)
             else:
                 if self.stop_semantic_grad:
                     h_stop = h.detach()
