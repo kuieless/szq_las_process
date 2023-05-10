@@ -19,6 +19,8 @@ class MemoryDataset(Dataset):
                  center_pixels: bool, device: torch.device, hparams):
         super(MemoryDataset, self).__init__()
 
+        self.sample_random_num_each = hparams.sample_random_num_each
+
         self.metadata_items = metadata_items
         self.near = near
         self.far = far
@@ -27,11 +29,12 @@ class MemoryDataset(Dataset):
         self.device= device
 
         rgbs = []
-        rays = []
         indices = []
         labels = []
         depths = []
 
+        all_rays = []
+        all_img_indices = []
         main_print('Loading data')
 
         metadata_item = metadata_items[0]
@@ -61,16 +64,29 @@ class MemoryDataset(Dataset):
             image_rgbs, image_indices, image_keep_mask, label, normal, depth = image_data
             #print(image_rgbs.shape, metadata_item.image_path)
 
+            #get rays
+            image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1,8).cpu()
+            if image_keep_mask is not None:
+                image_rays = image_rays[image_keep_mask == True]
+            all_rays.append(image_rays)
+            all_img_indices.append(image_indices * torch.ones(image_rays.shape[0], dtype=torch.int32))
+
             rgbs.append(image_rgbs)
             indices.append(image_indices)
             labels.append(label.int())
             depths.append(depth)
         main_print('Finished loading data')
 
+        self._all_rgbs = torch.cat(rgbs)[::10]
+        self._all_rays = torch.cat(all_rays)[::10]
+        self._all_img_indices = torch.cat(all_img_indices)[::10]
+        self._all_labels = torch.cat(labels)[::10]
+
         self._rgbs = rgbs # torch.stack(rgbs) # N*(H*W)*3, Byte/uint8
         self._depths = depths #torch.stack(depths)  # float16, N*(H*W)
         self._img_indices = indices # N, int
         self._labels = labels # torch.stack(labels) # Byte/uint8, N*H*W*1
+        
         print('self.rgbs', self._rgbs[0].shape, self._rgbs[0].dtype)
         if self._depths[0] is not None:
             print('self.depths', self._depths[0].shape, self._depths[0].dtype)
@@ -81,6 +97,7 @@ class MemoryDataset(Dataset):
         return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        
         total_pixels = self._rgbs[idx].shape[0]
         sampling_idx = torch.randperm(total_pixels)[:self.sampling_size]
 
@@ -98,14 +115,22 @@ class MemoryDataset(Dataset):
         rays = image_rays.view(-1,8).cpu()
 
         img_indices = self._img_indices[idx] * torch.ones(rays.shape[0], dtype=torch.int32)
+        
+        # get random sampling
+        all_total_pixels = self._all_rgbs.shape[0]
+        all_sampling_idx = torch.randperm(all_total_pixels)[:self.sample_random_num_each]
+
         item = {
-            'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,
-            'rays': rays,
-            'img_indices': img_indices,
-            'labels': self._labels[idx][sampling_idx].int(),
+            'rgbs': torch.cat((self._rgbs[idx][sampling_idx], self._all_rgbs[all_sampling_idx])).float() / 255.,
+            'rays': torch.cat((rays, self._all_rays[all_sampling_idx])),
+            'img_indices': torch.cat((img_indices, self._all_img_indices[all_sampling_idx])),
+            'labels': torch.cat((self._labels[idx][sampling_idx], self._all_labels[all_sampling_idx])).int(),
         }
 
         if self._depths[0] is not None:
             item['depths'] = self._depths[idx][sampling_idx].float()
             item['depth_scale'] = depth_scale
+        # print(item['rays'].size())
+        
+        
         return item

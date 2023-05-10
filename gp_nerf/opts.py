@@ -17,6 +17,9 @@ def get_opts_base():
     parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['filesystem', 'memory', 'sam', 'file_normal', 'memory_depth'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
+   
+    parser.add_argument('--sample_random_num', type=int, default=1024, help='')
+   
     #sam 
     parser.add_argument('--sam_sample_total', type=int, default=20480, help='')
     parser.add_argument('--sam_sample_each', type=int, default=1024, help='')

@@ -92,6 +92,10 @@ class Runner:
             random.seed(hparams.random_seed)
 
         self.hparams = hparams
+        assert hparams.sample_random_num % hparams.batch_size ==0
+        self.hparams.sample_random_num_each = int(hparams.sample_random_num / hparams.batch_size)
+ 
+        
 
         # self.hparams.train_iterations = int(self.hparams.train_iterations / (self.hparams.batch_size/1024))
         # self.hparams.val_interval = self.hparams.train_iterations + 1
@@ -381,12 +385,7 @@ class Runner:
                 with torch.cuda.amp.autocast(enabled=self.hparams.amp):
 
                     #semantic 
-                    if self.hparams.enable_semantic:
-                        labels = item['labels'].to(self.device, non_blocking=True)
-                        from tools.unetformer.uavid2rgb import remapping
-                        labels = remapping(labels)
-                    else:
-                        labels = None
+                    
 
                     
                     if self.hparams.appearance_dim > 0:
@@ -398,15 +397,24 @@ class Runner:
                         item['c2w_rots'] = c2w_rots
                     
                     if self.hparams.dataset_type == 'memory_depth':
+                        # print(item['rays'].size())
                         self.train_img_num = item['rgbs'].shape[0]
+                        self.sample_random_num_current = item['rgbs'].shape[0] * self.hparams.sample_random_num_each
                         for key in item.keys():
                             #print(key, item[key].shape)
+                            sample_from_image = item[key][:, :-self.hparams.sample_random_num_each]
+                            sample_random = item[key][:, -self.hparams.sample_random_num_each:]
                             if item[key].dim() == 2:
-                                item[key] = item[key].reshape(-1)
+                                item[key] = torch.cat((sample_from_image.reshape(-1),sample_random.reshape(-1)))
                             elif item[key].dim() == 3:
-                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
-                        if self.hparams.enable_semantic:
-                            labels = labels.reshape(-1)
+                                item[key] = torch.cat((sample_from_image.reshape(-1, *item[key].shape[2:]),sample_random.reshape(-1, *item[key].shape[2:])))
+                    
+                    if self.hparams.enable_semantic:
+                        labels = item['labels'].to(self.device, non_blocking=True)
+                        from tools.unetformer.uavid2rgb import remapping
+                        labels = remapping(labels)
+                    else:
+                        labels = None
 
                     if self.hparams.dataset_type == 'sam':
                         # # 这里得到ray
@@ -662,13 +670,13 @@ class Runner:
             decay_min = 0.00 # arrive decay_min in 1/4 training iterationsc
             nloss_decay = (1 - decay_min) * (1 - train_iterations / (self.hparams.train_iterations/4.)) + decay_min
             nloss_decay = max(nloss_decay, 0)
-            fg_mask = results['bg_lambda_fine'].detach() < 0.01
+            fg_mask = (results['bg_lambda_fine'].detach() < 0.01)[:-self.sample_random_num_current]
 
             if self.hparams.depth_loss:
                 batch_size = self.train_img_num # batch_size is the number of image
                 # TODO: add depth scale
                 gt_depths = item['depths'].to(self.device, non_blocking=True)
-                pred_depths = results['depth_fine'] * item['depth_scale']
+                pred_depths = results['depth_fine'][:-self.sample_random_num_current] * item['depth_scale']
                 ray_num = pred_depths.shape[0] // batch_size
                 sqrt_num = int(np.sqrt(ray_num))
                 if sqrt_num**2 != int(ray_num):
