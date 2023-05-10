@@ -402,12 +402,15 @@ class Runner:
                         self.sample_random_num_current = item['rgbs'].shape[0] * self.hparams.sample_random_num_each
                         for key in item.keys():
                             #print(key, item[key].shape)
-                            sample_from_image = item[key][:, :-self.hparams.sample_random_num_each]
-                            sample_random = item[key][:, -self.hparams.sample_random_num_each:]
                             if item[key].dim() == 2:
-                                item[key] = torch.cat((sample_from_image.reshape(-1),sample_random.reshape(-1)))
+                                item[key] = item[key].reshape(-1)
                             elif item[key].dim() == 3:
-                                item[key] = torch.cat((sample_from_image.reshape(-1, *item[key].shape[2:]),sample_random.reshape(-1, *item[key].shape[2:])))
+                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                        for key in item.keys():
+                            if 'random' in key:
+                                continue
+                            elif 'random_'+key in item.keys():
+                                item[key] = torch.cat((item[key], item['random_'+key]))
                     
                     if self.hparams.enable_semantic:
                         labels = item['labels'].to(self.device, non_blocking=True)
