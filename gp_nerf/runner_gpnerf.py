@@ -332,7 +332,7 @@ class Runner:
             w2c_rots = torch.linalg.inv(dataset._c2ws[:, :3, :3]).to(self.device, non_blocking=True)
 
         elif self.hparams.dataset_type == 'memory_depth':
-            from gp_nerf.datasets.memory_dataset_depth import MemoryDataset
+            from gp_nerf.datasets.memory_dataset_depth_random import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
         else:
@@ -680,7 +680,7 @@ class Runner:
                 # TODO: add depth scale
                 gt_depths = item['depths'].to(self.device, non_blocking=True)
                 pred_depths = results['depth_fine'][:-self.sample_random_num_current] * item['depth_scale']
-                ray_num = pred_depths.shape[0] // batch_size
+                ray_num = pred_depths.shape[0] // batch_size# + self.hparams.sample_random_num
                 sqrt_num = int(np.sqrt(ray_num))
                 if sqrt_num**2 != int(ray_num):
                     raise Exception('ray_num not N*N, %d %d' % (ray_num, sqrt_num))

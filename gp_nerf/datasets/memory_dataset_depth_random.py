@@ -19,6 +19,8 @@ class MemoryDataset(Dataset):
                  center_pixels: bool, device: torch.device, hparams):
         super(MemoryDataset, self).__init__()
 
+        self.sample_random_num_each = hparams.sample_random_num_each
+
         self.metadata_items = metadata_items
         self.near = near
         self.far = far
@@ -31,6 +33,10 @@ class MemoryDataset(Dataset):
         labels = []
         depths = []
 
+        all_rays = []
+        all_img_indices = []
+        all_rgbs = []
+        all_labels = []
         main_print('Loading data')
 
         metadata_item = metadata_items[0]
@@ -59,6 +65,17 @@ class MemoryDataset(Dataset):
             #zyq : add labels
             image_rgbs, image_indices, image_keep_mask, label, normal, depth = image_data
             #print(image_rgbs.shape, metadata_item.image_path)
+
+            #get rays
+            image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1,8).cpu()
+            if image_keep_mask is not None:
+                image_rays = image_rays[image_keep_mask == True]
+            all_rays.append(image_rays[::10])
+            all_img_indices.append(image_indices * torch.ones(image_rays.shape[0], dtype=torch.int32)[::10])
+            all_rgbs.append(image_rgbs[::10])
+            all_labels.append(label.int()[::10])
+
+            
             
             rgbs.append(image_rgbs)
             indices.append(image_indices)
@@ -66,6 +83,10 @@ class MemoryDataset(Dataset):
             depths.append(depth)
         main_print('Finished loading data')
 
+        self._all_rgbs = torch.cat(all_rgbs)
+        self._all_rays = torch.cat(all_rays)
+        self._all_img_indices = torch.cat(all_img_indices)
+        self._all_labels = torch.cat(all_labels)
 
         self._rgbs = rgbs # torch.stack(rgbs) # N*(H*W)*3, Byte/uint8
         self._depths = depths #torch.stack(depths)  # float16, N*(H*W)
@@ -101,7 +122,9 @@ class MemoryDataset(Dataset):
 
         img_indices = self._img_indices[idx] * torch.ones(rays.shape[0], dtype=torch.int32)
         
-
+        # get random sampling
+        all_total_pixels = self._all_rgbs.shape[0]
+        all_sampling_idx = torch.randperm(all_total_pixels)[:self.sample_random_num_each]
 
         item = {
             'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,
@@ -109,6 +132,11 @@ class MemoryDataset(Dataset):
             'img_indices': img_indices,
             'labels': self._labels[idx][sampling_idx].int(),
         }
+
+        item['random_rgbs'] = self._all_rgbs[all_sampling_idx].float() / 255.
+        item['random_rays'] = self._all_rays[all_sampling_idx]
+        item['random_img_indices'] = self._all_img_indices[all_sampling_idx]
+        item['random_labels'] = self._all_labels[all_sampling_idx].int()
 
         if self._depths[0] is not None:
             item['depths'] = self._depths[idx][sampling_idx].float()
