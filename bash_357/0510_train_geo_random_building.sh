@@ -2,11 +2,11 @@
 export OMP_NUM_THREADS=4
 # gpu=${1:-6}
 # exp=${2:-''}
-export CUDA_VISIBLE_DEVICES=6  #${gpu}
+export CUDA_VISIBLE_DEVICES=4  #${gpu}
 
-exp_name='logs_357/0510_train_geo_random_resi'    #${exp}
-dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
-dataset2="residence" # 'sci-art'  "building"  "rubble"  "quad"   "sci-art"  "campus"
+exp_name='logs_357/0510_train_geo_random_building'    #${exp}
+dataset1='Mill19'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
+dataset2="building" # 'sci-art'  "building"  "rubble"  "quad"   "sci-art"  "campus"
 wandb_id=None  #gpnerf_semantic   None
 
 wandb_run_name=$exp_name

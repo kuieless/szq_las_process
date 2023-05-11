@@ -4,6 +4,7 @@
 test.sh
 gy/
 logs_gy_313/
+logs_gy_357/
 zyq/
 tools/segment_anything/sam_vit_b_01ec64.pth
 tools/segment_anything/sam_vit_h_4b8939.pth
