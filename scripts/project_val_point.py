@@ -21,7 +21,6 @@ def _get_eval_opts() -> Namespace:
 
 @record
 def main(hparams: Namespace) -> None:
-    assert hparams.ckpt_path is not None or hparams.container_path is not None
     if hparams.network_type == 'sdf':
         hparams.cos_iterations = int(hparams.train_iterations / 2)
         hparams.normal_iterations = int(hparams.train_iterations / 2)

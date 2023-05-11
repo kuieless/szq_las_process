@@ -12,6 +12,14 @@ from tools.segment_anything import sam_model_registry, SamPredictor
 import numpy as np
 import cv2
 import sys
+import glob
+import os
+from pathlib import Path
+import random
+import shutil
+
+
+
 
 def init(device):
     # sam_checkpoint = "samnerf/segment_anything/sam_vit_h_4b8939.pth"
@@ -29,6 +37,9 @@ class MemoryDataset_SAM(Dataset):
     def __init__(self, metadata_items: List[ImageMetadata], near: float, far: float, ray_altitude_range: List[float],
                  center_pixels: bool, device: torch.device, hparams):
         super(MemoryDataset_SAM, self).__init__()
+
+        self.debug_one_images_sam = hparams.debug_one_images_sam
+        print(f"train_on_1_val_corresponding_images: {hparams.debug_one_images_sam}")
 
         # sam
         self.device = device # device 'cpu'
@@ -64,6 +75,18 @@ class MemoryDataset_SAM(Dataset):
         main_print('Loading data')
         if hparams.debug:
             metadata_items = metadata_items[:40]
+        
+        if self.debug_one_images_sam:
+            used_files = []
+            used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/val_000459_v4', '*.jpg')))
+            used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/val_000459_v4/occluded', '*.jpg')))
+            used_files.sort()
+            use_index = []
+            for used_file in used_files:
+                use_index.append(int(Path(used_file).stem))
+            use_index.sort()
+            self.use_index = use_index
+        
         for metadata_item in main_tqdm(metadata_items):
             image_data = get_rgb_index_mask_sam(metadata_item)
 
@@ -92,9 +115,15 @@ class MemoryDataset_SAM(Dataset):
         return self._labels.shape[0]
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        if self.debug_one_images_sam:
+            if not (idx in self.use_index):
+                random_number = random.randint(0, len(self.use_index))
+                idx = random_number
+        
         if self._is_vals[idx]:
             idx = idx + 1
             assert self._is_vals[idx] == False
+        
         in_labels = np.array([1])
         H, W = self.H, self.W
         sam_feature = (self._sam_features[idx]).to(self.device)
@@ -107,6 +136,8 @@ class MemoryDataset_SAM(Dataset):
         selected_one = []
         #visualize
         visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
+        save_dir = f'zyq/visual_sam_sample'
+
         # mode: 1 每次取一个点，识别一个mask，从中采样 
         if self.sampling_mode == 'per_mask':
             while N_selected < self.N_total:
@@ -178,7 +209,7 @@ class MemoryDataset_SAM(Dataset):
                 bool_tensor = bool_tensor * (~masks_max)
                 
                 # *****************************************************************************
-            #     # below is visualization to save the sampling images
+                #  #   # below is visualization to save the sampling images
             #     masks_max_vis = np.stack([masks_max.cpu().numpy(), masks_max.cpu().numpy(), masks_max.cpu().numpy()], axis=2)
             #     for point in selected_one:
             #         # print(point)
@@ -188,7 +219,7 @@ class MemoryDataset_SAM(Dataset):
             #                 for n in range(-2,2):
             #                     if x+m < W and x+m >0 and y+n < H and y+n >0:
             #                         masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
-            #     cv2.imwrite(f"zyq/mask_final_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
+            #   # cv2.imwrite(f"{save_dir}/mask_{idx}_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
             #     visual += masks_max * group_id
             # visual = visual.cpu().numpy()
             # rgb_array = np.stack([visual, visual, visual], axis=2)*(127/visual.max()+127)
@@ -206,8 +237,8 @@ class MemoryDataset_SAM(Dataset):
             #             for n in range(-5,5):
             #                 if x+m < W and x+m >0 and y+n < H and y+n >0:
             #                     rgb_array_test[(y+n), (x+m)] = np.array([0, 0, 128])
-            # cv2.imwrite(f"zyq/mask_final.png", (rgb_array_test).astype(np.int32))
-            # print(f"zyq/mask_final.png")
+            # cv2.imwrite(f"{save_dir}/mask_{idx}_final.png", (rgb_array_test).astype(np.int32))
+            # print(f"{save_dir}/mask_{idx}_final.png")
             # *****************************************************************************
             selected_points = torch.cat(selected_points)
             selected_points_group = torch.cat(selected_points_group)
@@ -226,7 +257,7 @@ class MemoryDataset_SAM(Dataset):
 
         else:
             raise ImportError
-
+        
         metadata_item = self.metadata_items[idx]
         image_rays = get_rays(self.directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
         img_indices = self._img_indices[idx] * torch.ones(selected_points.shape[0], dtype=torch.int32)

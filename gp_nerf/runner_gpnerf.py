@@ -426,7 +426,7 @@ class Runner:
                     else:
                         rgbs = item['rgbs'].to(self.device, non_blocking=True)
                         groups = None
-
+                    # print(labels.shape[0])
                     metrics, bg_nerf_rays_present = self._training_step(
                         rgbs,
                         item['rays'].to(self.device, non_blocking=True),
@@ -613,25 +613,6 @@ class Runner:
             metrics['semantic_loss'] = semantic_loss
             metrics['loss'] += self.hparams.wgt_sem_loss * semantic_loss
             
-            if self.hparams.dataset_type == 'sam':
-                # group loss
-                semantic_feature  = results[f'semantic_feature_{typ}']
-                group_ids, group_counts = torch.unique(groups, return_counts=True)
-                group_loss_each = 0
-                for group_id in group_ids:
-                    group_index = (groups==group_id)
-                    feature_group = semantic_feature[group_index]
-                    f_detach = feature_group.detach()
-                    feature_group_mean = f_detach.mean(dim=0).repeat(feature_group.shape[0],1)
-                    if self.hparams.sam_loss == 'MSELoss':
-                        group_loss_each += (self.loss_feat(feature_group, feature_group_mean))
-                    elif self.hparams.sam_loss == 'CSLoss':
-                        cs_loss = self.loss_feat(feature_group, feature_group_mean)
-                        group_loss_each += cs_loss.mean()
-                group_loss = group_loss_each / len(group_ids) #/ semantic_feature.shape[-1]
-                metrics['sam_group_loss'] = group_loss
-                metrics['loss'] += self.hparams.wgt_group_loss * group_loss
-            
             with torch.no_grad():
                 if train_iterations % 1000 == 0:
                     sem_label = self.logits_2_label(sem_logits)
@@ -641,6 +622,28 @@ class Runner:
                         # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
                     if self.wandb is not None:
                         self.wandb.log({'train/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
+
+            if self.hparams.dataset_type == 'sam':
+                if self.hparams.group_loss:
+                    # group loss
+                    semantic_feature  = results[f'semantic_feature_{typ}']
+                    group_ids, group_counts = torch.unique(groups, return_counts=True)
+                    group_loss_each = 0
+                    for group_id in group_ids:
+                        group_index = (groups==group_id)
+                        feature_group = semantic_feature[group_index]
+                        f_detach = feature_group.detach()
+                        feature_group_mean = f_detach.mean(dim=0).repeat(feature_group.shape[0],1)
+                        if self.hparams.sam_loss == 'MSELoss':
+                            group_loss_each += (self.loss_feat(feature_group, feature_group_mean))
+                        elif self.hparams.sam_loss == 'CSLoss':
+                            cs_loss = self.loss_feat(feature_group, feature_group_mean)
+                            group_loss_each += cs_loss.mean()
+                    group_loss = 1 - group_loss_each / len(group_ids) #/ semantic_feature.shape[-1]
+                    metrics['sam_group_loss'] = group_loss
+                    metrics['loss'] += self.hparams.wgt_group_loss * group_loss
+            
+                
 
         if self.hparams.depth_loss or self.hparams.normal_loss:
             decay_min = 0.00 # arrive decay_min in 1/4 training iterationsc
@@ -729,7 +732,7 @@ class Runner:
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
                     ##indices_to_eval = np.arange(0, len(self.train_items), 100)  
-                    indices_to_eval = np.arange(len(self.train_items))  
+                    indices_to_eval = [0] #np.arange(len(self.train_items))  
                 
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
@@ -845,7 +848,7 @@ class Runner:
             Path(str(experiment_path_current)).mkdir()
             Path(str(experiment_path_current / 'val_rgbs')).mkdir()
             
-            for i in indices_to_eval[0:1]:
+            for i in indices_to_eval[5:6]:
                 if val_type == 'val':
                     metadata_item = self.val_items[i]
                 elif val_type == 'train':
@@ -875,7 +878,7 @@ class Runner:
                 depth_scale = torch.abs(directions[:, :, 2]) # z-axis's values
                 depth_map = (depth_map * depth_scale).numpy()
 
-                x, y = int(W * 1/4), int(H * 1/4)
+                x, y = int(W * 1/2), int(H * 1/2)
                 #x, y = W // 2, H // 2
                 K1 = metadata_item.intrinsics
                 #K1 = np.array([[K1[0], 0, K1[2]],[0, -K1[1], K1[3]],[0,0,-1]])
@@ -889,6 +892,7 @@ class Runner:
                 pt_3d = np.append(pt_3d, 1)
                 print('3d point in camera space', pt_3d)
                 (Path(f"{save_dir}")).mkdir(exist_ok=True)
+                (Path(f"{save_dir}/occluded")).mkdir(exist_ok=True)
                 img1= cv2.imread(f"{str(metadata_item.image_path)}")
                 pt2 = (int(x), int(y))
                 radius = 5
@@ -934,9 +938,11 @@ class Runner:
                         if depth_diff > 0.01:
                             print('occluded points!!')
                             color = (0, 255, 0)
-
-                        img2 = cv2.circle(img2, pt2, radius, color, thickness)
-                        cv2.imwrite(f"{save_dir}/{train_item.image_path.stem}.jpg", img2)
+                            img2 = cv2.circle(img2, pt2, radius, color, thickness)
+                            cv2.imwrite(f"{save_dir}/occluded/{train_item.image_path.stem}.jpg", img2)
+                        else:
+                            img2 = cv2.circle(img2, pt2, radius, color, thickness)
+                            cv2.imwrite(f"{save_dir}/{train_item.image_path.stem}.jpg", img2)
                     # else:
                         # print('Projected point is not on image2')
                         

@@ -21,10 +21,13 @@ def get_opts_base():
     parser.add_argument('--sample_random_num', type=int, default=4096, help='')
     parser.add_argument('--add_random_rays', type=eval, default=False, help='shuffle=False and ignore the trained data')
 
+    parser.add_argument('--debug_one_images_sam', type=eval, default=False, help='shuffle=False and ignore the trained data')
+
    
     #sam 
 
     parser.add_argument('--sam_sample_each', type=int, default=256, help='')
+    parser.add_argument('--group_loss', default=False, type=eval, choices=[True, False], help='supervise normal')
     parser.add_argument('--wgt_group_loss', default=1e-2, type=float, help='')
     parser.add_argument('--sampling_mode', type=str, default='per_mask_threshold', choices=['per_mask', 'per_mask_threshold', 'whole_image'])
     parser.add_argument('--sam_loss', type=str, default='MSELoss', choices=['MSELoss', 'CSLoss'])
@@ -92,7 +95,7 @@ def get_opts_base():
     parser.add_argument('--ckpt_interval', type=int, default=100000, help='checkpoint interval')
     parser.add_argument('--model_chunk_size', type=int, default=10*1024*1024, help='chunk size to split the input to avoid OOM')
     # parser.add_argument('--model_chunk_size', type=int, default=32 * 1024, help='chunk size to split the input to avoid OOM')
-    parser.add_argument('--batch_size', type=int, default=5120, help='batch size')
+    parser.add_argument('--batch_size', type=int, default=8, help='batch size')
     parser.add_argument('--coarse_samples', type=int, default=128, help='number of coarse samples')
     parser.add_argument('--fine_samples', type=int, default=128, help='number of additional fine samples')
 

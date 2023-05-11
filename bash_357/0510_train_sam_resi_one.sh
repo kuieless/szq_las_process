@@ -4,7 +4,7 @@ gpu=${1:-6}
 # exp=${2:-''}
 export CUDA_VISIBLE_DEVICES=${gpu}
 
-exp_name='logs_357/0510_train_sam_resi'    #${exp}
+exp_name='logs_357/0510_train_sam_resi_one'    #${exp}
 dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2="residence" # 'sci-art'  "building"  "rubble"  "quad"   "sci-art"  "campus"
 wandb_id=None  #gpnerf_semantic   None
@@ -16,20 +16,20 @@ network_type='gpnerf'  #  gpnerf  sdf
 label_name='merge_new'
 
 sample_random_num=4096
-batch_size=8            #4 #25600 # 128*128
+batch_size=1            #4 #25600 # 128*128
 sample_ray_num=1024     #  2304
 sam_sample_each=512
 
 train_iterations=40000
-val_interval=300
+val_interval=3000
 ckpt_interval=300
-pos_xyz_dim=10
+pos_xyz_dim=0
 
 dataset_type='sam'
 sam_loss=CSLoss
 freeze_geo=True
-wgt_group_loss=0.1
-
+wgt_group_loss=10
+val_type='train'
 
 args=""
 chunk_path=/data/yuqi/Datasets/MegaNeRF/$dataset1/${dataset2}_chunk-labels-$label_name-down4
@@ -37,7 +37,7 @@ ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G3_geo_residence/0/mode
 args=${args}"--ckpt_path $ckpt_path --no_resume_ckpt_state  "
 
 
-args=${args}" --add_random_rays  False  --sample_random_num  $sample_random_num --sam_loss  $sam_loss  --freeze_geo  $freeze_geo  --wgt_group_loss  $wgt_group_loss "
+args=${args}" --add_random_rays  False  --sample_random_num  $sample_random_num --val_type  $val_type  --sam_loss  $sam_loss  --freeze_geo  $freeze_geo  --wgt_group_loss  $wgt_group_loss "
 
 debug=False
 # debug=True
