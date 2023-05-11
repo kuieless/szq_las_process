@@ -780,7 +780,7 @@ class Runner:
                         img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
 
                         get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
-                                            self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i)
+                                            self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer)
                             
                         prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
                             
@@ -800,11 +800,12 @@ class Runner:
                             self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
                         
 
-
                         if val_type == 'val':
                             #save  [pred_label, pred_rgb, fg_bg] to the folder 
                             Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
                                 str(experiment_path_current / 'val_rgbs' / '{}_pred_rgb.jpg'.format(i)))
+                            
+
                             if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
                                 img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
                                                                  results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())

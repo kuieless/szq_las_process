@@ -58,7 +58,7 @@ def get_depth_vis(results, typ):
         viz_depth = None
 
 def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, 
-                         metrics_val, metrics_val_each, img_list, experiment_path_current, i):
+                         metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer):
     if f'sem_map_{typ}' in results:
         sem_logits = results[f'sem_map_{typ}']
         if val_type == 'val':
@@ -88,6 +88,8 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         img_list.append(gt_label_rgb)
         img_list.append(torch.from_numpy(visualize_sem))
         Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / '{}_pred_label.jpg'.format(i)))
+        if writer is not None:
+            writer.add_image('5_val_images_semantic/{}'.format(i), torch.from_numpy(visualize_sem).permute(2, 0, 1), i)
 
     return
 
