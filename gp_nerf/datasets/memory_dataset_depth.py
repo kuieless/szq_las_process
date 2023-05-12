@@ -62,7 +62,7 @@ class MemoryDataset(Dataset):
             
             rgbs.append(image_rgbs)
             indices.append(image_indices)
-            labels.append(label.int())
+            labels.append(label)
             depths.append(depth)
         main_print('Finished loading data')
 

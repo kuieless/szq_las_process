@@ -139,9 +139,10 @@ class MemoryDataset_SAM(Dataset):
         selected_one = []
         #visualize
         visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
-        save_dir = f'zyq/visual_sam_sample_{idx}'
-        Path(save_dir).parent.mkdir(exist_ok=True)
-        Path(save_dir).mkdir(exist_ok=True)
+        
+        # save_dir = f'zyq/visual_sam_sample_{idx}'
+        # Path(save_dir).parent.mkdir(exist_ok=True)
+        # Path(save_dir).mkdir(exist_ok=True)
 
 
 

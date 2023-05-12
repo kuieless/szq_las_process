@@ -74,13 +74,13 @@ class MemoryDataset(Dataset):
             all_rays.append(image_rays[::10])
             all_img_indices.append(image_indices * torch.ones(image_rays.shape[0], dtype=torch.int32)[::10])
             all_rgbs.append(image_rgbs[::10])
-            all_labels.append(label.int()[::10])
+            all_labels.append(label[::10])
 
             
             
             rgbs.append(image_rgbs)
             indices.append(image_indices)
-            labels.append(label.int())
+            labels.append(label)
             depths.append(depth)
         main_print('Finished loading data')
 

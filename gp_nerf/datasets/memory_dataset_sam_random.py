@@ -84,7 +84,7 @@ class MemoryDataset_SAM(Dataset):
                 image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1,8).cpu()
                 all_rays.append(image_rays[::10])
                 all_rgbs.append(image_rgbs.view(-1, 3)[::10])
-                all_labels.append(label.int().view(-1)[::10])
+                all_labels.append(label.view(-1)[::10])
                 all_img_indices.append(image_indices * torch.ones(label.view(-1)[::10].shape[0], dtype=torch.int32))
 
             indices.append(image_indices)
