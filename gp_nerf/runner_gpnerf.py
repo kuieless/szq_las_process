@@ -57,13 +57,15 @@ def get_n_params(model):
         pp += nn
     return pp
 
-
 class Runner:
     def __init__(self, hparams: Namespace, set_experiment_path: bool = True):
         faulthandler.register(signal.SIGUSR1)
+        if hparams.balance_weight:
+            balance_weight = torch.FloatTensor([1, 1, 1, 5, 5, 5, 1, 1, 1, 1, 1]).cuda()
+            CrossEntropyLoss = nn.CrossEntropyLoss(weight=balance_weight, ignore_index=hparams.ignore_index)
+        else:
+            CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
 
-        
-        CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
         self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
         self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
         if hparams.dataset_type == 'sam':

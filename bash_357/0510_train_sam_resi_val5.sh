@@ -22,7 +22,7 @@ sam_sample_each=128
 train_iterations=40000
 val_interval=200
 ckpt_interval=200
-pos_xyz_dim=0
+pos_xyz_dim=10
 
 dataset_type='sam'
 sam_loss=CSLoss

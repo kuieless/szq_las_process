@@ -19,10 +19,9 @@ batch_size=4          #4 #25600 # 128*128
 sample_ray_num=4096    #  2304
 sam_sample_each=128
 
-train_iterations=40000
-val_interval=2000
-ckpt_interval=2000
-pos_xyz_dim=0
+train_iterations=20000
+val_interval=1000
+ckpt_interval=1000
 
 dataset_type='sam'
 sam_loss=CSLoss

@@ -21,7 +21,11 @@ def get_opts_base():
     parser.add_argument('--sample_random_num', type=int, default=4096, help='')
     parser.add_argument('--add_random_rays', type=eval, default=False, help='shuffle=False and ignore the trained data')
 
-    parser.add_argument('--debug_one_images_sam', type=eval, default=False, help='shuffle=False and ignore the trained data')
+    parser.add_argument('--debug_one_images_sam', type=eval, default=False, help='')
+    parser.add_argument('--balance_weight', type=eval, default=False, help='')
+    
+    parser.add_argument('--online_sam_label', type=eval, default=False, help='')
+
 
    
     #sam 
@@ -31,6 +35,7 @@ def get_opts_base():
     parser.add_argument('--wgt_group_loss', default=1e-2, type=float, help='')
     parser.add_argument('--sampling_mode', type=str, default='per_mask_threshold', choices=['per_mask', 'per_mask_threshold', 'whole_image'])
     parser.add_argument('--sam_loss', type=str, default='MSELoss', choices=['MSELoss', 'CSLoss'])
+
 
     parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
 

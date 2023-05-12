@@ -41,6 +41,8 @@ class MemoryDataset_SAM(Dataset):
         self.debug_one_images_sam = hparams.debug_one_images_sam
         print(f"train_on_1_val_corresponding_images: {hparams.debug_one_images_sam}")
 
+        self.online_sam_label = hparams.online_sam_label
+
         # sam
         self.device = device # device 'cpu'
         self.predictor = init(self.device)
@@ -131,6 +133,7 @@ class MemoryDataset_SAM(Dataset):
         bool_tensor = torch.ones((H, W), dtype=torch.int).to(self.device)
         N_selected = 0
         selected_points = []
+        selected_points_labels = []
         selected_points_group = []
         group_id = 1  #  0 denotes unassigned
         selected_one = []
@@ -138,42 +141,7 @@ class MemoryDataset_SAM(Dataset):
         visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
         save_dir = f'zyq/visual_sam_sample'
 
-        # mode: 1 每次取一个点，识别一个mask，从中采样 
-        if self.sampling_mode == 'per_mask':
-            while N_selected < self.N_total:
-                random_point = torch.nonzero(bool_tensor)[torch.randint(high=torch.sum(bool_tensor), size=(1,))]
-                random_point = random_point.flip(1)
-                selected_one.append(random_point)
-                masks, iou_preds, _ = self.predictor.predict(random_point.cpu().numpy(), in_labels, return_torch=True)
-                masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
-                #在mask内选 N_each 个点，若不足 N_each ，则全选
-                if masks_max.nonzero().size(0) ==0:
-                    continue
-                elif masks_max.nonzero().size(0) < self.N_each:
-                    select_point = masks_max.nonzero()
-                    selected_points.append(select_point)
-                    # group_id_str = str(idx)+'_'+str(group_id)
-                    # selected_points_group.append([group_id_str] * select_point.size(0))
-                    group_id_record = 1000 * idx + group_id
-                    selected_points_group.append(group_id_record * torch.ones(select_point.size(0)).to(self.device))
-                    N_selected += masks_max.nonzero().size(0)
-                else:
-                    select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(self.N_each,))]
-                    selected_points.append(select_point)
-                    group_id_record = 1000 * idx + group_id
-                    selected_points_group.append(group_id_record * torch.ones(select_point.size(0),dtype=torch.int).to(self.device))
-                    N_selected += self.N_each
-                group_id += 1
-                bool_tensor = bool_tensor * (~masks_max)
-            
-            selected_points = torch.cat(selected_points)
-            selected_points_group = torch.cat(selected_points_group)
-            assert selected_points.size(0) == selected_points_group.size(0)
-            if selected_points.size(0) > self.N_total:
-                selected_points = selected_points[:self.N_total]
-                selected_points_group = selected_points_group[:self.N_total]
-
-        elif self.sampling_mode == 'per_mask_threshold':
+        if self.sampling_mode == 'per_mask_threshold':
             while N_selected < self.N_total:
                 random_point = torch.nonzero(bool_tensor)[torch.randint(high=torch.sum(bool_tensor), size=(1,))]
                 random_point = random_point.flip(1)
@@ -184,27 +152,36 @@ class MemoryDataset_SAM(Dataset):
                 mask_size = masks_max.nonzero().size(0)
                 if masks_max.nonzero().size(0) ==0:
                     continue
+                if self.online_sam_label:
+                    sam_cut_out_labels = self._labels[idx][masks_max==True]
+                    cut_out_labels_uniques, cut_out_labels_counts = torch.unique(sam_cut_out_labels, return_counts=True)
+                    max_label = cut_out_labels_uniques[cut_out_labels_counts.argmax()].int()
+                    cut_out_labels_nonzero = cut_out_labels_uniques.nonzero().squeeze(-1)
+                    if max_label == 0 and len(cut_out_labels_nonzero)>0:
+                        cut_out_labels_uniques_nonzero = cut_out_labels_uniques[cut_out_labels_nonzero]
+                        cut_out_labels_counts_nonzero = cut_out_labels_counts[cut_out_labels_nonzero]
+                        max_label_nonzero = cut_out_labels_uniques_nonzero[cut_out_labels_counts_nonzero.argmax()]
+                        max_count_nonzero = cut_out_labels_counts_nonzero[cut_out_labels_counts_nonzero.argmax()]
+                        if max_count_nonzero / mask_size >0.1:
+                            max_label=max_label_nonzero.int()
+
                 if mask_size / images_size < 0.02:
                     N_sample = int(self.N_each*0.1)
-                    select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
-                    selected_points.append(select_point)
-                    group_id_record = 1000 * idx + group_id
-                    selected_points_group.append(group_id_record * torch.ones(select_point.size(0),dtype=torch.int).to(self.device))
-                    N_selected += N_sample
                 elif mask_size / images_size < 0.05:
                     N_sample = int(self.N_each*0.2)
-                    select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
-                    selected_points.append(select_point)
-                    group_id_record = 1000 * idx + group_id
-                    selected_points_group.append(group_id_record * torch.ones(select_point.size(0),dtype=torch.int).to(self.device))
-                    N_selected += N_sample
                 else:
                     N_sample = int(self.N_each*1)
-                    select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
-                    selected_points.append(select_point)
-                    group_id_record = 1000 * idx + group_id
-                    selected_points_group.append(group_id_record * torch.ones(select_point.size(0),dtype=torch.int).to(self.device))
-                    N_selected += N_sample
+                select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
+                candidate_tensor = torch.ones(select_point.size(0),dtype=torch.int).to(self.device)
+                selected_points.append(select_point)
+                group_id_record = 1000 * idx + group_id
+                selected_points_group.append(group_id_record * candidate_tensor)
+                N_selected += N_sample
+                
+                if self.online_sam_label:
+                    selected_points_labels.append(max_label * candidate_tensor)
+
+
                 group_id += 1
                 bool_tensor = bool_tensor * (~masks_max)
                 
@@ -242,10 +219,15 @@ class MemoryDataset_SAM(Dataset):
             # *****************************************************************************
             selected_points = torch.cat(selected_points)
             selected_points_group = torch.cat(selected_points_group)
+            if self.online_sam_label:
+                selected_points_labels = torch.cat(selected_points_labels)
+            
             assert selected_points.size(0) == selected_points_group.size(0)
             if selected_points.size(0) > self.N_total:
                 selected_points = selected_points[:self.N_total]
                 selected_points_group = selected_points_group[:self.N_total]
+                if self.online_sam_label:
+                    selected_points_labels = selected_points_labels[:self.N_total]
         
         # mode: 2  先随机采样所有点，然后从采样点中取一点，识别mask，划分group； 再拿未识别的点，重复上述过程
         
@@ -262,12 +244,24 @@ class MemoryDataset_SAM(Dataset):
         image_rays = get_rays(self.directions, metadata_item.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
         img_indices = self._img_indices[idx] * torch.ones(selected_points.shape[0], dtype=torch.int32)
         
-        item = {
+        if self.online_sam_label:
+            item = {
             # 'rgbs': self._rgbs[idx, selected_points[:, 0], selected_points[:, 1], :],
             'rays': image_rays[selected_points[:, 0], selected_points[:, 1], :], 
             'img_indices': img_indices,
-            'labels': self._labels[idx, selected_points[:, 0], selected_points[:, 1]].int(),
+            'labels': selected_points_labels,
             'groups': selected_points_group,
             # 'selected_points': selected_points
-        }
+            }
+        else:
+            item = {
+                # 'rgbs': self._rgbs[idx, selected_points[:, 0], selected_points[:, 1], :],
+                'rays': image_rays[selected_points[:, 0], selected_points[:, 1], :], 
+                'img_indices': img_indices,
+                'labels': self._labels[idx, selected_points[:, 0], selected_points[:, 1]].int(),
+                'groups': selected_points_group,
+                # 'selected_points': selected_points
+            }
+
+        
         return item
