@@ -18,7 +18,7 @@ from pathlib import Path
 import random
 import shutil
 
-
+from tools.unetformer.uavid2rgb import   remapping, custom2rgb
 
 
 def init(device):
@@ -139,7 +139,16 @@ class MemoryDataset_SAM(Dataset):
         selected_one = []
         #visualize
         visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
-        save_dir = f'zyq/visual_sam_sample'
+        save_dir = f'zyq/visual_sam_sample_{idx}'
+        Path(save_dir).parent.mkdir(exist_ok=True)
+        Path(save_dir).mkdir(exist_ok=True)
+
+
+
+        visual_rgb = self.metadata_items[idx].load_image()
+        visual_rgb = np.flip(visual_rgb.numpy(), axis=2)
+        visual_pseudo = np.flip(custom2rgb(remapping(self._labels[idx].numpy())), axis=2)
+        
 
         if self.sampling_mode == 'per_mask_threshold':
             while N_selected < self.N_total:
@@ -148,9 +157,10 @@ class MemoryDataset_SAM(Dataset):
                 selected_one.append(random_point)
                 masks, iou_preds, _ = self.predictor.predict(random_point.cpu().numpy(), in_labels, return_torch=True)
                 masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
+                masks_max = masks_max * bool_tensor.bool()
                 images_size = H*W
                 mask_size = masks_max.nonzero().size(0)
-                if masks_max.nonzero().size(0) ==0:
+                if masks_max.nonzero().size(0) == 0:
                     continue
                 if self.online_sam_label:
                     sam_cut_out_labels = self._labels[idx][masks_max==True]
@@ -166,11 +176,11 @@ class MemoryDataset_SAM(Dataset):
                             max_label=max_label_nonzero.int()
 
                 if mask_size / images_size < 0.02:
-                    N_sample = int(self.N_each*0.1)
+                    N_sample = min(int(self.N_each*0.1), mask_size)
                 elif mask_size / images_size < 0.05:
-                    N_sample = int(self.N_each*0.2)
+                    N_sample = min(int(self.N_each*0.2), mask_size)
                 else:
-                    N_sample = int(self.N_each*1)
+                    N_sample = min(int(self.N_each*1), mask_size)
                 select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
                 candidate_tensor = torch.ones(select_point.size(0),dtype=torch.int).to(self.device)
                 selected_points.append(select_point)
@@ -186,7 +196,7 @@ class MemoryDataset_SAM(Dataset):
                 bool_tensor = bool_tensor * (~masks_max)
                 
                 # *****************************************************************************
-                #  #   # below is visualization to save the sampling images
+            #      #   # below is visualization to save the sampling images
             #     masks_max_vis = np.stack([masks_max.cpu().numpy(), masks_max.cpu().numpy(), masks_max.cpu().numpy()], axis=2)
             #     for point in selected_one:
             #         # print(point)
@@ -197,15 +207,19 @@ class MemoryDataset_SAM(Dataset):
             #                     if x+m < W and x+m >0 and y+n < H and y+n >0:
             #                         masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
             #   # cv2.imwrite(f"{save_dir}/mask_{idx}_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
-            #     visual += masks_max * group_id
+            #     visual += masks_max * max_label
+            #     masks_max_vis = np.flip(custom2rgb(remapping(visual.cpu().numpy())),axis=2)
+            #     cv2.imwrite(f"{save_dir}/%06d_mask_%06d.png" % (idx, N_selected), np.concatenate([visual_rgb, visual_pseudo, masks_max_vis], axis=1))
+
             # visual = visual.cpu().numpy()
-            # rgb_array = np.stack([visual, visual, visual], axis=2)*(127/visual.max()+127)
-            # rgb_array_test = rgb_array
+            # # rgb_array = np.stack([visual, visual, visual], axis=2)*(127/visual.max()+127)
+            # rgb_array = np.flip(custom2rgb(remapping(visual)),axis=2)
+
             # for point in selected_points:
             #     for k in range(point.size(0)):  # H, W
             #         x, y = point[k, 0], point[k, 1]
             #         if x < H and x >0 and y < W and y >0:
-            #             rgb_array_test[x, y] = np.array([0, 128, 0])
+            #             rgb_array[x, y] = np.array([0, 128, 0])
             # for point in selected_one:
             #     # print(point)
             #     for k in range(point.size(0)):  # W , H
@@ -213,10 +227,12 @@ class MemoryDataset_SAM(Dataset):
             #         for m in range(-5,5):
             #             for n in range(-5,5):
             #                 if x+m < W and x+m >0 and y+n < H and y+n >0:
-            #                     rgb_array_test[(y+n), (x+m)] = np.array([0, 0, 128])
-            # cv2.imwrite(f"{save_dir}/mask_{idx}_final.png", (rgb_array_test).astype(np.int32))
-            # print(f"{save_dir}/mask_{idx}_final.png")
+            #                     rgb_array[(y+n), (x+m)] = np.array([0, 0, 128])
+            # image_cat = np.concatenate([visual_rgb, visual_pseudo, rgb_array], axis=1)
+            # cv2.imwrite(f"{save_dir}/%06d_mask_all.png" % idx, image_cat)
+            # print(f"{save_dir}/%06d_mask_all.png" % idx)
             # *****************************************************************************
+
             selected_points = torch.cat(selected_points)
             selected_points_group = torch.cat(selected_points_group)
             if self.online_sam_label:
