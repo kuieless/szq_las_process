@@ -16,7 +16,7 @@ freeze_geo=True
 val_type='val'
 
 online_sam_label=${2}    #True
-remove_cluster=True
+remove_cluster=False
 
 batch_size=4          #4 #25600 # 128*128
 sample_ray_num=4096    #  2304

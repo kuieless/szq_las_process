@@ -290,6 +290,8 @@ class MemoryDataset_SAM(Dataset):
                     N_sample = min(int(self.N_total*0.01), mask_size)
                 elif mask_ratio < 0.05:
                     N_sample = min(int(self.N_total*0.05), mask_size)
+                elif mask_ratio > 0.8:
+                    N_sample = min(int(self.N_total), mask_size)
                 elif mask_ratio > 0.5:
                     N_sample = min(int(self.N_total*0.6), mask_size)
                 elif mask_ratio > 0.3:
