@@ -58,7 +58,7 @@ def get_depth_vis(results, typ):
         viz_depth = None
 
 def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, 
-                         metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer):
+                         metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer, hparams):
     if f'sem_map_{typ}' in results:
         sem_logits = results[f'sem_map_{typ}']
         if val_type == 'val':
@@ -71,9 +71,15 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         sem_label = logits_2_label(sem_logits)
         sem_label = remapping(sem_label)
         visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-        
-        metrics_val.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
-        metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+        if hparams.remove_cluster:
+            ignore_cluster_index = gt_label.view(-1) * sem_label
+            gt_label_ig = gt_label.view(-1)[ignore_cluster_index.nonzero()].view(-1)
+            sem_label_ig = sem_label[ignore_cluster_index.nonzero()].view(-1)
+            metrics_val.add_batch(gt_label_ig.cpu().numpy(), sem_label_ig.cpu().numpy())
+            metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+        else:
+            metrics_val.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+            metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
         
         if val_type == 'val':
             gt_label_rgb = torch.from_numpy(gt_label_rgb)

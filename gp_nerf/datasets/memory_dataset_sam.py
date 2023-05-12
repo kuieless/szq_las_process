@@ -18,7 +18,7 @@ from pathlib import Path
 import random
 import shutil
 
-from tools.unetformer.uavid2rgb import   remapping, custom2rgb
+from tools.unetformer.uavid2rgb import remapping, custom2rgb
 
 
 def init(device):
@@ -42,7 +42,9 @@ class MemoryDataset_SAM(Dataset):
         print(f"train_on_1_val_corresponding_images: {hparams.debug_one_images_sam}")
 
         self.online_sam_label = hparams.online_sam_label
-
+        self.visualization = False
+        self.Visual_num = 0
+        self.Visual_Num = 5
         # sam
         self.device = device # device 'cpu'
         self.predictor = init(self.device)
@@ -130,7 +132,6 @@ class MemoryDataset_SAM(Dataset):
         H, W = self.H, self.W
         sam_feature = (self._sam_features[idx]).to(self.device)
         self.predictor.set_feature(sam_feature, [H, W])
-        bool_tensor = torch.ones((H, W), dtype=torch.int).to(self.device)
         N_selected = 0
         selected_points = []
         selected_points_labels = []
@@ -139,10 +140,12 @@ class MemoryDataset_SAM(Dataset):
         selected_one = []
         #visualize
         visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
+        bool_tensor = torch.ones((H, W), dtype=torch.int).to(self.device)
         
-        # save_dir = f'zyq/visual_sam_sample_{idx}'
-        # Path(save_dir).parent.mkdir(exist_ok=True)
-        # Path(save_dir).mkdir(exist_ok=True)
+        if self.visualization and self.Visual_num < self.Visual_Num:
+            save_dir = f'zyq/visual_sam_sample_{idx}'
+            Path(save_dir).parent.mkdir(exist_ok=True)
+            Path(save_dir).mkdir(exist_ok=True)
 
 
 
@@ -150,8 +153,214 @@ class MemoryDataset_SAM(Dataset):
         visual_rgb = np.flip(visual_rgb.numpy(), axis=2)
         visual_pseudo = np.flip(custom2rgb(remapping(self._labels[idx].numpy())), axis=2)
         
+        # mode: 2  先随机采样所有点，然后从采样点中取一点，识别mask，划分group； 再拿未识别的点，重复上述过程
+        # 还有问题，到后面很慢
+        if self.sampling_mode == 'whole_image':
+            ignore_point_index=[]
+            random_index = torch.randperm(H*W)[:self.N_total].to(self.device) 
+            rows = torch.div(random_index, W, rounding_mode='trunc')
+            cols = random_index % W
+            selected_points = torch.stack([rows, cols],dim=1)
 
-        if self.sampling_mode == 'per_mask_threshold':
+            selected_points_status = torch.zeros((H*W), dtype=torch.int).to(self.device)
+            selected_points_status[random_index] = 1
+            selected_points_labels = -1 * torch.ones_like(random_index)
+            selected_points_groups = -1 * torch.ones_like(random_index)
+
+            while selected_points_status.nonzero().size(0) > 0:  # bool_tensor 为空， 说明分配完了
+                random_point = torch.nonzero(selected_points_status.view(H, W))[torch.randint(high=torch.sum(selected_points_status), size=(1,))]
+
+                random_point = random_point.flip(1)
+                selected_one.append(random_point)
+                masks, iou_preds, _ = self.predictor.predict(random_point.cpu().numpy(), in_labels, return_torch=True)
+                masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
+                masks_max = masks_max * bool_tensor.bool()
+                mask_size = masks_max.nonzero().size(0)
+
+                if mask_size == 0:
+                    continue
+
+                if self.online_sam_label:
+                    sam_cut_out_labels = self._labels[idx][masks_max==True]
+                    cut_out_labels_uniques, cut_out_labels_counts = torch.unique(sam_cut_out_labels, return_counts=True)
+                    max_label = cut_out_labels_uniques[cut_out_labels_counts.argmax()].int()
+                    cut_out_labels_nonzero = cut_out_labels_uniques.nonzero().squeeze(-1)
+                    if max_label == 0 and len(cut_out_labels_nonzero)>0:
+                        cut_out_labels_uniques_nonzero = cut_out_labels_uniques[cut_out_labels_nonzero]
+                        cut_out_labels_counts_nonzero = cut_out_labels_counts[cut_out_labels_nonzero]
+                        max_label_nonzero = cut_out_labels_uniques_nonzero[cut_out_labels_counts_nonzero.argmax()]
+                        max_count_nonzero = cut_out_labels_counts_nonzero[cut_out_labels_counts_nonzero.argmax()]
+                        if max_count_nonzero / mask_size >0.1:
+                            max_label=max_label_nonzero.int()
+
+
+                current_index_flatten = masks_max.view(-1)
+
+                #种子点没有落在mask里面
+                random_point_index = random_point[0,1]*W+random_point[0,0]
+                if current_index_flatten[random_point_index]==False:
+                    ignore_point_index.append(torch.where(random_index == random_point_index))
+                    selected_points_status[random_point_index]= 0
+
+                selected_points_status[current_index_flatten] = 0
+                
+                #寻找落在当前mask中的采样点
+                current_index = current_index_flatten[random_index]
+                selected_points_labels[current_index] = max_label
+                group_id_record = 1000 * idx + group_id
+                selected_points_groups[current_index]=group_id_record
+                group_id += 1
+                bool_tensor = bool_tensor * (~masks_max)
+
+                if self.visualization and self.Visual_num < self.Visual_Num:
+                    N_selected += current_index.nonzero().size(0)
+                    print(N_selected)
+                    visual += masks_max * max_label
+                    masks_max_vis = np.flip(custom2rgb(remapping(visual.cpu().numpy())),axis=2)
+                    for point in selected_one:
+                        # print(point)
+                        for k in range(point.size(0)):  # W , H
+                            x, y = int(point[k, 0]), int(point[k, 1])
+                            for m in [0]: #range(-5,5):
+                                for n in [0]: #range(-5,5):
+                                    if x+m < W and x+m >0 and y+n < H and y+n >0:
+                                        masks_max_vis[(y+n), (x+m)] = np.array([14, 7, 176])
+                    if os.path.exists(f"{save_dir}/%06d_mask_%06d.png" % (idx, N_selected)):
+                        cv2.imwrite(f"{save_dir}/%06d_mask_%06d_2.png" % (idx, N_selected), np.concatenate([visual_rgb, visual_pseudo, masks_max_vis], axis=1))
+                    else:
+                        cv2.imwrite(f"{save_dir}/%06d_mask_%06d.png" % (idx, N_selected), np.concatenate([visual_rgb, visual_pseudo, masks_max_vis], axis=1))
+
+            assert (selected_points_labels==-1).nonzero() == 0
+            assert (selected_points_groups==-1).nonzero() == 0
+                
+            if self.visualization and self.Visual_num < self.Visual_Num:
+                visual = visual.cpu().numpy()
+                rgb_array = np.flip(custom2rgb(remapping(visual)),axis=2)
+
+                for point in selected_points:
+                    for k in range(point.size(0)):  # H, W
+                        x, y = point[k, 0], point[k, 1]
+                        if x < H and x >0 and y < W and y >0:
+                            rgb_array[x, y] = np.array([0, 128, 0])
+                for point in selected_one:
+                    # print(point)
+                    for k in range(point.size(0)):  # W , H
+                        x, y = int(point[k, 0]), int(point[k, 1])
+                        for m in range(-5,5):
+                            for n in range(-5,5):
+                                if x+m < W and x+m >0 and y+n < H and y+n >0:
+                                    rgb_array[(y+n), (x+m)] = np.array([0, 0, 128])
+                image_cat = np.concatenate([visual_rgb, visual_pseudo, rgb_array], axis=1)
+                cv2.imwrite(f"{save_dir}/%06d_mask_all.png" % idx, image_cat)
+                print(f"{save_dir}/%06d_mask_all.png" % idx)
+                self.Visual_num += 1
+            # *****************************************************************************
+            
+            selected_points = torch.index_select(selected_points, 0, torch.tensor([i for i in range(selected_points.size(0)) if i not in ignore_point_index]))
+            selected_points_labels = torch.index_select(selected_points_labels, 0, torch.tensor([i for i in range(selected_points_labels.size(0)) if i not in ignore_point_index]))
+            selected_points_groups = torch.index_select(selected_points_groups, 0, torch.tensor([i for i in range(selected_points_groups.size(0)) if i not in ignore_point_index]))
+
+        elif self.sampling_mode == 'per_mask_threshold':
+            while N_selected < self.N_total:
+                random_point = torch.nonzero(bool_tensor)[torch.randint(high=torch.sum(bool_tensor), size=(1,))]
+                random_point = random_point.flip(1)
+                selected_one.append(random_point)
+                masks, iou_preds, _ = self.predictor.predict(random_point.cpu().numpy(), in_labels, return_torch=True)
+                masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
+                masks_max = masks_max * bool_tensor.bool()
+                images_size = H*W
+                mask_size = masks_max.nonzero().size(0)
+                if masks_max.nonzero().size(0) == 0:
+                    continue
+                if self.online_sam_label:
+                    sam_cut_out_labels = self._labels[idx][masks_max==True]
+                    cut_out_labels_uniques, cut_out_labels_counts = torch.unique(sam_cut_out_labels, return_counts=True)
+                    max_label = cut_out_labels_uniques[cut_out_labels_counts.argmax()].int()
+                    cut_out_labels_nonzero = cut_out_labels_uniques.nonzero().squeeze(-1)
+                    if max_label == 0 and len(cut_out_labels_nonzero)>0:
+                        cut_out_labels_uniques_nonzero = cut_out_labels_uniques[cut_out_labels_nonzero]
+                        cut_out_labels_counts_nonzero = cut_out_labels_counts[cut_out_labels_nonzero]
+                        max_label_nonzero = cut_out_labels_uniques_nonzero[cut_out_labels_counts_nonzero.argmax()]
+                        max_count_nonzero = cut_out_labels_counts_nonzero[cut_out_labels_counts_nonzero.argmax()]
+                        if max_count_nonzero / mask_size >0.1:
+                            max_label=max_label_nonzero.int()
+
+                mask_ratio = mask_size / images_size
+                if mask_ratio < 0.02:
+                    N_sample = min(int(self.N_total*0.01), mask_size)
+                elif mask_ratio < 0.05:
+                    N_sample = min(int(self.N_total*0.05), mask_size)
+                elif mask_ratio > 0.5:
+                    N_sample = min(int(self.N_total*0.6), mask_size)
+                elif mask_ratio > 0.3:
+                    N_sample = min(int(self.N_total*0.3), mask_size)
+                else:
+                    N_sample = min(int(self.N_total*0.2), mask_size)
+                select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
+                candidate_tensor = torch.ones(select_point.size(0),dtype=torch.int).to(self.device)
+                selected_points.append(select_point)
+                group_id_record = 1000 * idx + group_id
+                selected_points_group.append(group_id_record * candidate_tensor)
+                N_selected += N_sample
+                
+                if self.online_sam_label:
+                    selected_points_labels.append(max_label * candidate_tensor)
+
+
+                group_id += 1
+                bool_tensor = bool_tensor * (~masks_max)
+                
+                # *****************************************************************************
+                if self.visualization and self.Visual_num < self.Visual_Num:
+                    masks_max_vis = np.stack([masks_max.cpu().numpy(), masks_max.cpu().numpy(), masks_max.cpu().numpy()], axis=2)
+                    for point in selected_one:
+                        # print(point)
+                        for k in range(point.size(0)):  # W , H
+                            x, y = int(point[k, 0]), int(point[k, 1])
+                            for m in range(-2,2):
+                                for n in range(-2,2):
+                                    if x+m < W and x+m >0 and y+n < H and y+n >0:
+                                        masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
+                    visual += masks_max * max_label
+                    masks_max_vis = np.flip(custom2rgb(remapping(visual.cpu().numpy())),axis=2)
+                    # cv2.imwrite(f"{save_dir}/%06d_mask_%06d.png" % (idx, N_selected), np.concatenate([visual_rgb, visual_pseudo, masks_max_vis], axis=1))
+            if self.visualization and self.Visual_num < self.Visual_Num:
+                visual = visual.cpu().numpy()
+                rgb_array = np.flip(custom2rgb(remapping(visual)),axis=2)
+
+                for point in selected_points:
+                    for k in range(point.size(0)):  # H, W
+                        x, y = point[k, 0], point[k, 1]
+                        if x < H and x >0 and y < W and y >0:
+                            rgb_array[x, y] = np.array([0, 128, 0])
+                for point in selected_one:
+                    # print(point)
+                    for k in range(point.size(0)):  # W , H
+                        x, y = int(point[k, 0]), int(point[k, 1])
+                        for m in range(-5,5):
+                            for n in range(-5,5):
+                                if x+m < W and x+m >0 and y+n < H and y+n >0:
+                                    rgb_array[(y+n), (x+m)] = np.array([0, 0, 128])
+                image_cat = np.concatenate([visual_rgb, visual_pseudo, rgb_array], axis=1)
+                cv2.imwrite(f"{save_dir}/%06d_mask_all.png" % idx, image_cat)
+                print(f"{save_dir}/%06d_mask_all.png" % idx)
+                self.Visual_num += 1
+            # *****************************************************************************
+
+            selected_points = torch.cat(selected_points)
+            selected_points_group = torch.cat(selected_points_group)
+            if self.online_sam_label:
+                selected_points_labels = torch.cat(selected_points_labels)
+            
+            assert selected_points.size(0) == selected_points_group.size(0)
+            if selected_points.size(0) > self.N_total:
+                selected_points = selected_points[:self.N_total]
+                selected_points_group = selected_points_group[:self.N_total]
+                if self.online_sam_label:
+                    selected_points_labels = selected_points_labels[:self.N_total]
+        
+        
+        elif self.sampling_mode == 'per_mask_threshold_old_0512':
             while N_selected < self.N_total:
                 random_point = torch.nonzero(bool_tensor)[torch.randint(high=torch.sum(bool_tensor), size=(1,))]
                 random_point = random_point.flip(1)
@@ -197,41 +406,40 @@ class MemoryDataset_SAM(Dataset):
                 bool_tensor = bool_tensor * (~masks_max)
                 
                 # *****************************************************************************
-            #      #   # below is visualization to save the sampling images
-            #     masks_max_vis = np.stack([masks_max.cpu().numpy(), masks_max.cpu().numpy(), masks_max.cpu().numpy()], axis=2)
-            #     for point in selected_one:
-            #         # print(point)
-            #         for k in range(point.size(0)):  # W , H
-            #             x, y = int(point[k, 0]), int(point[k, 1])
-            #             for m in range(-2,2):
-            #                 for n in range(-2,2):
-            #                     if x+m < W and x+m >0 and y+n < H and y+n >0:
-            #                         masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
-            #   # cv2.imwrite(f"{save_dir}/mask_{idx}_{N_selected}.png", masks_max_vis.astype(np.int32)*255)
-            #     visual += masks_max * max_label
-            #     masks_max_vis = np.flip(custom2rgb(remapping(visual.cpu().numpy())),axis=2)
-            #     cv2.imwrite(f"{save_dir}/%06d_mask_%06d.png" % (idx, N_selected), np.concatenate([visual_rgb, visual_pseudo, masks_max_vis], axis=1))
+                if self.visualization and self.Visual_num < self.Visual_Num:
+                    masks_max_vis = np.stack([masks_max.cpu().numpy(), masks_max.cpu().numpy(), masks_max.cpu().numpy()], axis=2)
+                    for point in selected_one:
+                        # print(point)
+                        for k in range(point.size(0)):  # W , H
+                            x, y = int(point[k, 0]), int(point[k, 1])
+                            for m in range(-2,2):
+                                for n in range(-2,2):
+                                    if x+m < W and x+m >0 and y+n < H and y+n >0:
+                                        masks_max_vis[(y+n), (x+m)] = np.array([0, 0, 128])
+                    visual += masks_max * max_label
+                    masks_max_vis = np.flip(custom2rgb(remapping(visual.cpu().numpy())),axis=2)
+                    cv2.imwrite(f"{save_dir}/%06d_mask_%06d.png" % (idx, N_selected), np.concatenate([visual_rgb, visual_pseudo, masks_max_vis], axis=1))
+            if self.visualization and self.Visual_num < self.Visual_Num:
+                visual = visual.cpu().numpy()
+                rgb_array = np.flip(custom2rgb(remapping(visual)),axis=2)
 
-            # visual = visual.cpu().numpy()
-            # # rgb_array = np.stack([visual, visual, visual], axis=2)*(127/visual.max()+127)
-            # rgb_array = np.flip(custom2rgb(remapping(visual)),axis=2)
-
-            # for point in selected_points:
-            #     for k in range(point.size(0)):  # H, W
-            #         x, y = point[k, 0], point[k, 1]
-            #         if x < H and x >0 and y < W and y >0:
-            #             rgb_array[x, y] = np.array([0, 128, 0])
-            # for point in selected_one:
-            #     # print(point)
-            #     for k in range(point.size(0)):  # W , H
-            #         x, y = int(point[k, 0]), int(point[k, 1])
-            #         for m in range(-5,5):
-            #             for n in range(-5,5):
-            #                 if x+m < W and x+m >0 and y+n < H and y+n >0:
-            #                     rgb_array[(y+n), (x+m)] = np.array([0, 0, 128])
-            # image_cat = np.concatenate([visual_rgb, visual_pseudo, rgb_array], axis=1)
-            # cv2.imwrite(f"{save_dir}/%06d_mask_all.png" % idx, image_cat)
-            # print(f"{save_dir}/%06d_mask_all.png" % idx)
+                for point in selected_points:
+                    for k in range(point.size(0)):  # H, W
+                        x, y = point[k, 0], point[k, 1]
+                        if x < H and x >0 and y < W and y >0:
+                            rgb_array[x, y] = np.array([0, 128, 0])
+                for point in selected_one:
+                    # print(point)
+                    for k in range(point.size(0)):  # W , H
+                        x, y = int(point[k, 0]), int(point[k, 1])
+                        for m in range(-5,5):
+                            for n in range(-5,5):
+                                if x+m < W and x+m >0 and y+n < H and y+n >0:
+                                    rgb_array[(y+n), (x+m)] = np.array([0, 0, 128])
+                image_cat = np.concatenate([visual_rgb, visual_pseudo, rgb_array], axis=1)
+                cv2.imwrite(f"{save_dir}/%06d_mask_all.png" % idx, image_cat)
+                print(f"{save_dir}/%06d_mask_all.png" % idx)
+                self.Visual_num += 1
             # *****************************************************************************
 
             selected_points = torch.cat(selected_points)
@@ -246,14 +454,6 @@ class MemoryDataset_SAM(Dataset):
                 if self.online_sam_label:
                     selected_points_labels = selected_points_labels[:self.N_total]
         
-        # mode: 2  先随机采样所有点，然后从采样点中取一点，识别mask，划分group； 再拿未识别的点，重复上述过程
-        
-        elif self.sampling_mode == 'whole_image':
-            selected_points = torch.ones_like(self._labels[idx])[torch.randint(high=torch.sum(self._labels[idx]), size=(self.N_total,))]
-            selected_points_status = torch.ones_like()
-            select_from_sampling = selected_points[torch.randint(high=torch.sum(selected_points), size=(1,))]
-            select_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(self.N_each,))]
-
         else:
             raise ImportError
         

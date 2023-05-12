@@ -25,6 +25,8 @@ def get_opts_base():
     parser.add_argument('--balance_weight', type=eval, default=False, help='')
     
     parser.add_argument('--online_sam_label', type=eval, default=False, help='')
+    parser.add_argument('--remove_cluster', type=eval, default=False, help='')
+
 
 
    

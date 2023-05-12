@@ -776,7 +776,7 @@ class Runner:
                         img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
 
                         get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
-                                            self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer)
+                                            self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
                             
                         prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
                             
