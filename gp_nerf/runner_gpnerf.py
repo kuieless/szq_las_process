@@ -68,11 +68,8 @@ class Runner:
 
         self.crossentropy_loss = lambda logit, label: CrossEntropyLoss(logit, label)
         self.logits_2_label = lambda x: torch.argmax(torch.nn.functional.softmax(x, dim=-1),dim=-1)
-        if hparams.dataset_type == 'sam':
-            if hparams.sam_loss == 'MSELoss':
-                self.loss_feat = lambda pred, target: nn.MSELoss()(pred, target)
-            elif hparams.sam_loss == 'CSLoss':
-                self.loss_feat = lambda pred, target: nn.CosineSimilarity(dim=1)(pred, target)
+        
+        self.group_loss_feat = lambda pred, target: nn.CosineSimilarity(dim=1)(pred, target)
 
 
         if hparams.depth_loss:
@@ -636,11 +633,8 @@ class Runner:
                         feature_group = semantic_feature[group_index]
                         f_detach = feature_group.detach()
                         feature_group_mean = f_detach.mean(dim=0).repeat(feature_group.shape[0],1)
-                        if self.hparams.sam_loss == 'MSELoss':
-                            group_loss_each += (self.loss_feat(feature_group, feature_group_mean))
-                        elif self.hparams.sam_loss == 'CSLoss':
-                            cs_loss = self.loss_feat(feature_group, feature_group_mean)
-                            group_loss_each += cs_loss.mean()
+                        cs_loss = self.group_loss_feat(feature_group, feature_group_mean)
+                        group_loss_each += cs_loss.mean()
                     group_loss = 1 - group_loss_each / len(group_ids) #/ semantic_feature.shape[-1]
                     metrics['sam_group_loss'] = group_loss
                     metrics['loss'] += self.hparams.wgt_group_loss * group_loss

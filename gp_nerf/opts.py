@@ -34,7 +34,6 @@ def get_opts_base():
     parser.add_argument('--group_loss', default=False, type=eval, choices=[True, False], help='supervise normal')
     parser.add_argument('--wgt_group_loss', default=1e-2, type=float, help='')
     parser.add_argument('--sampling_mode', type=str, default='per_mask_threshold', choices=['per_mask', 'per_mask_threshold', 'whole_image'])
-    parser.add_argument('--sam_loss', type=str, default='MSELoss', choices=['MSELoss', 'CSLoss'])
 
 
     parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
