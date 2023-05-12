@@ -4,7 +4,7 @@ gpu=${1:-6}
 # exp=${2:-''}
 export CUDA_VISIBLE_DEVICES=${gpu}
 
-exp_name='logs_357/0512_train_sam_online_build'    #${exp}
+exp_name='logs_357/0512_train_sam_online_sci'    #${exp}
 dataset1='UrbanScene3D'  #  "Mill19"  "Quad6k"   "UrbanScene3D"
 dataset2="sci-art" # 'sci-art'  "building"  "rubble"  "quad"   "sci-art"  "campus"
 
