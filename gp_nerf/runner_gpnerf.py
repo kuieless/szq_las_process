@@ -324,6 +324,10 @@ class Runner:
                 from gp_nerf.datasets.memory_dataset_sam import MemoryDataset_SAM
             dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
+        elif self.hparams.dataset_type == 'sam_project':
+            from gp_nerf.datasets.memory_dataset_sam_project import MemoryDataset_SAM
+            dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'file_normal':
             from gp_nerf.datasets.filesystem_dataset_normal import FilesystemDatasetNormal
             dataset = FilesystemDatasetNormal(self.train_items, self.near, self.far, self.ray_altitude_range,
