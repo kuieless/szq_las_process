@@ -56,6 +56,14 @@ def get_n_params(model):
             nn = nn*s
         pp += nn
     return pp
+    
+
+def custom_collate(batch):
+    # 过滤掉为 None 的项
+    batch = [item for item in batch if item is not None]
+    if len(batch) == 0:
+        return None
+    return torch.utils.data.dataloader.default_collate(batch)
 
 class Runner:
     def __init__(self, hparams: Namespace, set_experiment_path: bool = True):
@@ -372,9 +380,11 @@ class Runner:
                 data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size // world_size, sampler=sampler,
                                          num_workers=0, pin_memory=True)
             else:
-                if self.hparams.dataset_type == 'sam':
+                if 'sam' in self.hparams.dataset_type:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
-                                                pin_memory=False)
+                                                pin_memory=False, collate_fn=custom_collate)
+                    
+
                 elif self.hparams.dataset_type == 'memory_depth':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
                                                 pin_memory=False)
@@ -382,9 +392,11 @@ class Runner:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=4,
                                                 pin_memory=False)
                 
-            
             for dataset_index, item in enumerate(data_loader): #, start=10462):
-                # continue
+                
+                if item == None:
+                    continue
+
                 # item = np.load('79972.npy',allow_pickle=True).item()
 
                 if dataset_index <= discard_index:
@@ -423,9 +435,12 @@ class Runner:
                     else:
                         labels = None
 
-                    if self.hparams.dataset_type == 'sam':
+                    if 'sam' in self.hparams.dataset_type:
                         rgbs = None
-                        groups = item['groups'].to(self.device, non_blocking=True)
+                        if self.hparams.group_loss:
+                            groups = item['groups'].to(self.device, non_blocking=True)
+                        else:
+                            groups = None
                     else:
                         rgbs = item['rgbs'].to(self.device, non_blocking=True)
                         groups = None
@@ -480,7 +495,7 @@ class Runner:
 
                     if train_iterations > 0 and train_iterations % self.hparams.ckpt_interval == 0:
                         self._save_checkpoint(optimizers, scaler, train_iterations, dataset_index,
-                                              dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
+                                            dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
             
                 if (train_iterations > 0 and train_iterations % self.hparams.val_interval == 0) or train_iterations == self.hparams.train_iterations:
                     val_metrics = self._run_validation(train_iterations)
@@ -489,7 +504,7 @@ class Runner:
                 
                 if train_iterations >= self.hparams.train_iterations:
                     break
-
+        
 
         if 'RANK' in os.environ:
             dist.barrier()
@@ -583,7 +598,7 @@ class Runner:
         
         
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
-        if not self.hparams.freeze_geo and self.hparams.dataset_type != 'sam':
+        if not self.hparams.freeze_geo and not ('sam' in self.hparams.dataset_type):
             if self.hparams.network_type == 'sdf':
                 with torch.no_grad():
                     psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
@@ -830,11 +845,7 @@ class Runner:
 
     def _run_validation_project_val_points(self, train_index=-1) -> Dict[str, float]:
         self._setup_experiment_dir()
-        
-        if 'residence'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
-            from tools.unetformer.uavid2rgb import remapping_remove_ground as remapping
-        else:
-            from tools.unetformer.uavid2rgb import remapping
+
 
         with torch.inference_mode():
             #semantic 
@@ -950,6 +961,41 @@ class Runner:
 
                         
         return -1
+
+    def _run_validation_save_depth(self, train_index=-1) -> Dict[str, float]:
+            self._setup_experiment_dir()
+
+            with torch.inference_mode():
+                #semantic 
+                self.nerf.eval()
+                val_type = self.hparams.val_type  # train  val
+                print('val_type: ', val_type)
+
+                indices_to_eval = np.arange(len(self.train_items))
+                
+                train_depth = self.train_items[0].image_path.parent.parent.parent / 'train'/ 'depths'
+                val_depth = self.train_items[0].image_path.parent.parent.parent / 'val'/ 'depths'
+                print(train_depth)
+                print(val_depth)
+
+                (train_depth).mkdir(exist_ok=True)
+                (val_depth).mkdir(exist_ok=True)
+                
+                for i in tqdm(indices_to_eval):
+                    metadata_item = self.train_items[i]
+                    results, _ = self.render_image(metadata_item, train_index)
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    viz_rgbs = metadata_item.load_image().float() / 255.
+                    depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1])
+                    if self.train_items[i].is_val: 
+                        np.save(f"{val_depth}/{metadata_item.image_path.stem}.npy", depth_map)
+                        print(f"{val_depth}/{metadata_item.image_path.stem}.npy")
+                    else:
+                        np.save(f"{train_depth}/{metadata_item.image_path.stem}.npy", depth_map)
+
+                    
+                            
+            return -1
 
 
     def _save_checkpoint(self, optimizers: Dict[str, any], scaler: GradScaler, train_index: int, dataset_index: int,
@@ -1165,6 +1211,16 @@ class Runner:
                 sam_feature_path = candidate
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, sam_feature_path)
+        elif self.hparams.dataset_type == 'sam_project':
+            sam_feature_path = None
+            candidate = metadata_path.parent.parent / 'sam_features' / '{}.npy'.format(metadata_path.stem)
+            if candidate.exists():
+                sam_feature_path = candidate
+            # depth_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_depth.npy' % metadata_path.stem) 
+            depth_path = os.path.join(metadata_path.parent.parent, 'depths', '%s.npy' % metadata_path.stem) 
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, sam_feature_path, depth_path=depth_path)
+        
         elif self.hparams.normal_loss:
             normal_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_normal.npy' % metadata_path.stem) 
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,

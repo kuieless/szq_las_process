@@ -85,6 +85,53 @@ def get_rgb_index_mask_sam(metadata: ImageMetadata) -> Optional[
     return rgbs, metadata.image_index, keep_mask, labels, sam_features, metadata.is_val
 
 
+def get_rgb_index_mask_sam_depth(metadata: ImageMetadata) -> Optional[
+    Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
+    rgbs = metadata.load_image() #.view(-1, 3)
+
+    keep_mask = metadata.load_mask()
+
+    if metadata.is_val:
+        if keep_mask is None:
+            keep_mask = torch.ones(metadata.H, metadata.W, dtype=torch.bool)
+        else:
+            # Get how many pixels we're discarding that would otherwise be added
+            discard_half = keep_mask[:, metadata.W // 2:]
+            discard_pos_count = discard_half[discard_half == True].shape[0]
+
+            candidates_to_add = torch.arange(metadata.H * metadata.W).view(metadata.H, metadata.W)[:, :metadata.W // 2]
+            keep_half = keep_mask[:, :metadata.W // 2]
+            candidates_to_add = candidates_to_add[keep_half == False].reshape(-1)
+            to_add = candidates_to_add[torch.randperm(candidates_to_add.shape[0])[:discard_pos_count]]
+
+            keep_mask.view(-1).scatter_(0, to_add, torch.ones_like(to_add, dtype=torch.bool))
+
+        keep_mask[:, metadata.W // 2:] = False
+
+    if keep_mask is not None:
+        if keep_mask[keep_mask == True].shape[0] == 0:
+            return None
+        # rgbs = rgbs[keep_mask == True]
+
+    labels = metadata.load_label() #.view(-1)
+    
+    # 没有view(-1)
+    sam_features = metadata.load_sam_feature()
+    
+    depths = None
+    if metadata.depth_path is not None:
+        depths = metadata.load_depth()#.view(-1)
+        # if keep_mask is not None:
+        #     depths = depths[keep_mask == True]
+
+
+    assert metadata.image_index <= torch.iinfo(torch.int32).max
+    
+    #sam 返回原图像尺寸， 没有view(-1), 且在get_items时才对val_images进行mask   keep_mask[:, metadata.W // 2:] = False
+    # return rgbs, metadata.image_index * torch.ones(rgbs.shape[:2], dtype=torch.int32), keep_mask, labels, sam_features, metadata.is_val
+    return rgbs, metadata.image_index, keep_mask, labels, sam_features, metadata.is_val, depths
+
+
 def get_rgb_index_mask_monocues(metadata: ImageMetadata) -> Optional[
     Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
     rgbs = metadata.load_image().view(-1, 3)

@@ -113,8 +113,9 @@ class MemoryDataset_SAM(Dataset):
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         if self._is_vals[idx]:
-            idx = idx + 1
-            assert self._is_vals[idx] == False
+            # idx = idx + 1
+            # assert self._is_vals[idx] == False
+            return None
         in_labels = np.array([1])
         H, W = self.H, self.W
         sam_feature = (self._sam_features[idx]).to(self.device)

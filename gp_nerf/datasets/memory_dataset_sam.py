@@ -125,8 +125,7 @@ class MemoryDataset_SAM(Dataset):
                 idx = random_number
         
         if self._is_vals[idx]:
-            idx = idx + 1
-            assert self._is_vals[idx] == False
+            return None
         
         in_labels = np.array([1])
         H, W = self.H, self.W
