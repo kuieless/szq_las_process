@@ -47,7 +47,7 @@ class MemoryDataset_SAM(Dataset):
         # sam
         self.device = device # device 'cpu'
         self.predictor = init(self.device)
-        self.N_total = int(hparams.sample_ray_num / 2)
+        self.N_total = hparams.sample_ray_num
         # 假设所有图像的长宽一致
         self.W = metadata_items[0].W
         self.H = metadata_items[0].H
@@ -134,7 +134,7 @@ class MemoryDataset_SAM(Dataset):
         occluded_threshold = 0.01
         
         if self._is_vals[idx]:
-            # print('is val')
+            print('is val')
             if self.num_depth_process % self._labels.shape[0] != 0:
                 self.num_depth_process = self.num_depth_process + 1
             return None
@@ -143,24 +143,20 @@ class MemoryDataset_SAM(Dataset):
             save_dir = f'zyq/project'
             Path(save_dir).parent.mkdir(exist_ok=True)
             Path(save_dir).mkdir(exist_ok=True)
-            (Path(save_dir) / "sample").mkdir(exist_ok=True)
 
         if self.num_depth_process % self._labels.shape[0] == 0:
             self.select_origin = True
             # 测试一个点的投影影响
-            # if self.num_depth_process == self._labels.shape[0]:
-                # return 'end'
+            if self.num_depth_process == self._labels.shape[0]:
+                return 'end'
             self.num_depth_process = 0
-        
-        
-
+              
         if self.select_origin == True:
             print('select one point to project')
-            self.object_id = 1
+            self.object_id = self.object_id + 1
             self.num_depth_process = self.num_depth_process + 1
             # 选择未被分配的点作为初始点，后续投影到其他图像上
             bool_tensor = self._labels[idx].bool()
-            bool_tensor = torch.zeros((self.H, self.W), dtype=torch.int).bool()
             #投影的代码和其他的get item不同，下面的bool tensor要取 非
             random_point = torch.nonzero(~bool_tensor)[torch.randint(high=torch.sum(~bool_tensor), size=(1,))]
             
@@ -204,7 +200,6 @@ class MemoryDataset_SAM(Dataset):
         elif self.num_depth_process < self._labels.shape[0]:
             #得到投影点在该图像上的位置，随后进行采样
             bool_tensor = self._labels[idx].bool()
-            bool_tensor = torch.zeros((self.H, self.W), dtype=torch.int).bool()
             self.num_depth_process = self.num_depth_process + 1
             E2 = np.array(self.metadata_items[idx].c2w)
             E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
@@ -245,7 +240,8 @@ class MemoryDataset_SAM(Dataset):
                 else:
                     random_point = torch.tensor([[pt2[0],pt2[1]]])
             else:
-                # print(f"{idx}   out of images")
+                print(f"{idx}   out of images")
+                print()
                 return None
           
         
@@ -279,16 +275,9 @@ class MemoryDataset_SAM(Dataset):
         selected_points = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
         candidate_tensor = torch.ones(selected_points.size(0),dtype=torch.int).to(self.device)
         selected_points_object_id = self.object_id * candidate_tensor
+        
         self._labels[idx][masks_max] = self.object_id
 
-        #从整张图像中采样
-        random_index = torch.randperm(H*W)[:self.N_total].to(self.device) 
-        rows = torch.div(random_index, W, rounding_mode='trunc')
-        cols = random_index % W
-        selected_points1 = torch.stack([rows, cols],dim=1)
-        selected_points_object_id1 = masks_max[selected_points1[:, 0], selected_points1[:, 1]].int()
-        selected_points = torch.cat([selected_points, selected_points1], dim=0)
-        selected_points_object_id = torch.cat([selected_points_object_id, selected_points_object_id1], dim=0)
         # *****************************************************************************
         if self.visualization:
             visual = masks_max
@@ -301,12 +290,9 @@ class MemoryDataset_SAM(Dataset):
                     rgb_array[x, y] = np.array([0, 128, 0])
 
             image_cat = np.concatenate([img, visual_pseudo, rgb_array], axis=1)
-            cv2.imwrite(f"{save_dir}/sample/{self.object_id}_{self.metadata_items[idx].image_path.stem}_project_sample.jpg", image_cat)
+            cv2.imwrite(f"{save_dir}/{self.object_id}_{self.metadata_items[idx].image_path.stem}_project_sample.jpg", image_cat)
             print(f"{save_dir}/{self.object_id}_{self.metadata_items[idx].image_path.stem}_project_sample.jpg")
         # *****************************************************************************
-
-        
-
 
 
         image_rays = get_rays(self.directions, self.metadata_items[idx].c2w.to(self.device), self.near, self.far, self.ray_altitude_range)

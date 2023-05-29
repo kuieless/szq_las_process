@@ -14,14 +14,13 @@ dataset_type='sam_project'
 freeze_geo=True
 val_type='val'
 
-online_sam_label=${2}    #True
 
 batch_size=1          #4 #25600 # 128*128
-sample_ray_num=4096    #  2304
+sample_ray_num=20480    #  2304
 
 train_iterations=10000
-val_interval=1000
-ckpt_interval=1000
+val_interval=288
+ckpt_interval=2000
 label_name='m2f_new'
 
 

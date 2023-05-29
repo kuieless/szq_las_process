@@ -381,7 +381,7 @@ class Runner:
                                          num_workers=0, pin_memory=True)
             else:
                 if 'sam' in self.hparams.dataset_type:
-                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
+                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                     
 
@@ -396,6 +396,12 @@ class Runner:
                 
                 if item == None:
                     continue
+                elif item == ['end']:
+                    self._save_checkpoint(optimizers, scaler, train_iterations, dataset_index,
+                                  dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
+                    val_metrics = self._run_validation(train_iterations)
+                    self._write_final_metrics(val_metrics, train_iterations)
+                    # raise TypeError
 
                 # item = np.load('79972.npy',allow_pickle=True).item()
 
@@ -414,8 +420,8 @@ class Runner:
                     if self.hparams.dataset_type == 'memory_depth':
                         # print(item['rays'].size())
                         self.train_img_num = item['rgbs'].shape[0]
-                    
-                    self.sample_random_num_current = item['rays'].shape[0] * self.hparams.sample_random_num_each
+                    if self.hparams.add_random_rays:
+                        self.sample_random_num_current = item['rays'].shape[0] * self.hparams.sample_random_num_each
                     
                     for key in item.keys():
                         if item[key].dim() == 2:
@@ -747,7 +753,14 @@ class Runner:
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
                     ##indices_to_eval = np.arange(0, len(self.train_items), 100)  
-                    indices_to_eval = [0] #np.arange(len(self.train_items))  
+                    # indices_to_eval = [0] #np.arange(len(self.train_items))  
+                    used_files = []
+                    import glob
+                    for ext in ('*.jpg'):
+                        used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/project5/sample', ext)))
+                    used_files.sort()
+                    used_files = used_files[1:]
+                    indices_to_eval = [int(Path(x).stem[2:8]) for x in used_files]
                 
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
@@ -806,7 +819,7 @@ class Runner:
                         img_list = torch.stack(img_list).permute(0,3,1,2)
                         img = make_grid(img_list, nrow=3)
                         img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                        Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / '{}_all.jpg'.format(i)))
+                        Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
 
                         if self.writer is not None:
                             self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
@@ -818,13 +831,13 @@ class Runner:
                         if val_type == 'val':
                             #save  [pred_label, pred_rgb, fg_bg] to the folder 
                             Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                                str(experiment_path_current / 'val_rgbs' / '{}_pred_rgb.jpg'.format(i)))
+                                str(experiment_path_current / 'val_rgbs' / ("%06d_pred_rgb.jpg" % i)))
                             
 
                             if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
                                 img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
                                                                  results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
-                                img.save(str(experiment_path_current / 'val_rgbs' / '{}_fg_bg.jpg'.format(i)))
+                                img.save(str(experiment_path_current / 'val_rgbs' / ("%06d_fg_bg.jpg" % i)))
                             
                             # logger
                             samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
