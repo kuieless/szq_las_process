@@ -65,11 +65,14 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
                 gt_label = metadata_item.load_gt()
         elif val_type == 'train':
             gt_label = metadata_item.load_label()
-        gt_label = remapping(gt_label)
-        gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+        if hparams.dataset_type == 'sam_project':
+            pass
+        else:
+            gt_label = remapping(gt_label)
+            sem_label = remapping(sem_label)
 
+        gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         sem_label = logits_2_label(sem_logits)
-        sem_label = remapping(sem_label)
         visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         if hparams.remove_cluster:
             ignore_cluster_index = gt_label.view(-1) * sem_label

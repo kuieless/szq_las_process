@@ -133,6 +133,8 @@ class MemoryDataset_SAM(Dataset):
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         occluded_threshold = 0.01
         
+        num_sample_one = 10
+
         if self._is_vals[idx]:
             print('is val')
             if self.num_depth_process % self._labels.shape[0] != 0:
@@ -150,7 +152,8 @@ class MemoryDataset_SAM(Dataset):
             if self.num_depth_process == self._labels.shape[0]:
                 return 'end'
             self.num_depth_process = 0
-              
+        
+        
         if self.select_origin == True:
             print('select one point to project')
             self.object_id = self.object_id + 1
@@ -163,11 +166,6 @@ class MemoryDataset_SAM(Dataset):
             depth_map = self._depths[idx].view(self.H, self.W)
             depth_map = (depth_map * self.depth_scale).numpy()
             # depth_map = depth_map.numpy()
-
-            random_point[0, 1] = int(self.W * 2/5)
-            random_point[0, 0] = int(self.H * 2/3)
-            # random_point[0, 1] = int(self.W * 1/2)
-            # random_point[0, 0] = int(self.H * 1/2)
 
             x, y = random_point[0, 1], random_point[0, 0]
             depth = depth_map[y, x]
@@ -293,6 +291,7 @@ class MemoryDataset_SAM(Dataset):
             cv2.imwrite(f"{save_dir}/{self.object_id}_{self.metadata_items[idx].image_path.stem}_project_sample.jpg", image_cat)
             print(f"{save_dir}/{self.object_id}_{self.metadata_items[idx].image_path.stem}_project_sample.jpg")
         # *****************************************************************************
+
 
 
         image_rays = get_rays(self.directions, self.metadata_items[idx].c2w.to(self.device), self.near, self.far, self.ray_altitude_range)

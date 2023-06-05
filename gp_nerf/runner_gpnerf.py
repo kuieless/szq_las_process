@@ -436,8 +436,11 @@ class Runner:
                     
                     if self.hparams.enable_semantic:
                         labels = item['labels'].to(self.device, non_blocking=True)
-                        from tools.unetformer.uavid2rgb import remapping
-                        labels = remapping(labels)
+                        if self.hparams.dataset_type == 'sam_project':
+                            pass
+                        else:
+                            from tools.unetformer.uavid2rgb import remapping
+                            labels = remapping(labels)
                     else:
                         labels = None
 
@@ -752,15 +755,15 @@ class Runner:
                     # self.val_items=self.val_items[:2]
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
-                    ##indices_to_eval = np.arange(0, len(self.train_items), 100)  
-                    # indices_to_eval = [0] #np.arange(len(self.train_items))  
-                    used_files = []
-                    import glob
-                    for ext in ('*.jpg'):
-                        used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/project5/sample', ext)))
-                    used_files.sort()
-                    used_files = used_files[1:]
-                    indices_to_eval = [int(Path(x).stem[2:8]) for x in used_files]
+                    # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
+                    indices_to_eval = [0] #np.arange(len(self.train_items))  
+                    # used_files = []
+                    # import glob
+                    # for ext in ('*.jpg'):
+                    #     used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/project5/sample', ext)))
+                    # used_files.sort()
+                    # used_files = used_files[1:]
+                    # indices_to_eval = [int(Path(x).stem[2:8]) for x in used_files]
                 
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
