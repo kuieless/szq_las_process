@@ -16,10 +16,10 @@ val_type='val'
 
 
 batch_size=1          #4 #25600 # 128*128
-sample_ray_num=20480    #  2304
+sample_ray_num=102400    #  2304
 
 train_iterations=10000
-val_interval=288
+val_interval=2000
 ckpt_interval=2000
 label_name='m2f_new'
 

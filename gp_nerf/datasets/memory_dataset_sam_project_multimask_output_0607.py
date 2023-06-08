@@ -43,12 +43,12 @@ class MemoryDataset_SAM(Dataset):
         
 
         self.online_sam_label = hparams.online_sam_label
-        self.visualization = False
+        self.visualization = True
         
         # sam
         self.device = device # device 'cpu'
         self.predictor = init(self.device)
-        self.N_total = int(hparams.sample_ray_num / 5)
+        self.N_total = int(hparams.sample_ray_num / 8)
         # 假设所有图像的长宽一致
         self.W = metadata_items[0].W
         self.H = metadata_items[0].H
@@ -84,7 +84,6 @@ class MemoryDataset_SAM(Dataset):
         is_vals =[]
         depths = []
         
-        # metadata_items = metadata_items[27:]
 
         main_print('Loading data')
         if hparams.debug:
@@ -133,25 +132,27 @@ class MemoryDataset_SAM(Dataset):
         return self._labels.shape[0]
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        
-        #27是初始祯
-        if idx < 27:
-            return None
-        
         occluded_threshold = 0.01
-        num_random_points = 5
+        
+        num_random_points = 8
         selected_points = []
         self.random_points = []
-
-        self.random_points = [torch.tensor([[105, 690 ]]), 
-                              torch.tensor([[460, 1075]]), 
-                              torch.tensor([[490, 685]]), 
-                              torch.tensor([[630, 1150]]), 
-                              torch.tensor([[250, 400]]), 
-                            #   torch.tensor([[101, 171]]), 
-                            #   torch.tensor([[775, 103]]), 
-                            #   torch.tensor([[40, 1073]])
-                            ]
+        # self.random_points = [torch.tensor([[414, 510]]), 
+        #                       torch.tensor([[277, 267]]), 
+        #                       torch.tensor([[837, 532]]), 
+        #                       torch.tensor([[ 41, 464]]), 
+        #                       torch.tensor([[431, 800]]), 
+        #                       torch.tensor([[781, 147]]), 
+        #                       torch.tensor([[196, 610]]), 
+        #                       torch.tensor([[ 36, 123]])]
+        self.random_points = [torch.tensor([[510, 414]]), 
+                              torch.tensor([[363,  13]]), 
+                              torch.tensor([[581, 205]]), 
+                              torch.tensor([[621, 980]]), 
+                              torch.tensor([[270,  93]]), 
+                              torch.tensor([[101, 171]]), 
+                              torch.tensor([[775, 103]]), 
+                              torch.tensor([[40, 1073]])]
         self.sam_points = []
         
         if self._is_vals[idx]:
@@ -172,18 +173,16 @@ class MemoryDataset_SAM(Dataset):
             self.world_points = []
             self.select_origin = True
             # 测试一个点的投影影响
-            # if self.num_depth_process == self._labels.shape[0]:
-                # return 'end'
+            if self.num_depth_process == self._labels.shape[0]:
+                return 'end'
             self._labels = torch.zeros_like(self._labels)
             self.num_depth_process = 0
             self.object_id=0
         
+        self.num_depth_process = self.num_depth_process + 1
         
 
         if self.select_origin == True:
-            self.num_depth_process = 27
-            self.num_depth_process = self.num_depth_process + 1
-
             if self.visualization:
                 img= cv2.imread(f"{str(self.metadata_items[idx].image_path)}")
 
@@ -294,8 +293,7 @@ class MemoryDataset_SAM(Dataset):
                         # cv2.imwrite(f"{save_dir}/{self.object_id}_{self.metadata_items[idx].image_path.stem}.jpg", image_cat)
                         # print(f"{save_dir}/{self.metadata_items[idx].image_path.stem}.jpg")
                 self.world_points.append(world_points_10)
-                if self.visualization:
-                    cv2.circle(img, (int(random_point[0,0]), int(random_point[0,1])), radius, (0, 0, 255), thickness)
+
             if self.visualization:
                 rgb_array = np.stack([self._labels[idx].bool(), self._labels[idx].bool(), self._labels[idx].bool()], axis=2)* 255
                 image_cat = np.concatenate([img, rgb_array], axis=1)
@@ -304,8 +302,6 @@ class MemoryDataset_SAM(Dataset):
             self.select_origin = False   
 
         elif self.num_depth_process < self._labels.shape[0]:
-            self.num_depth_process = self.num_depth_process + 1
-            
             E2 = np.array(self.metadata_items[idx].c2w)
             E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
             w2c = np.linalg.inv(np.concatenate((E2, [[0,0,0,1]]), 0))
