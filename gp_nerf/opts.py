@@ -14,7 +14,7 @@ def get_opts_base():
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory'],
+    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
    

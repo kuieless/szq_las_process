@@ -1,6 +1,7 @@
 
 
 # Byte-compiled / optimized / DLL files
+tools/segment_anything/SAM_mask_autogenerate*
 test.sh
 gy/
 logs_gy_313/
