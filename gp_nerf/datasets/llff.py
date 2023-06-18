@@ -244,7 +244,7 @@ class NeRFDataset:
                     img = cv2.imread(f_path)
                     self.imgs.append(img)
 
-                    depth_path = Path(f_path).parent.parent / 'depths_8' / f"{Path(f_path).stem}.npy"
+                    depth_path = Path(f_path).parent.parent / 'depths' / f"{Path(f_path).stem}.npy"
                     depth = np.load(depth_path)  # zyq   depth_path
                     depth = torch.HalfTensor(depth)
                     self.depths.append(depth)
@@ -263,7 +263,7 @@ class NeRFDataset:
             self.K1 = None
             self.world_point = None
             self.N_total = opt.sample_ray_num
-            self.visualization=True # False  True
+            self.visualization=False # False  True
             self.num_save = 0
 
             

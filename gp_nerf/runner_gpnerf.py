@@ -1087,7 +1087,7 @@ class Runner:
                 Path(str(experiment_path_current)).mkdir()
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
 
-                save_depth_path = Path(dataset.f_paths[0]).parent.parent / 'depths_8'
+                save_depth_path = Path(dataset.f_paths[0]).parent.parent / 'depths'
                 (save_depth_path).mkdir(exist_ok=True)
                 
                 for dataset_index, item in enumerate(data_loader): #, start=10462):
