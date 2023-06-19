@@ -389,7 +389,7 @@ class NeRFDataset:
                     if masks_max.nonzero().size(0) == 0: 
                         continue
 
-                    sam_points_10 = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(1,))]
+                    sam_points_10 = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(10,))]
                     self.sam_points.append(sam_points_10)
                     sam_points_10 = sam_points_10.flip(1).cpu().numpy()
 
