@@ -128,11 +128,15 @@ class Runner:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         if self.hparams.dataset_type == 'llff':
+            
+            from gp_nerf.datasets.llff import NeRFDataset
+            dataset = NeRFDataset(self.hparams, device=self.device, type='all')
+            
             self.sphere_center = None
             self.sphere_radius = None
-            self.nerf = get_nerf(hparams, 20).to(self.device)
+            self.nerf = get_nerf(hparams, len(dataset)).to(self.device)
             self.bg_nerf = None
-
+            
         else:
             coordinate_info = torch.load(Path(hparams.dataset_path) / 'coordinates.pt', map_location='cpu')
             self.origin_drb = coordinate_info['origin_drb']
@@ -818,6 +822,23 @@ class Runner:
                             visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
                             img_list.append(torch.from_numpy(visualize_sem))
 
+                    if f'depth_{typ}' in results:
+                        depth_map = results[f'depth_{typ}']
+                        # if f'fg_depth_{typ}' in results:
+                        #     to_use = results[f'fg_depth_{typ}'].view(-1)
+                        #     while to_use.shape[0] > 2 ** 24:
+                        #         to_use = to_use[::2]
+                        #     ma = torch.quantile(to_use, 0.95)
+                        #     depth_clamp = depth_map.clamp_max(ma)
+                        # else:
+                        #     depth_clamp = depth_map
+                        depth_clamp = depth_map
+
+                        depth_vis = torch.from_numpy(Runner.visualize_scalars(
+                            torch.log(depth_clamp + 1e-8).view(*viz_rgbs.shape[:-1]).cpu()))
+                        img_list.append(depth_vis)
+                    
+                    
                     img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
                     img_list = torch.stack(img_list).permute(0,3,1,2)
                     img = make_grid(img_list, nrow=3)

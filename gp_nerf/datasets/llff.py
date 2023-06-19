@@ -29,6 +29,7 @@ def nerf_matrix_to_ngp(pose, scale=0.33, offset=[0, 0, 0]):
     return new_pose
 
 
+
 def visualize_poses(poses, size=0.1):
     # poses: [B, 4, 4]
 
@@ -110,7 +111,7 @@ class NeRFDataset:
         self.downscale = downscale
         self.root_path = opt.dataset_path
         self.preload = True # opt.preload # preload data into GPU
-        self.scale = 0.33 # opt.scale # camera radius scale to make sure camera are inside the bounding box.
+        self.scale = 0.33  # opt.scale # camera radius scale to make sure camera are inside the bounding box. default = 0.33
         self.offset = [0, 0, 0]  # opt.offset # camera offset
         self.bound = 1 # opt.bound # bounding box half length, also used as the radius to random sample poses.
         self.fp16 = True  # opt.fp16 # if preload, load into fp16.
@@ -259,11 +260,10 @@ class NeRFDataset:
             self.select_origin = True
             self.num_depth_process = 0
             self.object_id=0
-            # self.depth_scale = torch.abs(self.directions.cpu()[:, :, 2]) # z-axis's values
             self.K1 = None
             self.world_point = None
             self.N_total = opt.sample_ray_num
-            self.visualization=False # False  True
+            self.visualization=True # False  True
             self.num_save = 0
 
             
@@ -314,12 +314,15 @@ class NeRFDataset:
     def __getitem__(self, index):
         occluded_threshold=0.01
         # print(index)
-        poses = self.poses[index].to(self.device).unsqueeze(0) # [B, 4, 4]
+        poses1 = self.poses[index].to(self.device).unsqueeze(0) # [B, 4, 4]
         
         if self.type == 'train' and not self.enable_semantic:
-            rays, directions = get_rays(poses, self.intrinsics, self.H, self.W, self.num_rays)
+            rays, directions = get_rays(poses1, self.intrinsics, self.H, self.W, self.num_rays)
         else:
-            rays, directions = get_rays(poses, self.intrinsics, self.H, self.W)
+            rays, directions = get_rays(poses1, self.intrinsics, self.H, self.W)
+
+        poses = poses1.clone()
+        # poses[:, :, 3] = poses[:, :, 3] * 0.33
 
         rays_o = rays['rays_o'].squeeze(0).cpu()
         rays_d = rays['rays_d'].squeeze(0).cpu()
@@ -359,7 +362,7 @@ class NeRFDataset:
                 self.object_id=0
                 self.num_save = self.num_save + 1
 
-            self.random_points = [torch.tensor([[self.H // 2, self.W // 2]])]
+            self.random_points = [torch.tensor([[self.H // 3, self.W // 3]])]
             H, W = self.H, self.W
             
             if self.select_origin == True:
@@ -386,7 +389,7 @@ class NeRFDataset:
                     if masks_max.nonzero().size(0) == 0: 
                         continue
 
-                    sam_points_10 = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(10,))]
+                    sam_points_10 = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(1,))]
                     self.sam_points.append(sam_points_10)
                     sam_points_10 = sam_points_10.flip(1).cpu().numpy()
 
@@ -418,7 +421,7 @@ class NeRFDataset:
                         K1 = self.intrinsics
                         K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
                         E1 = np.array(poses.squeeze(0).cpu())
-                        E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+                        # E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)   # RUB -> RDF
 
                         # coordinates = np.column_stack((x, y, np.ones(10))).astype(int)
                         # pt_3d = (np.dot(np.linalg.inv(K1), coordinates.T)).T * depth[:, np.newaxis]
@@ -458,7 +461,7 @@ class NeRFDataset:
                 self.num_depth_process = self.num_depth_process + 1
                 
                 E2 = np.array(poses.squeeze(0).cpu())
-                E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
+                # E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)   # RUB -> RDF
                 # w2c = np.linalg.inv(np.concatenate((E2, [[0,0,0,1]]), 0))
                 w2c = np.linalg.inv(E2)
 
@@ -495,10 +498,13 @@ class NeRFDataset:
                                     
                                     # cv2.imwrite(f"{save_dir}/{self.object_ids[point_idx]}_{self.metadata_items[idx].image_path.stem}_occluded_{depth_diff}.jpg", img)
                                     # print(f"{save_dir}/{self.metadata_items[idx].image_path.stem}_occluded_{depth_diff}.jpg")
+                                    cv2.imwrite(f"{save_dir}/{self.num_save}_{index}.jpg", img)
+
                                 else:
                                     img = cv2.circle(img, pt2, radius, color, thickness)
                                     # print(f"{save_dir}/{self.object_ids[point_idx]}_{self.metadata_items[idx].image_path.stem}_project.jpg   the depth_diff: {depth_diff}")
-                            
+                                    cv2.imwrite(f"{save_dir}/{self.num_save}_{index}.jpg", img)
+
                             if depth_diff > occluded_threshold:
                                 # print(f"{idx}   out of images")
                                 continue
