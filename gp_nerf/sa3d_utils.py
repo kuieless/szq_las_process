@@ -9,7 +9,8 @@ import torch.nn.functional as F
 
 from torch import Tensor
 from tools.sa3d.self_prompting import mask_to_prompt
-from tools.sa3d import utils
+from typing import Optional
+
 
 def to_tensor(array, device=torch.device('cuda')):
     '''cvt numpy array to cuda tensor, if already tensor, do nothing
@@ -21,7 +22,6 @@ def to_tensor(array, device=torch.device('cuda')):
     else:
         pass
     return array.float()
-
 
 def seg_loss(mask: Tensor, selected_mask: Optional[Tensor], seg_m: Tensor, lamda: float = 5.0) -> Tensor:
     """

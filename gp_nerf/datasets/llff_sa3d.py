@@ -234,6 +234,7 @@ class NeRFDataset:
                 self.f_paths.append(f_path)
 
                 if self.enable_semantic:
+                # if True:
                     img = cv2.imread(f_path)
                     self.imgs.append(img)
 
@@ -248,6 +249,7 @@ class NeRFDataset:
                     self._sam_features.append(feature)
 
         if self.enable_semantic:
+        # if True:
             self.predictor = predictor
             self.select_origin = True
             self.num_depth_process = 0
@@ -309,6 +311,7 @@ class NeRFDataset:
         poses1 = self.poses[index].to(self.device).unsqueeze(0) # [B, 4, 4]
         
         if self.type == 'train' and not self.enable_semantic:
+        # if False:
             rays, directions = get_rays(poses1, self.intrinsics, self.H, self.W, self.num_rays)
         else:
             rays, directions = get_rays(poses1, self.intrinsics, self.H, self.W)
@@ -323,6 +326,7 @@ class NeRFDataset:
         C = images.shape[-1]
 
         if self.type == 'train' and not self.enable_semantic:
+        # if False:
             images = torch.gather(images.view(-1, C), 0, torch.stack(C * [rays['inds'].cpu().squeeze(0)], -1)) # [B, N, 3/4]
         else:
             images = images.view(-1, C)
@@ -337,6 +341,8 @@ class NeRFDataset:
         
         selected_points = []
         self._labels = torch.zeros((self.H, self.W), dtype=torch.int)
+        sam_feature = (self._sam_features[index]).to(self.device)
+
         if index == 0:
             # self.random_points = [torch.tensor([[self.H // 2, self.W // 2]])]  # fern
             self.random_points = [torch.tensor([[self.H // 3, self.W // 3]])]  # horn 
@@ -347,7 +353,6 @@ class NeRFDataset:
             self.num_depth_process = 0
             self.num_depth_process = self.num_depth_process + 1
             
-            sam_feature = (self._sam_features[index]).to(self.device)
             self.predictor.set_feature(sam_feature, [H, W])
             in_labels = np.array([1])
 
@@ -372,26 +377,26 @@ class NeRFDataset:
                 # masks_max = masks_max * ~bool_tensor.to(self.device)  
 
 
-                mask_size = masks_max.nonzero().size(0)
-                N_sample = min(int(self.N_total), mask_size)
-                selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
-                selected_points.append(selected_point)
+                # mask_size = masks_max.nonzero().size(0)
+                # N_sample = min(int(self.N_total), mask_size)
+                # selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
+                # selected_points.append(selected_point)
                 
                 self._labels[masks_max] = 1
             
             
-            if len(selected_points) == 0:
-                return None
-            else:
-                selected_points = torch.cat(selected_points)
-            #从整张图像中采样
-            bool_tensor = self._labels.bool().to(self.device)
-            selected_points1_num = min(1024, torch.sum(~bool_tensor))
-            selected_points1 = torch.nonzero(~bool_tensor)[torch.randint(high=torch.sum(~bool_tensor), size=(selected_points1_num,))]
-            if selected_points1.size(0) == 0: 
-                pass
-            else:
-                selected_points = torch.cat([selected_points, selected_points1], dim=0)
+            # if len(selected_points) == 0:
+            #     return None
+            # else:
+            #     selected_points = torch.cat(selected_points)
+            # #从整张图像中采样
+            # bool_tensor = self._labels.bool().to(self.device)
+            # selected_points1_num = min(1024, torch.sum(~bool_tensor))
+            # selected_points1 = torch.nonzero(~bool_tensor)[torch.randint(high=torch.sum(~bool_tensor), size=(selected_points1_num,))]
+            # if selected_points1.size(0) == 0: 
+            #     pass
+            # else:
+            #     selected_points = torch.cat([selected_points, selected_points1], dim=0)
             
             labels = self._labels.view(-1)
 
@@ -425,14 +430,14 @@ class NeRFDataset:
 
         img_indices = index * torch.ones(images.shape[0], dtype=torch.int32)
         item = {
-                'rgbs': images,
-                'rays': rays, 
-                'img_indices': img_indices,
+                'rgbs': images[:100000],
+                'rays': rays[:100000], 
+                'img_indices': img_indices[:100000],
                 } 
-        
-        item['labels'] = labels
-        item['depth'] = torch.tensor(depth_map).view(-1)
-        item['sam_feature'] = sam_feature.cpu()
+        if labels is not None:
+            item['labels'] = labels[:100000]
+        item['depth'] = torch.tensor(depth_map).view(-1)[:100000]
+        item['sam_feature'] = sam_feature.cpu()[:100000]
         # if index == 0:
         #     item['labels'] = labels
 

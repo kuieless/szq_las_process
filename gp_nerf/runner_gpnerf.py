@@ -386,6 +386,8 @@ class Runner:
         elif self.hparams.dataset_type == 'llff':
             from gp_nerf.datasets.llff import NeRFDataset
             dataset = NeRFDataset(self.hparams, device=self.device, type='train')
+            self.H = dataset.H
+            self.W = dataset.W
         elif self.hparams.dataset_type == 'llff_sa3d':
             self.predictor = init_predictor(self.device)
             from gp_nerf.datasets.llff_sa3d import NeRFDataset
@@ -434,7 +436,7 @@ class Runner:
                                                 pin_memory=False)
                 
             for dataset_index, item in enumerate(data_loader): #, start=10462):
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
                 
                 if item == None:
                     continue
@@ -516,7 +518,7 @@ class Runner:
                 for optimizer in optimizers.values():
                     optimizer.zero_grad(set_to_none=True)
 
-                scaler.scale(metrics['loss']).backward()
+                scaler.scale(metrics['loss']).backward()   # 在这之后用torch.cuda.empty_cache() 有效
                 if self.hparams.clip_grad_max != 0:
                     torch.nn.utils.clip_grad_norm_(self.nerf.parameters(), self.hparams.clip_grad_max)
 
@@ -636,51 +638,58 @@ class Runner:
         else:
             from gp_nerf.rendering_gpnerf import render_rays
         
-        # results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
-        #                                             bg_nerf=self.bg_nerf,
-        #                                             rays=rays,
-        #                                             image_indices=image_indices,
-        #                                             hparams=self.hparams,
-        #                                             sphere_center=self.sphere_center,
-        #                                             sphere_radius=self.sphere_radius,
-        #                                             get_depth=False,
-        #                                             get_depth_variance=True,
-        #                                             get_bg_fg_rgb=False,
-        #                                             train_iterations=train_iterations
-        #                                             )
-
-        bg_nerf_rays_present=False
-        results_chunks = []
-        bg_nerf_rays_present_chunks = []
-        B = rays.shape[0]
-        keys = ['rgb_fine', 'sem_map_fine', 'depth_variance_fine']
-        
-
-        for i in range(0, B, self.hparams.ray_chunk_size):
-            results_chunk, _ = render_rays(nerf=self.nerf,
-                                        bg_nerf=self.bg_nerf,
-                                        rays=rays[i:i + self.hparams.ray_chunk_size],
-                                        image_indices=image_indices[i:i + self.hparams.ray_chunk_size],
-                                        hparams=self.hparams,
-                                        sphere_center=self.sphere_center,
-                                        sphere_radius=self.sphere_radius,
-                                        get_depth=False,
-                                        get_depth_variance=True,
-                                        get_bg_fg_rgb=False,
-                                        train_iterations=train_iterations
-                                        )
+        if self.hparams.dataset_type =='llff_sa3d':
+            bg_nerf_rays_present=False
+            results_chunks = []
+            B = rays.shape[0]
+            keys = ['rgb_fine', 'sem_map_fine', 'depth_variance_fine']
             
-            results_chunk_dict = {k: v for k, v in results_chunk.items()}
-            results_chunks.append(results_chunk_dict)
-            del results_chunk, results_chunk_dict
-            gc.collect()
-            torch.cuda.empty_cache()
+
+            for i in range(0, B, self.hparams.ray_chunk_size):
+                torch.cuda.empty_cache()
+                ray_chunk = rays[i:i + self.hparams.ray_chunk_size]
+                image_indices_chunk= image_indices[i:i + self.hparams.ray_chunk_size]
+                results_chunk, _ = render_rays(nerf=self.nerf,
+                                            bg_nerf=self.bg_nerf,
+                                            rays=ray_chunk,
+                                            image_indices=image_indices_chunk,
+                                            hparams=self.hparams,
+                                            sphere_center=self.sphere_center,
+                                            sphere_radius=self.sphere_radius,
+                                            get_depth=False,
+                                            get_depth_variance=True,
+                                            get_bg_fg_rgb=False,
+                                            train_iterations=train_iterations
+                                            )
+                
+                results_chunk_dict = {k: v for k, v in results_chunk.items()}
+                results_chunks += [results_chunk_dict]
+                del results_chunk, results_chunk_dict
+                # gc.collect()
+                torch.cuda.empty_cache()
+                
+
+            
+            H, W = self.H, self.W
+            results = {
+                k: torch.cat([ret[k] for ret in results_chunks])#.reshape(H,W,-1)
+                for k in results_chunks[0].keys()
+            }
+        else:
+            results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
+                                                        bg_nerf=self.bg_nerf,
+                                                        rays=rays,
+                                                        image_indices=image_indices,
+                                                        hparams=self.hparams,
+                                                        sphere_center=self.sphere_center,
+                                                        sphere_radius=self.sphere_radius,
+                                                        get_depth=False,
+                                                        get_depth_variance=True,
+                                                        get_bg_fg_rgb=False,
+                                                        train_iterations=train_iterations
+                                                        )
+
         
-        H, W = self.H, self.W
-        results = {
-            k: torch.cat([ret[k] for ret in results_chunks]).reshape(H,W,-1)
-            for k in results_chunks[0].keys()
-        }
         
         
             

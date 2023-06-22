@@ -182,13 +182,13 @@ class NeRF(nn.Module):
             # position[:, 0] = (position[:, 0]-self.scaling_factor_altitude_bottom)/self.scaling_factor_altitude_range
             # position[:, 1:] = position[:, 1:] / self.scaling_factor_ground
         plane_feat = self.plane_encoder(position, bound=self.fg_bound)
-        h = torch.cat([h, plane_feat], dim=-1)
+        h = torch.cat([h, plane_feat], dim=-1)  #####
 
         for l in range(self.num_layers):
             h = self.sigma_net[l](h)
             if l != self.num_layers - 1:
                 h = F.relu(h, inplace=True)
-        sigma = trunc_exp(h[..., 0])
+        sigma = trunc_exp(h[..., 0])   ######
         geo_feat = h[..., 1:]
 
         if sigma_only:
@@ -196,10 +196,10 @@ class NeRF(nn.Module):
 
         # semantic 
         if self.enable_semantic:
-            input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
+            input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])  ######
             if self.separate_semantic:
-                sem_feature = self.semantic_linear[:-2](input_xyz)
-                sem_logits = self.semantic_linear[-2:](sem_feature)
+                sem_feature = self.semantic_linear[:-2](input_xyz)   ######
+                sem_logits = self.semantic_linear[-2:](sem_feature)   #######
             else:
                 if self.stop_semantic_grad:
                     h_stop = h.detach()
@@ -213,7 +213,8 @@ class NeRF(nn.Module):
         d = x[:, self.xyz_dim:-1]
         d = self.encoder_dir(d)
         a = self.embedding_a(x[:, -1].long())
-        h = torch.cat([d, geo_feat, a, plane_feat], dim=-1)
+        h = torch.cat([d, geo_feat, a, plane_feat], dim=-1)   ##########
+
         for l in range(self.num_layers_color):
             h = self.color_net[l](h)
             if l != self.num_layers_color - 1:
