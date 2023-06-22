@@ -14,7 +14,7 @@ def get_opts_base():
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff'],
+    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff', 'llff_sa3d'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
    
@@ -31,6 +31,7 @@ def get_opts_base():
 
    
     #sam 
+    parser.add_argument('--wgt_sam_loss', default=4e-2, type=float, help='llff_sa3d')
 
     parser.add_argument('--sam_sample_each', type=int, default=256, help='')
     parser.add_argument('--group_loss', default=False, type=eval, choices=[True, False], help='supervise normal')
@@ -100,6 +101,8 @@ def get_opts_base():
     parser.add_argument('--val_interval', type=int, default=100000, help='validation interval')
     parser.add_argument('--ckpt_interval', type=int, default=100000, help='checkpoint interval')
     parser.add_argument('--model_chunk_size', type=int, default=10*1024*1024, help='chunk size to split the input to avoid OOM')
+    parser.add_argument('--ray_chunk_size', type=int, default=20*1024, help='chunk size to split the input to avoid OOM')
+
     # parser.add_argument('--model_chunk_size', type=int, default=32 * 1024, help='chunk size to split the input to avoid OOM')
     parser.add_argument('--batch_size', type=int, default=8, help='batch size')
     parser.add_argument('--coarse_samples', type=int, default=128, help='number of coarse samples')

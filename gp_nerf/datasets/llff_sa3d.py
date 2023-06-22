@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader
 
 from nerf.utils import get_rays
 from pathlib import Path
-from tools.segment_anything import sam_model_registry, SamPredictor
 
 
 # ref: https://github.com/NVlabs/instant-ngp/blob/b76004c8cf478880227401ae763be4c02f80b62f/include/neural-graphics-primitives/nerf_loader.h#L50
@@ -93,17 +92,10 @@ def rand_poses(size, device, radius=1, theta_range=[np.pi/3, 2*np.pi/3], phi_ran
 
     return poses
 
-def init(device):
-    sam_checkpoint = "tools/segment_anything/sam_vit_h_4b8939.pth"
-    
-    model_type = "vit_h"
-    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-    sam.to(device=device)
-    predictor = SamPredictor(sam)
-    return predictor
+
 
 class NeRFDataset:
-    def __init__(self, opt, device, type='train', downscale=1, n_test=10):
+    def __init__(self, opt, device, type='train', downscale=1, n_test=10, predictor=None):
         super().__init__()
         
         self.device = device
@@ -256,7 +248,7 @@ class NeRFDataset:
                     self._sam_features.append(feature)
 
         if self.enable_semantic:
-            self.predictor = init(self.device)
+            self.predictor = predictor
             self.select_origin = True
             self.num_depth_process = 0
             self.object_id=0
@@ -334,229 +326,60 @@ class NeRFDataset:
             images = torch.gather(images.view(-1, C), 0, torch.stack(C * [rays['inds'].cpu().squeeze(0)], -1)) # [B, N, 3/4]
         else:
             images = images.view(-1, C)
-
-        if self.enable_semantic and self.type == 'train':
-            if self.visualization:
-                save_dir = f'zyq/project'
-                Path(save_dir).parent.mkdir(exist_ok=True)
-                Path(save_dir).mkdir(exist_ok=True)
-                (Path(save_dir) / "sample").mkdir(exist_ok=True)
-
-            directions = directions.view(self.H, self.W, 3)
-            self.depth_scale = torch.abs(directions.cpu()[:, :, 2]) # z-axis's values
-
-            selected_points = []
-            self.sam_points = []
-
-            num_depth_process_total = self.images.shape[0]
-            self._labels = torch.zeros((self.H, self.W), dtype=torch.int)
-
-            if self.num_depth_process % num_depth_process_total == 0:
-                self.object_ids = []
-                self.world_points = []
-                self.select_origin = True
-                # 测试一个点的投影影响
-                # if self.num_depth_process == self._labels.shape[0]:
-                    # return 'end'
-                self.num_depth_process = 0
-                self.object_id=0
-                self.num_save = self.num_save + 1
-
-            # self.random_points = [torch.tensor([[self.H // 2, self.W // 2]])]  # fern
-            # self.random_points = [torch.tensor([[self.H // 3, self.W // 3]])]  # horn 
-            self.random_points = [torch.tensor([[405, 815]])]  # horn 
-
-            H, W = self.H, self.W
-            
-            if self.select_origin == True:
-                img = self.imgs[index].copy()
-
-                self.num_depth_process = 0
-                self.num_depth_process = self.num_depth_process + 1
-                
-                sam_feature = (self._sam_features[index]).to(self.device)
-                self.predictor.set_feature(sam_feature, [H, W])
-                in_labels = np.array([1])
-
-                for random_point in self.random_points:
-                    self.object_id = self.object_id + 1
-                    self.object_ids.append(self.object_id)
-                    visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
-                    bool_tensor = torch.zeros((H, W), dtype=torch.int).bool()
-
-                    random_point = random_point.flip(1)
-                    masks, iou_preds, _ = self.predictor.predict(random_point.cpu().numpy(), in_labels, return_torch=True)
-                    masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
-                    masks_max = masks_max * ~bool_tensor.to(self.device)
-                    # TODO: 这里需要考虑上面初始采样点的问题
-                    if masks_max.nonzero().size(0) == 0: 
-                        continue
-
-                    sam_points_10 = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(10,))]
-                    self.sam_points.append(sam_points_10)
-                    sam_points_10 = sam_points_10.flip(1).cpu().numpy()
-
-                    masks, iou_preds, _ = self.predictor.predict(sam_points_10, np.array([1]*sam_points_10.shape[0]), multimask_output=False, return_torch=True)
-                    masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
-                    masks_max = masks_max * ~bool_tensor.to(self.device)  
-
-
-                    mask_size = masks_max.nonzero().size(0)
-                    N_sample = min(int(self.N_total), mask_size)
-                    selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
-                    selected_points.append(selected_point)
-                    self._labels[masks_max] = self.object_id
-                    
-                    depth_map = self.depths[index].view(self.H, self.W)
-                    depth_map = (depth_map * self.depth_scale).numpy()
-                    # depth_map = depth_map.numpy()
-
-
-                    world_points_10 = []
-
-                    for sam_point_10 in sam_points_10:
-                        sam_point_10 = torch.tensor([sam_point_10]).flip(1)
-
-                        x, y = sam_point_10[0, 1], sam_point_10[0, 0]
-                        depth = depth_map[y, x]
-
-
-                        K1 = self.intrinsics
-                        K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
-                        E1 = np.array(poses.squeeze(0).cpu())
-                        # E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)   # RUB -> RDF
-
-                        # coordinates = np.column_stack((x, y, np.ones(10))).astype(int)
-                        # pt_3d = (np.dot(np.linalg.inv(K1), coordinates.T)).T * depth[:, np.newaxis]
-                        # pt_3d = np.concatenate((pt_3d, np.ones((10, 1), dtype=pt_3d.dtype)), axis=1)
-                        
-                        pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
-                        pt_3d = np.append(pt_3d, 1)
-                        # world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
-                        world_point = np.dot(E1, pt_3d)
-
-                        self.K1 = K1
-                        world_points_10.append(world_point)
-                        
-                        if self.visualization:
-                            
-
-                            pt2 = (int(x), int(y))
-                            radius = 5
-                            color = (255, 0, 0)
-                            thickness = 2
-                            cv2.circle(img, pt2, radius, color, thickness)
-                            
-                            # image_cat = np.concatenate([img, rgb_array], axis=1)
-                            # cv2.imwrite(f"{save_dir}/{self.object_id}_{self.metadata_items[idx].image_path.stem}.jpg", image_cat)
-                            # print(f"{save_dir}/{self.metadata_items[idx].image_path.stem}.jpg")
-                    self.world_points.append(world_points_10)
-                    if self.visualization:
-                        cv2.circle(img, (int(random_point[0,0]), int(random_point[0,1])), radius, (0, 0, 255), thickness)
-                if self.visualization:
-                    rgb_array = np.stack([self._labels.bool(), self._labels.bool(), self._labels.bool()], axis=2)* 255
-                    image_cat = np.concatenate([img, rgb_array], axis=1)
-                    cv2.imwrite(f"{save_dir}/{self.num_save}_{index}.jpg", image_cat)
-                    
-                self.select_origin = False  
         
-            elif self.num_depth_process < num_depth_process_total:
-                self.num_depth_process = self.num_depth_process + 1
+        H, W = self.H, self.W
+
+        directions = directions.view(self.H, self.W, 3)
+        self.depth_scale = torch.abs(directions.cpu()[:, :, 2]) # z-axis's values
+        depth_map = self.depths[index].view(self.H, self.W)
+        depth_map = (depth_map * self.depth_scale).numpy()
+        
+        
+        selected_points = []
+        self._labels = torch.zeros((self.H, self.W), dtype=torch.int)
+        if index == 0:
+            # self.random_points = [torch.tensor([[self.H // 2, self.W // 2]])]  # fern
+            self.random_points = [torch.tensor([[self.H // 3, self.W // 3]])]  # horn 
+            # self.random_points = [torch.tensor([[405, 815]])]  # horn 
+            
+            img = self.imgs[index].copy()
+
+            self.num_depth_process = 0
+            self.num_depth_process = self.num_depth_process + 1
+            
+            sam_feature = (self._sam_features[index]).to(self.device)
+            self.predictor.set_feature(sam_feature, [H, W])
+            in_labels = np.array([1])
+
+            for random_point in self.random_points:
+                visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
+                bool_tensor = torch.zeros((H, W), dtype=torch.int).bool()
+
+                random_point = random_point.flip(1)
+                masks, iou_preds, _ = self.predictor.predict(random_point.cpu().numpy(), in_labels, return_torch=True)
+                masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
+                masks_max = masks_max * ~bool_tensor.to(self.device)
+                # TODO: 这里需要考虑上面初始采样点的问题
+                if masks_max.nonzero().size(0) == 0: 
+                    continue
+
+                # sam_points_10 = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(10,))]
+                # self.sam_points.append(sam_points_10)
+                # sam_points_10 = sam_points_10.flip(1).cpu().numpy()
+
+                # masks, iou_preds, _ = self.predictor.predict(sam_points_10, np.array([1]*sam_points_10.shape[0]), multimask_output=False, return_torch=True)
+                # masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
+                # masks_max = masks_max * ~bool_tensor.to(self.device)  
+
+
+                mask_size = masks_max.nonzero().size(0)
+                N_sample = min(int(self.N_total), mask_size)
+                selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
+                selected_points.append(selected_point)
                 
-                E2 = np.array(poses.squeeze(0).cpu())
-                # E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)   # RUB -> RDF
-                # w2c = np.linalg.inv(np.concatenate((E2, [[0,0,0,1]]), 0))
-                w2c = np.linalg.inv(E2)
-
-                if self.visualization:
-                    img = self.imgs[index].copy()
-                
-                for point_idx in range(len(self.world_points)):
-                    #得到投影点在该图像上的位置，随后进行采样
-                    bool_tensor = torch.zeros((H, W), dtype=torch.int).bool()
-                    sam_points_10 = []
-                    for world_point in self.world_points[point_idx]:
-                        pt_3d_trans = np.dot(w2c, world_point)
-                        pt_2d_trans = np.dot(self.K1, pt_3d_trans[:3]) 
-                        pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
-                        x2, y2 = int(pt_2d_trans[0]), int(pt_2d_trans[1])
-                        if x2 >= 0 and x2 < self.W and y2 >= 0 and y2 < self.H:
-                            depth_map2 = self.depths[index].view(self.H, self.W)
-                            depth_map2 = (depth_map2 * self.depth_scale).numpy()
-                            # depth_map2 = depth_map2.numpy()
-                            depth2 = depth_map2[y2, x2]
-                            depth_diff = np.abs(depth2 - pt_3d_trans[2])
-                            pt2 = (int(pt_2d_trans[0]), int(pt_2d_trans[1]))
-                            
-                            if self.visualization:
-                                #visualize
-                                # print('Project inside image 2', self.depth, depth2, depth_diff)
-                                radius = 5
-                                color = (255, 0, 0)
-                                thickness = 2
-                                if depth_diff > occluded_threshold:
-                                    color = (0, 255, 0)
-                                    img = cv2.circle(img, pt2, radius, color, thickness)
-                                    print(f'occluded points!!   the depth_diff: {depth_diff}')
-                                    
-                                    # cv2.imwrite(f"{save_dir}/{self.object_ids[point_idx]}_{self.metadata_items[idx].image_path.stem}_occluded_{depth_diff}.jpg", img)
-                                    # print(f"{save_dir}/{self.metadata_items[idx].image_path.stem}_occluded_{depth_diff}.jpg")
-                                    # cv2.imwrite(f"{save_dir}/{self.num_save}_{index}.jpg", img)
-
-                                else:
-                                    img = cv2.circle(img, pt2, radius, color, thickness)
-                                    # print(f"{save_dir}/{self.object_ids[point_idx]}_{self.metadata_items[idx].image_path.stem}_project.jpg   the depth_diff: {depth_diff}")
-                                    # cv2.imwrite(f"{save_dir}/{self.num_save}_{index}.jpg", img)
-
-                            if depth_diff > occluded_threshold:
-                                # print(f"{idx}   out of images")
-                                continue
-                            else:
-                                sam_points_10.append(torch.tensor([[pt2[0],pt2[1]]]))
-                                
-                        else:
-                            # print(f"{idx}   occluded")
-                            continue
-                    
-                    
-                    
-                    if len(sam_points_10) == 0:
-                        continue
-                    else:
-                        self.sam_points.append(sam_points_10)
-                    
-                    sam_points_10 = torch.cat(sam_points_10, 0)
-                    #### SAM ###
-                    in_labels = np.array([1])
-                    H, W = self.H, self.W
-                    sam_feature = (self._sam_features[index]).to(self.device)
-                    self.predictor.set_feature(sam_feature, [H, W])
-                            
-                    
-                    #从初始点采样 sam mask
-                    if sam_points_10.shape[0]==1:
-                        masks, iou_preds, _ = self.predictor.predict(sam_points_10.cpu().numpy(), np.array([1]*sam_points_10.shape[0]), multimask_output=True, return_torch=True)
-                    else:
-                        masks, iou_preds, _ = self.predictor.predict(sam_points_10.cpu().numpy(), np.array([1]*sam_points_10.shape[0]), multimask_output=False, return_torch=True)
-                    masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
-                    masks_max = masks_max * ~bool_tensor.to(self.device)
-                    mask_size = masks_max.nonzero().size(0)
-                    # TODO: 这里需要考虑上面初始采样点的问题
-                    if masks_max.nonzero().size(0) == 0: 
-                        continue
-                    
-                    N_sample = min(int(self.N_total), mask_size)
-                    selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
-                    selected_points.append(selected_point)
-                    
-                    self._labels[masks_max] = self.object_id
-
-                if self.visualization and len(self.sam_points) > 0:
-                    rgb_array = np.stack([self._labels.bool(), self._labels.bool(), self._labels.bool()], axis=2)* 255
-                    image_cat = np.concatenate([img, rgb_array], axis=1)
-                    print(f"{save_dir}/{index}.jpg")
-                    cv2.imwrite(f"{save_dir}/{self.num_save}_{index}.jpg", image_cat)
-
+                self._labels[masks_max] = 1
+            
+            
             if len(selected_points) == 0:
                 return None
             else:
@@ -570,33 +393,49 @@ class NeRFDataset:
             else:
                 selected_points = torch.cat([selected_points, selected_points1], dim=0)
             
-            near = torch.zeros((rays_o.shape[0],1), dtype=torch.int32)
-            far = 10 * torch.ones((rays_o.shape[0],1), dtype=torch.int32)
-            rays = torch.cat([rays_o, rays_d, near, far], dim=1)
-            images = images.view(H, W, -1)[selected_points[:, 0], selected_points[:, 1]]
-            rays = rays.view(H, W, -1)[selected_points[:, 0], selected_points[:, 1]]
-            img_indices = index * torch.ones(images.shape[0], dtype=torch.int32)
+            labels = self._labels.view(-1)
 
-            item = {
-                    'rgbs': images,
-                    'rays': rays, 
-                    'img_indices': img_indices,
-                    'labels': self._labels[selected_points[:, 0], selected_points[:, 1]],
-                }
         else:
-            near = torch.zeros((rays_o.shape[0],1), dtype=torch.int32)
-            far = 10 * torch.ones((rays_o.shape[0],1), dtype=torch.int32)
-            rays = torch.cat([rays_o, rays_d, near, far], dim=1)
-            img_indices = index * torch.ones(rays_o.shape[0], dtype=torch.int32)
+            labels = None
 
-            item = {
-                    'rgbs': images,
-                    'rays': rays, 
-                    'img_indices': img_indices,
-                    # 'labels': self._labels[idx][selected_points[:, 0], selected_points[:, 1]],
-                }
+        if self.visualization:
 
+            save_dir = f'zyq/project'
+            Path(save_dir).parent.mkdir(exist_ok=True)
+            Path(save_dir).mkdir(exist_ok=True)
+            (Path(save_dir) / "sample").mkdir(exist_ok=True)
+            rgb_array = np.stack([self._labels.bool(), self._labels.bool(), self._labels.bool()], axis=2)* 255
+            image_cat = np.concatenate([img, rgb_array], axis=1)
+            cv2.imwrite(f"{save_dir}/first_{self.num_save}.jpg", image_cat)
+            self.num_save = self.num_save + 1
+
+        near = torch.zeros((rays_o.shape[0],1), dtype=torch.int32)
+        far = 10 * torch.ones((rays_o.shape[0],1), dtype=torch.int32)
+        rays = torch.cat([rays_o, rays_d, near, far], dim=1)
         
+        
+        
+        
+
+
+        # if selected_points != []:
+        #     images = images.view(H, W, -1)[selected_points[:, 0], selected_points[:, 1]]
+        #     rays = rays.view(H, W, -1)[selected_points[:, 0], selected_points[:, 1]]
+        #     labels = labels.view(H, W)[selected_points[:, 0], selected_points[:, 1]]
+
+        img_indices = index * torch.ones(images.shape[0], dtype=torch.int32)
+        item = {
+                'rgbs': images,
+                'rays': rays, 
+                'img_indices': img_indices,
+                } 
+        
+        item['labels'] = labels
+        item['depth'] = torch.tensor(depth_map).view(-1)
+        item['sam_feature'] = sam_feature.cpu()
+        # if index == 0:
+        #     item['labels'] = labels
+
         return item
         
         

@@ -162,6 +162,7 @@ class NeRF(nn.Module):
 
     def forward(self, point_type, x: torch.Tensor, sigma_only: bool = False,
                 sigma_noise: Optional[torch.Tensor] = None,train_iterations=-1) -> torch.Tensor:
+        
         if point_type == 'fg':
             out = self.forward_fg(point_type, x, sigma_only, sigma_noise,train_iterations=train_iterations)
         elif point_type == 'bg':

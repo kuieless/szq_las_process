@@ -25,6 +25,7 @@ from torch.utils.data import DistributedSampler, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms as T
 from tqdm import tqdm
+import gc
 
 from gp_nerf.datasets.filesystem_dataset import FilesystemDataset
 from gp_nerf.datasets.memory_dataset import MemoryDataset
@@ -47,6 +48,14 @@ import pandas as pd
 from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map 
 from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folder_logger, save_semantic_metric
 from gp_nerf.eval_utils import prepare_depth_normal_visual
+
+
+from gp_nerf.sa3d_utils import seg_loss, _generate_index_matrix, prompting_coarse
+from tools.segment_anything import sam_model_registry, SamPredictor
+
+
+
+
 def get_n_params(model):
     pp=0
     for p in list(model.parameters()):
@@ -64,6 +73,17 @@ def custom_collate(batch):
     if len(batch) == 0:
         return None
     return torch.utils.data.dataloader.default_collate(batch)
+
+
+def init_predictor(device):
+    sam_checkpoint = "tools/segment_anything/sam_vit_h_4b8939.pth"
+    
+    model_type = "vit_h"
+    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+    sam.to(device=device)
+    predictor = SamPredictor(sam)
+    return predictor
+
 
 class Runner:
     def __init__(self, hparams: Namespace, set_experiment_path: bool = True):
@@ -127,7 +147,7 @@ class Runner:
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        if self.hparams.dataset_type == 'llff':
+        if 'llff' in self.hparams.dataset_type:
             
             from gp_nerf.datasets.llff import NeRFDataset
             dataset = NeRFDataset(self.hparams, device=self.device, type='all')
@@ -365,10 +385,13 @@ class Runner:
                                     self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'llff':
             from gp_nerf.datasets.llff import NeRFDataset
-            # if self.hparams.enable_semantic:
-            #     dataset = NeRFDataset(self.hparams, device=self.device, type='train', nerf=self.nerf)
-            # else:
             dataset = NeRFDataset(self.hparams, device=self.device, type='train')
+        elif self.hparams.dataset_type == 'llff_sa3d':
+            self.predictor = init_predictor(self.device)
+            from gp_nerf.datasets.llff_sa3d import NeRFDataset
+            dataset = NeRFDataset(self.hparams, device=self.device, type='train', predictor=self.predictor)
+            self.H = dataset.H
+            self.W = dataset.W
         else:
             raise Exception('Unrecognized dataset type: {}'.format(self.hparams.dataset_type))
 
@@ -403,7 +426,7 @@ class Runner:
                 elif self.hparams.dataset_type == 'memory_depth':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
                                                 pin_memory=False)
-                elif self.hparams.dataset_type == 'llff':
+                elif 'llff' in self.hparams.dataset_type:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 else:
@@ -411,6 +434,7 @@ class Runner:
                                                 pin_memory=False)
                 
             for dataset_index, item in enumerate(data_loader): #, start=10462):
+                torch.cuda.empty_cache()
                 
                 if item == None:
                     continue
@@ -430,17 +454,19 @@ class Runner:
                 # amp: Automatic mixed precision
                 with torch.cuda.amp.autocast(enabled=self.hparams.amp):
 
-                    #semantic 
-
+                    # normal loss
                     if self.hparams.normal_loss:
                         item['c2w_rots'] = c2w_rots
-                    
+                    # depth loss
                     if self.hparams.dataset_type == 'memory_depth':
                         # print(item['rays'].size())
                         self.train_img_num = item['rgbs'].shape[0]
+                    # add random_rays when depth
                     if self.hparams.add_random_rays:
                         self.sample_random_num_current = item['rays'].shape[0] * self.hparams.sample_random_num_each
                     
+
+                    # 调整shape
                     for key in item.keys():
                         if item[key].dim() == 2:
                             item[key] = item[key].reshape(-1)
@@ -452,11 +478,10 @@ class Runner:
                         elif 'random_'+key in item.keys():
                             item[key] = torch.cat((item[key], item['random_'+key]))
                     
-                    if self.hparams.enable_semantic:
+
+                    if self.hparams.enable_semantic and 'labels' in item.keys():
                         labels = item['labels'].to(self.device, non_blocking=True)
-                        if self.hparams.dataset_type == 'sam_project':
-                            pass
-                        else:
+                        if self.hparams.dataset_type != 'sam_project':
                             from tools.unetformer.uavid2rgb import remapping
                             labels = remapping(labels)
                     else:
@@ -588,7 +613,7 @@ class Runner:
 
             self.model_path.mkdir(parents=True)
 
-            if self.hparams.dataset_type != 'llff':
+            if 'llff' not in self.hparams.dataset_type:
                 with (self.experiment_path / 'image_indices.txt').open('w') as f:
                     for i, metadata_item in enumerate(self.train_items):
                         f.write('{},{}\n'.format(metadata_item.image_index, metadata_item.image_path.name))
@@ -611,20 +636,55 @@ class Runner:
         else:
             from gp_nerf.rendering_gpnerf import render_rays
         
+        # results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
+        #                                             bg_nerf=self.bg_nerf,
+        #                                             rays=rays,
+        #                                             image_indices=image_indices,
+        #                                             hparams=self.hparams,
+        #                                             sphere_center=self.sphere_center,
+        #                                             sphere_radius=self.sphere_radius,
+        #                                             get_depth=False,
+        #                                             get_depth_variance=True,
+        #                                             get_bg_fg_rgb=False,
+        #                                             train_iterations=train_iterations
+        #                                             )
+
+        bg_nerf_rays_present=False
+        results_chunks = []
+        bg_nerf_rays_present_chunks = []
+        B = rays.shape[0]
+        keys = ['rgb_fine', 'sem_map_fine', 'depth_variance_fine']
         
-        results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
-                                                    bg_nerf=self.bg_nerf,
-                                                    rays=rays,
-                                                    image_indices=image_indices,
-                                                    hparams=self.hparams,
-                                                    sphere_center=self.sphere_center,
-                                                    sphere_radius=self.sphere_radius,
-                                                    get_depth=False,
-                                                    get_depth_variance=True,
-                                                    get_bg_fg_rgb=False,
-                                                    train_iterations=train_iterations
-                                                    )
+
+        for i in range(0, B, self.hparams.ray_chunk_size):
+            results_chunk, _ = render_rays(nerf=self.nerf,
+                                        bg_nerf=self.bg_nerf,
+                                        rays=rays[i:i + self.hparams.ray_chunk_size],
+                                        image_indices=image_indices[i:i + self.hparams.ray_chunk_size],
+                                        hparams=self.hparams,
+                                        sphere_center=self.sphere_center,
+                                        sphere_radius=self.sphere_radius,
+                                        get_depth=False,
+                                        get_depth_variance=True,
+                                        get_bg_fg_rgb=False,
+                                        train_iterations=train_iterations
+                                        )
+            
+            results_chunk_dict = {k: v for k, v in results_chunk.items()}
+            results_chunks.append(results_chunk_dict)
+            del results_chunk, results_chunk_dict
+            gc.collect()
+            torch.cuda.empty_cache()
         
+        H, W = self.H, self.W
+        results = {
+            k: torch.cat([ret[k] for ret in results_chunks]).reshape(H,W,-1)
+            for k in results_chunks[0].keys()
+        }
+        
+        
+            
+
         
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
         if not self.hparams.freeze_geo and not ('sam' in self.hparams.dataset_type):
@@ -653,39 +713,56 @@ class Runner:
             metrics['photo_loss'] = photo_loss
         metrics['loss'] = photo_loss
 
+
         #semantic loss
         if self.hparams.enable_semantic:
-            sem_logits = results[f'sem_map_{typ}']
-            semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
-            metrics['semantic_loss'] = semantic_loss
-            metrics['loss'] += self.hparams.wgt_sem_loss * semantic_loss
+            if self.hparams.dataset_type == 'llff_sa3d':
+                if labels is not None:  # 第一祯
+                    sem_logits = results[f'sem_map_{typ}']
+                    loss_sam = seg_loss(labels, None, sem_logits)
+                else:   #其他祯
+                    sem_logits = results[f'sem_map_{typ}'].view(H, W, 1)
+                    depth = item['depth'].view(H, W, 1)
+                    sam_feature = item['sam_feature'].squeeze(0).to(self.device)
+                    self.predictor.set_feature(sam_feature, [H, W])
+                    index_matrix = _generate_index_matrix(H, W, depth.detach().clone())  # 【H,W,3】分别存储的是x y depth
+                    loss_sam, sam_seg_show = prompting_coarse(self, H, W, sem_logits, index_matrix, self.hparams.num_semantic_classes)
+                    
+                metrics['loss_sam'] = loss_sam
+                metrics['loss'] += self.hparams.wgt_sam_loss * loss_sam
             
-            with torch.no_grad():
-                if train_iterations % 1000 == 0:
-                    sem_label = self.logits_2_label(sem_logits)
-                    if self.writer is not None:
-                        self.writer.add_scalar('1_train/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
-                        # self.writer.add_histogram("gt_labels", labels,train_iterations)
-                        # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
-                    if self.wandb is not None:
-                        self.wandb.log({'train/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
+            else:
+                sem_logits = results[f'sem_map_{typ}']
+                semantic_loss = self.crossentropy_loss(sem_logits, labels.type(torch.long))
+                metrics['semantic_loss'] = semantic_loss
+                metrics['loss'] += self.hparams.wgt_sem_loss * semantic_loss
+                
+                with torch.no_grad():
+                    if train_iterations % 1000 == 0:
+                        sem_label = self.logits_2_label(sem_logits)
+                        if self.writer is not None:
+                            self.writer.add_scalar('1_train/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
+                            # self.writer.add_histogram("gt_labels", labels,train_iterations)
+                            # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
+                        if self.wandb is not None:
+                            self.wandb.log({'train/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
 
-            if self.hparams.dataset_type == 'sam':
-                if self.hparams.group_loss:
-                    # group loss
-                    semantic_feature  = results[f'semantic_feature_{typ}']
-                    group_ids, group_counts = torch.unique(groups, return_counts=True)
-                    group_loss_each = 0
-                    for group_id in group_ids:
-                        group_index = (groups==group_id)
-                        feature_group = semantic_feature[group_index]
-                        f_detach = feature_group.detach()
-                        feature_group_mean = f_detach.mean(dim=0).repeat(feature_group.shape[0],1)
-                        cs_loss = self.group_loss_feat(feature_group, feature_group_mean)
-                        group_loss_each += cs_loss.mean()
-                    group_loss = 1 - group_loss_each / len(group_ids) #/ semantic_feature.shape[-1]
-                    metrics['sam_group_loss'] = group_loss
-                    metrics['loss'] += self.hparams.wgt_group_loss * group_loss
+                if self.hparams.dataset_type == 'sam':
+                    if self.hparams.group_loss:
+                        # group loss
+                        semantic_feature  = results[f'semantic_feature_{typ}']
+                        group_ids, group_counts = torch.unique(groups, return_counts=True)
+                        group_loss_each = 0
+                        for group_id in group_ids:
+                            group_index = (groups==group_id)
+                            feature_group = semantic_feature[group_index]
+                            f_detach = feature_group.detach()
+                            feature_group_mean = f_detach.mean(dim=0).repeat(feature_group.shape[0],1)
+                            cs_loss = self.group_loss_feat(feature_group, feature_group_mean)
+                            group_loss_each += cs_loss.mean()
+                        group_loss = 1 - group_loss_each / len(group_ids) #/ semantic_feature.shape[-1]
+                        metrics['sam_group_loss'] = group_loss
+                        metrics['loss'] += self.hparams.wgt_group_loss * group_loss
             
                 
 
@@ -751,7 +828,7 @@ class Runner:
         return metrics, bg_nerf_rays_present
 
     def _run_validation(self, train_index=-1) -> Dict[str, float]:
-        if self.hparams.dataset_type == 'llff':
+        if 'llff' in self.hparams.dataset_type:
             from gp_nerf.rendering_gpnerf import render_rays
             with torch.inference_mode():
                 from gp_nerf.datasets.llff import NeRFDataset

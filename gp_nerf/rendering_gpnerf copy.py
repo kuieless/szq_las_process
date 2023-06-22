@@ -149,8 +149,6 @@ def render_rays(nerf: nn.Module,
                 results[f'bg_{key}_{typ}'] = torch.zeros_like(val)
 
     bg_nerf_rays_present = False
-    
-    # del results['bg_lambda_fine']
 
     return results, bg_nerf_rays_present
     # return results
@@ -266,26 +264,51 @@ def _inference(point_type,
 
     # Perform model inference to get rgb and raw sigma
     B = xyz_.shape[0]
+    out_chunks = []
+    out_semantic_chunk = [] 
+    out_semantic_feature_chunk = []
     rays_d_ = rays_d.repeat(1, N_samples_, 1).view(-1, rays_d.shape[-1])
 
-    image_indices_ = image_indices.repeat(1, N_samples_, 1).view(-1, 1)
+    if image_indices is not None:
+        image_indices_ = image_indices.repeat(1, N_samples_, 1).view(-1, 1)
 
-    xyz_chunk = torch.cat([xyz_, rays_d_, image_indices_], 1)
-    sigma_noise=None
 
-    if hparams.enable_semantic:
-        if hparams.dataset_type == 'sam':
-            out_geo, out_semantic, out_semantic_feature= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+    # (N_rays*N_samples_, embed_dir_channels)
+    for i in range(0, B, hparams.model_chunk_size):
+        xyz_chunk = xyz_[i:i + hparams.model_chunk_size]
+
+        if image_indices is not None:
+            xyz_chunk = torch.cat([xyz_chunk,
+                                   rays_d_[i:i + hparams.model_chunk_size],
+                                   image_indices_[i:i + hparams.model_chunk_size]], 1)
         else:
-            out_geo, out_semantic= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
-    else:
-        out_geo= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+            xyz_chunk = torch.cat([xyz_chunk, rays_d_[i:i + hparams.model_chunk_size]], 1)
+
+        # sigma_noise = torch.rand(len(xyz_chunk), 1, device=xyz_chunk.device) if nerf.training else None
+        sigma_noise=None
+
+        if hparams.enable_semantic:
+            if hparams.dataset_type == 'sam':
+                model_chunk, semantic_chunk, semantic_feature_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+                out_chunks += [model_chunk]
+                out_semantic_chunk += [semantic_chunk]
+                out_semantic_feature_chunk += [semantic_feature_chunk]
+            else:
+                model_chunk, semantic_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+                out_chunks += [model_chunk]
+                out_semantic_chunk += [semantic_chunk]
+                del model_chunk, semantic_chunk
+                gc.collect()
+        else:
+            model_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+            out_chunks += [model_chunk]
 
 
-    out_geo = out_geo.view(N_rays_, N_samples_, out_geo.shape[-1])
+    out = torch.cat(out_chunks, 0)
+    out = out.view(N_rays_, N_samples_, out.shape[-1])
 
-    rgbs = out_geo[..., :3]  # (N_rays, N_samples_, 3)
-    sigmas = out_geo[..., 3]  # (N_rays, N_samples_)
+    rgbs = out[..., :3]  # (N_rays, N_samples_, 3)
+    sigmas = out[..., 3]  # (N_rays, N_samples_)
 
     
 
@@ -294,11 +317,16 @@ def _inference(point_type,
         gradient, normals = extract_gradients(nerf, xyz_, train_iterations, hparams)
 
     if hparams.enable_semantic:
-        out_semantic = out_semantic.view(N_rays_, N_samples_, out_semantic.shape[-1])
-        sem_logits = out_semantic[..., 0:0 + hparams.num_semantic_classes]
+        out_semantic = torch.cat(out_semantic_chunk, 0)
+        out = out_semantic.view(N_rays_, N_samples_, out_semantic.shape[-1])
+        sem_logits = out[..., 0:0 + hparams.num_semantic_classes]
         if hparams.dataset_type == 'sam':
-            sem_feature = out_semantic_feature.view(N_rays_, N_samples_, out_semantic_feature.shape[-1])  
+            out_semantic_fea = torch.cat(out_semantic_feature_chunk, 0)
+            sem_feature = out_semantic_fea.view(N_rays_, N_samples_, out_semantic_fea.shape[-1])  
 
+    del out, out_chunks, out_semantic_chunk
+    gc.collect()
+    torch.cuda.empty_cache()
 
     if 'zvals_coarse' in results:
         # combine coarse and fine samples
