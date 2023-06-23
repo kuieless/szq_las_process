@@ -50,7 +50,7 @@ from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folde
 from gp_nerf.eval_utils import prepare_depth_normal_visual
 
 
-from gp_nerf.sa3d_utils import seg_loss, _generate_index_matrix, prompting_coarse_N
+from gp_nerf.sa3d_utils import seg_loss, _generate_index_matrix, prompting_coarse_N, prompting_coarse
 from tools.segment_anything import sam_model_registry, SamPredictor
 
 
@@ -296,6 +296,8 @@ class Runner:
             non_frozen_parameters = [p for p in self.nerf.parameters() if p.requires_grad]
             optimizers = {}
             optimizers['nerf'] = Adam(non_frozen_parameters, lr=self.hparams.lr)
+            # optimizers['nerf'] = torch.optim.SGD(non_frozen_parameters, lr=self.hparams.lr)
+            
         else:
             optimizers = {}
             optimizers['nerf'] = Adam(self.nerf.parameters(), lr=self.hparams.lr)
@@ -391,7 +393,10 @@ class Runner:
             self.W = dataset.W
         elif self.hparams.dataset_type == 'llff_sa3d':
             self.predictor = init_predictor(self.device)
-            from gp_nerf.datasets.llff_sa3d import NeRFDataset
+            if self.hparams.sa3d_whole_image:
+                from gp_nerf.datasets.llff_sa3d_whole_image import NeRFDataset
+            else:
+                from gp_nerf.datasets.llff_sa3d import NeRFDataset
             dataset = NeRFDataset(self.hparams, device=self.device, type='train', predictor=self.predictor)
             self.H = dataset.H
             self.W = dataset.W
@@ -640,13 +645,24 @@ class Runner:
         else:
             from gp_nerf.rendering_gpnerf import render_rays
         
-        if self.hparams.dataset_type =='llff_sa3d':
+        if self.hparams.dataset_type !='llff_sa3d':
+            results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
+                                                        bg_nerf=self.bg_nerf,
+                                                        rays=rays,
+                                                        image_indices=image_indices,
+                                                        hparams=self.hparams,
+                                                        sphere_center=self.sphere_center,
+                                                        sphere_radius=self.sphere_radius,
+                                                        get_depth=False,
+                                                        get_depth_variance=True,
+                                                        get_bg_fg_rgb=False,
+                                                        train_iterations=train_iterations
+                                                        )
+        else:
             bg_nerf_rays_present=False
             results_chunks = []
             B = rays.shape[0]
             keys = ['rgb_fine', 'sem_map_fine', 'depth_variance_fine']
-            
-
             for i in range(0, B, self.hparams.ray_chunk_size):
                 torch.cuda.empty_cache()
                 ray_chunk = rays[i:i + self.hparams.ray_chunk_size]
@@ -670,32 +686,12 @@ class Runner:
                 # gc.collect()
                 torch.cuda.empty_cache()
                 
-
-            
             H, W = self.H, self.W
             results = {
                 k: torch.cat([ret[k] for ret in results_chunks])#.reshape(H,W,-1)
                 for k in results_chunks[0].keys()
             }
-        else:
-            results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
-                                                        bg_nerf=self.bg_nerf,
-                                                        rays=rays,
-                                                        image_indices=image_indices,
-                                                        hparams=self.hparams,
-                                                        sphere_center=self.sphere_center,
-                                                        sphere_radius=self.sphere_radius,
-                                                        get_depth=False,
-                                                        get_depth_variance=True,
-                                                        get_bg_fg_rgb=False,
-                                                        train_iterations=train_iterations
-                                                        )
-
-        
-        
-        
             
-
         
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
         if not self.hparams.freeze_geo and not ('sam' in self.hparams.dataset_type):
@@ -732,14 +728,23 @@ class Runner:
                     sem_logits = results[f'sem_map_{typ}']
                     loss_sam = seg_loss(labels, None, sem_logits)
                 else:   #其他祯
-                    sem_logits = results[f'sem_map_{typ}']
-                    depth = item['depth'].unsqueeze(-1)  # H * W * 1
-                    sam_feature = item['sam_feature'].squeeze(0).to(self.device)
-                    self.predictor.set_feature(sam_feature, [H, W])
-                    index_matrix = _generate_index_matrix(H, W, depth.detach().clone())  # 【H,W,3】分别存储的是x y depth
-                    selected_points = item['selected_points']
-                    loss_sam, sam_seg_show = prompting_coarse_N(self, H, W, sem_logits, index_matrix, self.hparams.num_semantic_classes, selected_points)
-                    
+                    if self.hparams.sa3d_whole_image:
+                        sem_logits = results[f'sem_map_{typ}'].view(H, W, 1)
+                        # cv2.imwrite("00000.jpg", (sem_logits>0).repeat(1,1,3).cpu().numpy()*255)
+                        depth = item['depth'].view(H, W, 1)
+                        sam_feature = item['sam_feature'].squeeze(0).to(self.device)
+                        self.predictor.set_feature(sam_feature, [H, W])
+                        index_matrix = _generate_index_matrix(H, W, depth.detach().clone())  # 【H,W,3】分别存储的是x y depth
+                        loss_sam, sam_seg_show = prompting_coarse(self, H, W, sem_logits, index_matrix.to(self.device), self.hparams.num_semantic_classes)    
+                    else:
+                        sem_logits = results[f'sem_map_{typ}']
+                        depth = item['depth'].unsqueeze(-1)  # H * W * 1
+                        sam_feature = item['sam_feature'].squeeze(0).to(self.device)
+                        self.predictor.set_feature(sam_feature, [H, W])
+                        index_matrix = _generate_index_matrix(H, W, depth.detach().clone())  # 【H,W,3】分别存储的是x y depth
+                        selected_points = item['selected_points']
+                        loss_sam, sam_seg_show = prompting_coarse_N(self, H, W, sem_logits, index_matrix, self.hparams.num_semantic_classes, selected_points)
+                        
                 metrics['loss_sam'] = loss_sam
                 metrics['loss'] += self.hparams.wgt_sam_loss * loss_sam
             

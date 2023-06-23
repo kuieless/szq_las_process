@@ -390,7 +390,10 @@ class Runner:
             self.W = dataset.W
         elif self.hparams.dataset_type == 'llff_sa3d':
             self.predictor = init_predictor(self.device)
-            from gp_nerf.datasets.llff_sa3d import NeRFDataset
+            if self.hparams.sa3d_whole_image:
+                from gp_nerf.datasets.llff_sa3d_whole_image import NeRFDataset
+            else:
+                from gp_nerf.datasets.llff_sa3d import NeRFDataset
             dataset = NeRFDataset(self.hparams, device=self.device, type='train', predictor=self.predictor)
             self.H = dataset.H
             self.W = dataset.W
