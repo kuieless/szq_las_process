@@ -14,9 +14,6 @@ from gp_nerf.torch_ngp.activation import trunc_exp
 from gp_nerf.models.Plane_module import get_Plane_encoder
 
 
-from tools.sa3d import grid
-
-
 def fc_block(in_f, out_f):
     return torch.nn.Sequential(
         torch.nn.Linear(in_f, out_f),
@@ -49,8 +46,7 @@ class NeRF(nn.Module):
                  xyz_dim: int,  # xyz_dim : fg = 3, bg =4
                  sigma_activation: nn.Module, hparams):
         super(NeRF, self).__init__()
-        
-        
+
         #sam
         self.dataset_type = hparams.dataset_type
         print(f"the dataset_type is :{self.dataset_type}")
@@ -123,11 +119,6 @@ class NeRF(nn.Module):
         self.plane_encoder, self.plane_dim = get_Plane_encoder(hparams)
         self.sigma_net, self.color_net, self.encoder_dir = self.get_nerf_mlp()
         self.sigma_net_bg, self.color_net_bg, self.encoder_dir_bg = self.get_nerf_mlp(nerf_type='bg')
-
-        self.seg_mask_grid = grid.create_grid(
-                'DenseGrid', channels=hparams.num_semantic_classes, world_size=torch.tensor([375,333,261]),
-                xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
-        
 
     def get_nerf_mlp(self, nerf_type='fg'):
         encoding_dir = "sphere_harmonics"
@@ -204,20 +195,19 @@ class NeRF(nn.Module):
             return sigma
 
         # semantic 
-        # if self.enable_semantic:
-        #     input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])  ######
-        #     if self.separate_semantic:
-        #         sem_feature = self.semantic_linear[:-2](input_xyz)   ######
-        #         sem_logits = self.semantic_linear[-2:](sem_feature)   #######
-        #     else:
-        #         if self.stop_semantic_grad:
-        #             h_stop = h.detach()
-        #             sem_logits = self.semantic_linear(torch.cat([h_stop, input_xyz], dim=-1))
-        #         else:
-        #             sem_logits = self.semantic_linear(torch.cat([h, input_xyz], dim=-1))
-        #     if self.use_pano_lift:
-        #         sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
-        sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim]).unsqueeze(-1)
+        if self.enable_semantic:
+            input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])  ######
+            if self.separate_semantic:
+                sem_feature = self.semantic_linear[:-2](input_xyz)   ######
+                sem_logits = self.semantic_linear[-2:](sem_feature)   #######
+            else:
+                if self.stop_semantic_grad:
+                    h_stop = h.detach()
+                    sem_logits = self.semantic_linear(torch.cat([h_stop, input_xyz], dim=-1))
+                else:
+                    sem_logits = self.semantic_linear(torch.cat([h, input_xyz], dim=-1))
+            if self.use_pano_lift:
+                sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
 
         # color
         d = x[:, self.xyz_dim:-1]
@@ -252,21 +242,19 @@ class NeRF(nn.Module):
         geo_feat = h[..., 1:]
 
         # semantic 
-        # if self.enable_semantic:
-        #     input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
-        #     if self.separate_semantic:
-        #         sem_feature = self.semantic_linear_bg[:-2](input_xyz)
-        #         sem_logits = self.semantic_linear_bg[-2](sem_feature)
-        #     else:
-        #         if self.stop_semantic_grad:
-        #             h_stop = h.detach()
-        #             sem_logits = self.semantic_linear_bg(torch.cat([h_stop, input_xyz], dim=-1))
-        #         else:
-        #             sem_logits = self.semantic_linear_bg(torch.cat([h, input_xyz], dim=-1))
-        #     if self.use_pano_lift:
-        #         sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
-        
-        sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim]).unsqueeze(-1)
+        if self.enable_semantic:
+            input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
+            if self.separate_semantic:
+                sem_feature = self.semantic_linear_bg[:-2](input_xyz)
+                sem_logits = self.semantic_linear_bg[-2](sem_feature)
+            else:
+                if self.stop_semantic_grad:
+                    h_stop = h.detach()
+                    sem_logits = self.semantic_linear_bg(torch.cat([h_stop, input_xyz], dim=-1))
+                else:
+                    sem_logits = self.semantic_linear_bg(torch.cat([h, input_xyz], dim=-1))
+            if self.use_pano_lift:
+                sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
 
 
         # color

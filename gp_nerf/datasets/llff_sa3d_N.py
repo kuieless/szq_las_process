@@ -306,6 +306,7 @@ class NeRFDataset:
 
 
     def __getitem__(self, index):
+        # index = 0
         occluded_threshold=0.01
         # print(index)
         poses1 = self.poses[index].to(self.device).unsqueeze(0) # [B, 4, 4]
@@ -377,42 +378,62 @@ class NeRFDataset:
                 # masks_max = masks_max * ~bool_tensor.to(self.device)  
 
 
-                # mask_size = masks_max.nonzero().size(0)
-                # N_sample = min(int(self.N_total), mask_size)
-                # selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
-                # selected_points.append(selected_point)
+                mask_size = masks_max.nonzero().size(0)
+                N_sample = min(int(self.N_total), mask_size)
+                selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
+                selected_points.append(selected_point)
                 
                 self._labels[masks_max] = 1
             
             
-            # if len(selected_points) == 0:
-            #     return None
-            # else:
-            #     selected_points = torch.cat(selected_points)
-            # #从整张图像中采样
-            # bool_tensor = self._labels.bool().to(self.device)
-            # selected_points1_num = min(1024, torch.sum(~bool_tensor))
-            # selected_points1 = torch.nonzero(~bool_tensor)[torch.randint(high=torch.sum(~bool_tensor), size=(selected_points1_num,))]
-            # if selected_points1.size(0) == 0: 
-            #     pass
-            # else:
-            #     selected_points = torch.cat([selected_points, selected_points1], dim=0)
+            if len(selected_points) == 0:
+                return None
+            else:
+                selected_points = torch.cat(selected_points)
+            #从整张图像中采样
+            bool_tensor = self._labels.bool().to(self.device)
+            selected_points1_num = min(2048, torch.sum(~bool_tensor))
+            selected_points1 = torch.nonzero(~bool_tensor)[torch.randint(high=torch.sum(~bool_tensor), size=(selected_points1_num,))]
+            if selected_points1.size(0) == 0: 
+                pass
+            else:
+                selected_points = torch.cat([selected_points, selected_points1], dim=0)
             
             labels = self._labels.view(-1)
+            if self.visualization:
+
+                save_dir = f'zyq/project'
+                Path(save_dir).parent.mkdir(exist_ok=True)
+                Path(save_dir).mkdir(exist_ok=True)
+                (Path(save_dir) / "sample").mkdir(exist_ok=True)
+                rgb_array = np.stack([self._labels.bool(), self._labels.bool(), self._labels.bool()], axis=2)* 255
+                image_cat = np.concatenate([img, rgb_array], axis=1)
+                cv2.imwrite(f"{save_dir}/first_{self.num_save}.jpg", image_cat)
+
+                visual = self._labels
+                visual = visual.cpu().numpy()
+                rgb_array = np.stack([visual, visual, visual], axis=2)* 255
+                
+                for k in range(selected_points.size(0)):  # H, W
+                    x, y = selected_points[k, 0], selected_points[k, 1]
+                    if x < H and x >0 and y < W and y >0:
+                        rgb_array[x, y] = np.array([0, 128, 0])
+
+                cv2.imwrite(f"{save_dir}/first_sample_{self.num_save}.jpg", rgb_array)
+
+                self.num_save = self.num_save + 1
 
         else:
+            #从整张图像中采样
+            bool_tensor = self._labels.bool().to(self.device)
+            selected_points1_num = min(2048+self.N_total, torch.sum(~bool_tensor))
+            selected_points1 = torch.nonzero(~bool_tensor)[torch.randint(high=torch.sum(~bool_tensor), size=(selected_points1_num,))]
+            selected_points.append(selected_points1)
+            selected_points = torch.cat([selected_points1], dim=0)
+            
             labels = None
 
-        if self.visualization:
-
-            save_dir = f'zyq/project'
-            Path(save_dir).parent.mkdir(exist_ok=True)
-            Path(save_dir).mkdir(exist_ok=True)
-            (Path(save_dir) / "sample").mkdir(exist_ok=True)
-            rgb_array = np.stack([self._labels.bool(), self._labels.bool(), self._labels.bool()], axis=2)* 255
-            image_cat = np.concatenate([img, rgb_array], axis=1)
-            cv2.imwrite(f"{save_dir}/first_{self.num_save}.jpg", image_cat)
-            self.num_save = self.num_save + 1
+        
 
         near = torch.zeros((rays_o.shape[0],1), dtype=torch.int32)
         far = 10 * torch.ones((rays_o.shape[0],1), dtype=torch.int32)
@@ -423,10 +444,8 @@ class NeRFDataset:
         
 
 
-        # if selected_points != []:
-        #     images = images.view(H, W, -1)[selected_points[:, 0], selected_points[:, 1]]
-        #     rays = rays.view(H, W, -1)[selected_points[:, 0], selected_points[:, 1]]
-        #     labels = labels.view(H, W)[selected_points[:, 0], selected_points[:, 1]]
+        images = images.view(H, W, -1)[selected_points[:, 0], selected_points[:, 1]]
+        rays = rays.view(H, W, -1)[selected_points[:, 0], selected_points[:, 1]]
 
         img_indices = index * torch.ones(images.shape[0], dtype=torch.int32)
         item = {
@@ -434,12 +453,15 @@ class NeRFDataset:
                 'rays': rays, 
                 'img_indices': img_indices,
                 } 
+        
         if labels is not None:
+            labels = labels.view(H, W)[selected_points[:, 0], selected_points[:, 1]]
             item['labels'] = labels
-        item['depth'] = torch.tensor(depth_map).view(-1)
-        item['sam_feature'] = sam_feature.cpu()
-        # if index == 0:
-        #     item['labels'] = labels
+
+        if index !=0:
+            item['depth'] = torch.tensor(depth_map)#[selected_points[:, 0], selected_points[:, 1]]
+            item['selected_points']=selected_points
+            item['sam_feature'] = sam_feature.cpu()
 
         return item
         

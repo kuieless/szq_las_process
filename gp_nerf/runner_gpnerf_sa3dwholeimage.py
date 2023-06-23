@@ -50,11 +50,10 @@ from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folde
 from gp_nerf.eval_utils import prepare_depth_normal_visual
 
 
-from gp_nerf.sa3d_utils import seg_loss, _generate_index_matrix, prompting_coarse_N
+from gp_nerf.sa3d_utils import seg_loss, _generate_index_matrix, prompting_coarse
 from tools.segment_anything import sam_model_registry, SamPredictor
 
 
-to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 
 
 def get_n_params(model):
@@ -520,7 +519,6 @@ class Runner:
                     optimizer.zero_grad(set_to_none=True)
 
                 scaler.scale(metrics['loss']).backward()   # 在这之后用torch.cuda.empty_cache() 有效
-                
                 if self.hparams.clip_grad_max != 0:
                     torch.nn.utils.clip_grad_norm_(self.nerf.parameters(), self.hparams.clip_grad_max)
 
@@ -555,7 +553,7 @@ class Runner:
             
                 if (train_iterations > 0 and train_iterations % self.hparams.val_interval == 0) or train_iterations == self.hparams.train_iterations:
                     val_metrics = self._run_validation(train_iterations)
-                    if 'llff' not in self.hparams.dataset_type:
+                    if self.hparams.dataset_type != 'llff':
                         self._write_final_metrics(val_metrics, train_iterations)
                 
                 
@@ -732,13 +730,12 @@ class Runner:
                     sem_logits = results[f'sem_map_{typ}']
                     loss_sam = seg_loss(labels, None, sem_logits)
                 else:   #其他祯
-                    sem_logits = results[f'sem_map_{typ}']
-                    depth = item['depth'].unsqueeze(-1)  # H * W * 1
+                    sem_logits = results[f'sem_map_{typ}'].view(H, W, 1)
+                    depth = item['depth'].view(H, W, 1)
                     sam_feature = item['sam_feature'].squeeze(0).to(self.device)
                     self.predictor.set_feature(sam_feature, [H, W])
                     index_matrix = _generate_index_matrix(H, W, depth.detach().clone())  # 【H,W,3】分别存储的是x y depth
-                    selected_points = item['selected_points']
-                    loss_sam, sam_seg_show = prompting_coarse_N(self, H, W, sem_logits, index_matrix, self.hparams.num_semantic_classes, selected_points)
+                    loss_sam, sam_seg_show = prompting_coarse(self, H, W, sem_logits, index_matrix, self.hparams.num_semantic_classes)
                     
                 metrics['loss_sam'] = loss_sam
                 metrics['loss'] += self.hparams.wgt_sam_loss * loss_sam
@@ -907,12 +904,9 @@ class Runner:
                     if self.hparams.enable_semantic:
                         if f'sem_map_{typ}' in results:
                             sem_logits = results[f'sem_map_{typ}']
-                            if self.hparams.dataset_type == 'llff':
-                                sem_label = self.logits_2_label(sem_logits)
-                                visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-                                img_list.append(torch.from_numpy(visualize_sem))
-                            else:
-                                img_list.append((sem_logits>0).view(*viz_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+                            sem_label = self.logits_2_label(sem_logits)
+                            visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                            img_list.append(torch.from_numpy(visualize_sem))
 
                     if f'depth_{typ}' in results:
                         depth_map = results[f'depth_{typ}']

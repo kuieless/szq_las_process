@@ -8,9 +8,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch import Tensor
-from tools.sa3d.self_prompting import mask_to_prompt
+from tools.sa3d.self_prompting import mask_to_prompt_N, mask_to_prompt
 from typing import Optional
-
+import cv2
+to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 
 def to_tensor(array, device=torch.device('cuda')):
     '''cvt numpy array to cuda tensor, if already tensor, do nothing
@@ -42,14 +43,14 @@ def seg_loss(mask: Tensor, selected_mask: Optional[Tensor], seg_m: Tensor, lamda
 
     # mask_loss = -(to_tensor(mask, device) * seg_m.squeeze(-1)).sum()
     # out_mask_loss = lamda * ((1 - to_tensor(mask, device)) * seg_m.squeeze(-1)).sum()
+    device = seg_m.device
     
     if selected_mask is not None:     #selected_mask   选择sam的mask中得分最高的一个
-        device = seg_m.device
         mask_loss = -(to_tensor(mask[selected_mask], device) * seg_m.squeeze(-1)).sum()
         out_mask_loss = lamda * (to_tensor(1 - mask[selected_mask], device) * seg_m.squeeze(-1)).sum()
     else:
-        mask_loss = -(mask * seg_m.squeeze(-1)).sum()
-        out_mask_loss = lamda * ((1 - mask) * seg_m.squeeze(-1)).sum()
+        mask_loss = -(to_tensor(mask, device) * seg_m.squeeze(-1)).sum()
+        out_mask_loss = lamda * (to_tensor(1 - mask, device) * seg_m.squeeze(-1)).sum()
 
 
     return mask_loss + out_mask_loss
@@ -80,6 +81,67 @@ def cal_IoU(a: Tensor, b: Tensor) -> Tensor:
     intersection = torch.count_nonzero(torch.logical_and(a == b, a != 0))
     union = torch.count_nonzero(a + b)
     return intersection / union
+
+# 采样N个点
+def prompting_coarse_N(self, H, W, seg_m, index_matrix, num_obj, selected_points=None):
+        '''TODO, for coarse stage, we use the self-prompting method to generate the prompt and mask'''
+        seg_m_clone = seg_m.detach().clone()
+        seg_m_for_prompt = seg_m_clone
+        # kernel_size = 3
+        # padding = kernel_size // 2
+        # seg_m_for_prompt = torch.nn.functional.avg_pool2d(seg_m_clone.permute([2,0,1]).unsqueeze(0), kernel_size, stride = 1, padding = padding)
+        # seg_m_for_prompt = seg_m_for_prompt.squeeze(0).permute([1,2,0])
+
+        loss = 0
+
+        for num in range(num_obj):
+            with torch.no_grad():
+                # self-prompting
+                prompt_points, input_label = mask_to_prompt_N(predictor = self.predictor, rendered_mask_score = seg_m_for_prompt, 
+                                                            index_matrix = index_matrix, num_prompts = 20, selected_points=selected_points)
+
+                masks, selected = None, -1
+                if len(prompt_points) != 0:
+                    masks, scores, logits = self.predictor.predict(
+                        point_coords=prompt_points,
+                        point_labels=input_label,
+                        multimask_output=False,
+                    )
+                    selected = np.argmax(scores)
+
+            if num == 0:
+                # used for single object only
+                sam_seg_show = masks[selected].astype(np.float32) if masks is not None else np.zeros((H,W))
+                sam_seg_show = np.stack([sam_seg_show,sam_seg_show,sam_seg_show], axis = -1)
+                r = 8
+                for ip, point in enumerate(prompt_points):
+                    sam_seg_show[point[1]-r : point[1]+r, point[0] - r : point[0]+r, :] = 0
+                    if ip < 3:
+                        sam_seg_show[point[1]-r : point[1]+r, point[0] - r : point[0]+r, ip] = 1
+                    else:
+                        sam_seg_show[point[1]-r : point[1]+r, point[0] - r : point[0]+r, -1] = 1
+                    
+            cv2.imwrite("00000.jpg", to8b(masks[0]))
+            if masks is not None:
+                # tmp_seg_m = seg_m[:,:,num]
+                # tmp_rendered_mask = tmp_seg_m.detach().clone()
+                # tmp_rendered_mask[torch.logical_or(tmp_rendered_mask <= tmp_rendered_mask.mean(), tmp_rendered_mask <= 0)] = 0
+                # tmp_rendered_mask[tmp_rendered_mask != 0] = 1
+                # tmp_IoU = cal_IoU(torch.as_tensor(masks[selected]).float(), tmp_rendered_mask)
+                # print(f"current IoU is: {tmp_IoU}")
+                # if tmp_IoU < 0.5:
+                #     print("SKIP, unacceptable sam prediction, IoU is", tmp_IoU)
+                #     continue
+                
+                masks = masks[selected]
+                selected_point_numpy = selected_points.cpu().numpy()
+                masks = masks[selected_point_numpy[:, 0], selected_point_numpy[:, 1]]
+                loss += seg_loss(masks, None, seg_m)
+                for neg_i in range(seg_m.shape[-1]):
+                    if neg_i == num:
+                        continue
+                    loss += (torch.tensor(masks[selected]).to(seg_m.device) * seg_m[:,:,neg_i]).sum()
+        return loss, sam_seg_show
 
 
 def prompting_coarse(self, H, W, seg_m, index_matrix, num_obj):

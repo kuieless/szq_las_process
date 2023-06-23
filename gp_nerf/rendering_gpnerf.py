@@ -151,7 +151,7 @@ def render_rays(nerf: nn.Module,
                 results[f'bg_{key}_{typ}'] = torch.zeros_like(val)
 
     bg_nerf_rays_present = False
-
+    
     return results, bg_nerf_rays_present
     # return results
 
