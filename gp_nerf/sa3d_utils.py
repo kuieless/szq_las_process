@@ -107,7 +107,7 @@ def prompting_coarse_N(self, H, W, seg_m, index_matrix, num_obj, selected_points
                         multimask_output=False,
                     )
                     selected = np.argmax(scores)
-            cv2.imwrite("00000.jpg", to8b(masks[selected]))
+                    # cv2.imwrite("00000.jpg", to8b(masks[selected]))
 
             if num == 0:
                 # used for single object only
@@ -120,9 +120,8 @@ def prompting_coarse_N(self, H, W, seg_m, index_matrix, num_obj, selected_points
                         sam_seg_show[point[1]-r : point[1]+r, point[0] - r : point[0]+r, ip] = 1
                     else:
                         sam_seg_show[point[1]-r : point[1]+r, point[0] - r : point[0]+r, -1] = 1
-            cv2.imwrite("00002.jpg", to8b(sam_seg_show))
+                    cv2.imwrite("00002.jpg", to8b(sam_seg_show))
             
-            # cv2.imwrite("00000.jpg", to8b(masks[0]))
             if masks is not None:
                 # tmp_seg_m = seg_m[:,:,num]
                 # tmp_rendered_mask = tmp_seg_m.detach().clone()
@@ -170,7 +169,7 @@ def prompting_coarse(self, H, W, seg_m, index_matrix, num_obj):
                         multimask_output=False,
                     )
                     selected = np.argmax(scores)
-            cv2.imwrite("00000.jpg", to8b(masks[selected]))
+                    # cv2.imwrite("00000.jpg", to8b(masks[selected]))
             if num == 0:
                 # used for single object only
                 sam_seg_show = masks[selected].astype(np.float32) if masks is not None else np.zeros((H,W))
@@ -182,12 +181,12 @@ def prompting_coarse(self, H, W, seg_m, index_matrix, num_obj):
                         sam_seg_show[point[1]-r : point[1]+r, point[0] - r : point[0]+r, ip] = 1
                     else:
                         sam_seg_show[point[1]-r : point[1]+r, point[0] - r : point[0]+r, -1] = 1
-            cv2.imwrite("00002.jpg", to8b(sam_seg_show))
+                # cv2.imwrite("00002.jpg", to8b(sam_seg_show))
 
 
             if masks is not None:
                 tmp_seg_m = seg_m[:,:,num]
-                cv2.imwrite("00001.jpg", (seg_m>0).repeat(1,1,3).cpu().numpy()*255)
+                # cv2.imwrite("00001.jpg", (seg_m>0).repeat(1,1,3).cpu().numpy()*255)
                 tmp_rendered_mask = tmp_seg_m.detach().clone()
                 tmp_rendered_mask[torch.logical_or(tmp_rendered_mask <= tmp_rendered_mask.mean(), tmp_rendered_mask <= 0)] = 0
                 tmp_rendered_mask[tmp_rendered_mask != 0] = 1

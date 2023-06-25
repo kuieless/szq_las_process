@@ -5,9 +5,9 @@ export CUDA_VISIBLE_DEVICES=7
 exp_name='logs_357/0623_horns_mlp_X'
 
 batch_size=1
-train_iterations=5000
-val_interval=5000
-ckpt_interval=5000
+train_iterations=500
+val_interval=500
+ckpt_interval=500
 sample_ray_num=8192
 
 enable_semantic=True
@@ -19,7 +19,7 @@ aabb_bound=1
 use_densegrid_mask=False
 sa3d_whole_image=False
 
-python gp_nerf/train.py   --semantic_layer_dim  128     --num_layers_semantic_hidden   1     \
+python gp_nerf/train.py   --semantic_layer_dim  256     --num_layers_semantic_hidden   3     \
         --use_densegrid_mask  $use_densegrid_mask --sa3d_whole_image  $sa3d_whole_image  \
         --num_semantic_classes   $num_semantic_classes  \
         --ckpt_path   $ckpt_path   --freeze_geo   True     --aabb_bound   $aabb_bound  --sample_ray_num  $sample_ray_num  \

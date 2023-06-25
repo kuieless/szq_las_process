@@ -29,13 +29,17 @@ def semantic_mlp(in_f, out_f, dim_mlp, num_hidden):
 
     for i in range(num_hidden):
         semantic_linears.append(torch.nn.ReLU(inplace=False))
-        # semantic_linears.append(torch.nn.LeakyReLU(inplace=True))
+        # semantic_linears.append(torch.nn.LeakyReLU())
         # semantic_linears.append(torch.nn.PReLU())
+        # semantic_linears.append(torch.nn.Softplus())
+
+
         semantic_linears.append(torch.nn.Linear(dim_mlp, dim_mlp))
         
     semantic_linears.append(torch.nn.ReLU(inplace=False))
+    # semantic_linears.append(torch.nn.LeakyReLU())
     # semantic_linears.append(torch.nn.PReLU())
-    semantic_linears.append(torch.nn.Softplus())
+    # semantic_linears.append(torch.nn.Softplus())
 
     semantic_linears.append(torch.nn.Linear(dim_mlp, out_f))
     return torch.nn.Sequential(*semantic_linears)
@@ -88,7 +92,22 @@ class NeRF(nn.Module):
                 print('add the semantic head to nerf')
                 self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
                 self.semantic_linear_bg = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
-
+            # for module in self.semantic_linear.modules():
+            #     if isinstance(module, nn.Linear):
+            #         # 使用零初始化将权重设置为零
+            #         nn.init.zeros_(module.weight)
+            #         # 使用零初始化将偏置项设置为零
+            #         nn.init.zeros_(module.bias)
+            # for module in self.semantic_linear_bg.modules():
+            #     if isinstance(module, nn.Linear):
+            #         # 使用零初始化将权重设置为零
+            #         nn.init.zeros_(module.weight)
+            #         # 使用零初始化将偏置项设置为零
+            #         nn.init.zeros_(module.bias)
+            # for name, param in self.semantic_linear.named_parameters():
+            #     print(f'{name}: {param.data}')
+            # for name, param in self.semantic_linear_bg.named_parameters():
+            #     print(f'{name}: {param.data}')
         #hash
         base_resolution = hparams.base_resolution
         desired_resolution = hparams.desired_resolution

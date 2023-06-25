@@ -401,6 +401,13 @@ class Runner:
             dataset = NeRFDataset(self.hparams, device=self.device, type='train', predictor=self.predictor)
             self.H = dataset.H
             self.W = dataset.W
+        elif self.hparams.dataset_type == 'mega_sa3d':
+            self.predictor = init_predictor(self.device)
+            from gp_nerf.datasets.mega_sa3d_whole_image import MemoryDataset_SAM_sa3d
+            dataset = MemoryDataset_SAM_sa3d(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams, predictor=self.predictor)
+            self.H = dataset.H
+            self.W = dataset.W
         else:
             raise Exception('Unrecognized dataset type: {}'.format(self.hparams.dataset_type))
 
@@ -435,7 +442,7 @@ class Runner:
                 elif self.hparams.dataset_type == 'memory_depth':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
                                                 pin_memory=False)
-                elif 'llff' in self.hparams.dataset_type:
+                elif 'llff' in self.hparams.dataset_type or self.hparams.dataset_type =='mega_sa3d':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 else:
@@ -496,7 +503,7 @@ class Runner:
                     else:
                         labels = None
 
-                    if 'sam' in self.hparams.dataset_type:
+                    if 'sam' in self.hparams.dataset_type or self.hparams.dataset_type == 'mega_sa3d':
                         rgbs = None
                         if self.hparams.group_loss:
                             groups = item['groups'].to(self.device, non_blocking=True)
@@ -511,6 +518,9 @@ class Runner:
                         item['rays'].to(self.device, non_blocking=True),
                         item['img_indices'].to(self.device, non_blocking=True), 
                         labels, groups, train_iterations, item)
+                    
+                    if metrics == None and self.hparams.dataset_type == 'mega_sa3d':
+                        continue
 
                     with torch.no_grad():
                         for key, val in metrics.items():
@@ -646,7 +656,7 @@ class Runner:
         else:
             from gp_nerf.rendering_gpnerf import render_rays
         
-        if self.hparams.dataset_type !='llff_sa3d':
+        if 'sa3d' not in self.hparams.dataset_type:
             results, bg_nerf_rays_present = render_rays(nerf=self.nerf,
                                                         bg_nerf=self.bg_nerf,
                                                         rays=rays,
@@ -724,9 +734,10 @@ class Runner:
 
         #semantic loss
         if self.hparams.enable_semantic:
-            if self.hparams.dataset_type == 'llff_sa3d':
+            if 'sa3d' in self.hparams.dataset_type:
                 if labels is not None:  # 第一祯
                     sem_logits = results[f'sem_map_{typ}']
+                    # print(sem_logits.unique())
                     loss_sam = seg_loss(labels, None, sem_logits)
 
                     ###  查看第一祯的监督，正常（从grid训练正常也能判断）
@@ -739,6 +750,9 @@ class Runner:
                 else:   #其他祯
                     if self.hparams.sa3d_whole_image:
                         sem_logits = results[f'sem_map_{typ}'].view(H, W, 1)
+                        if sem_logits.max() < 0:
+                            print('There is no positive value in sem_logits')
+                            return None, None
                         # cv2.imwrite("00001.jpg", (sem_logits>0).repeat(1,1,3).cpu().numpy()*255)
                         depth = item['depth'].view(H, W, 1)
                         # set feature
@@ -763,7 +777,9 @@ class Runner:
                         index_matrix = _generate_index_matrix(H, W, depth.detach().clone())  # 【H,W,3】分别存储的是x y depth
                         selected_points = item['selected_points']
                         loss_sam, sam_seg_show = prompting_coarse_N(self, H, W, sem_logits, index_matrix, self.hparams.num_semantic_classes, selected_points)
-                        
+                    if loss_sam == 0:
+                        return None, None
+
                 metrics['loss_sam'] = loss_sam
                 metrics['loss'] += self.hparams.wgt_sam_loss * loss_sam
             
@@ -867,10 +883,13 @@ class Runner:
         if 'llff' in self.hparams.dataset_type:
             from gp_nerf.rendering_gpnerf import render_rays
             with torch.inference_mode():
+                
                 from gp_nerf.datasets.llff import NeRFDataset
                 dataset = NeRFDataset(self.hparams, device=self.device, type='test')
                 data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
                                                 pin_memory=False)
+                
+                
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
@@ -922,8 +941,13 @@ class Runner:
                     # Image.fromarray(viz_result_rgbs*255).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % dataset_index)))
                     # viz_result_rgbs = (viz_result_rgbs.numpy()*255)[:,:,::-1]
                     # viz_result_rgbs = viz_result_rgbs[:,:,::-1]
-                    viz_rgbs = item['rgbs'].view(*viz_result_rgbs.shape)
-                    img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+                    if 'rgbs' in item:
+                        viz_rgbs = item['rgbs'].view(*viz_result_rgbs.shape)
+                        img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+                    else:
+                        img_list = [viz_result_rgbs * 255]
+
+                    
                     
                     # cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % dataset_index)), viz_result_rgbs)
                     # cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_gt.jpg" % dataset_index)), (item['rgbs'].view(*viz_result_rgbs.shape).numpy()*255)[:,:,::-1])
@@ -933,10 +957,10 @@ class Runner:
                             sem_logits = results[f'sem_map_{typ}']
                             if self.hparams.dataset_type == 'llff':
                                 sem_label = self.logits_2_label(sem_logits)
-                                visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                                visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
                                 img_list.append(torch.from_numpy(visualize_sem))
                             else:
-                                img_list.append((sem_logits>0).view(*viz_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+                                img_list.append((sem_logits>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
 
                     if f'depth_{typ}' in results:
                         depth_map = results[f'depth_{typ}']
@@ -951,17 +975,88 @@ class Runner:
                         depth_clamp = depth_map
 
                         depth_vis = torch.from_numpy(Runner.visualize_scalars(
-                            torch.log(depth_clamp + 1e-8).view(*viz_rgbs.shape[:-1]).cpu()))
+                            torch.log(depth_clamp + 1e-8).view(*viz_result_rgbs.shape[:-1]).cpu()))
                         img_list.append(depth_vis)
                     
                     
-                    img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                    img_list = [torch.zeros_like(viz_result_rgbs) if element is None else element for element in img_list]
                     img_list = torch.stack(img_list).permute(0,3,1,2)
                     img = make_grid(img_list, nrow=3)
                     img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
                     Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % dataset_index)))
 
+        elif self.hparams.dataset_type == 'mega_sa3d':
+            with torch.inference_mode():
+                val_type = self.hparams.val_type  # train  val
+                print('val_type: ', val_type)
+                if val_type == 'val':
+                    if 'residence'in self.hparams.dataset_path:
+                        self.val_items=self.val_items[:19]
+                    elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                        self.val_items=self.val_items[:10]
+                    # self.val_items=self.val_items[:2]
+                    indices_to_eval = np.arange(len(self.val_items))
+                elif val_type == 'train':
+                    # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
+                    indices_to_eval = [0] #np.arange(len(self.train_items)) 
+                
+                experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                Path(str(experiment_path_current)).mkdir()
+                Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+
+                for i in main_tqdm(indices_to_eval):
+                    if val_type == 'val':
+                        metadata_item = self.val_items[i]
+                    elif val_type == 'train':
+                        metadata_item = self.train_items[i]
+
+                    results, _ = self.render_image(metadata_item, train_index)
+
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    viz_result_rgbs = results[f'rgb_{typ}'].view(self.H, self.W, 3).cpu()
+                    # Image.fromarray(viz_result_rgbs*255).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+                    # viz_result_rgbs = (viz_result_rgbs.numpy()*255)[:,:,::-1]
+                    # viz_result_rgbs = viz_result_rgbs[:,:,::-1]
+                    img_list = [viz_result_rgbs * 255]
+
                     
+                    
+                    # cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)), viz_result_rgbs)
+                    # cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_gt.jpg" % i)), (item['rgbs'].view(*viz_result_rgbs.shape).numpy()*255)[:,:,::-1])
+                    
+                    if self.hparams.enable_semantic:
+                        if f'sem_map_{typ}' in results:
+                            sem_logits = results[f'sem_map_{typ}']
+                            if self.hparams.dataset_type == 'llff':
+                                sem_label = self.logits_2_label(sem_logits)
+                                visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
+                                img_list.append(torch.from_numpy(visualize_sem))
+                            else:
+                                img_list.append((sem_logits>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+
+                    if f'depth_{typ}' in results:
+                        depth_map = results[f'depth_{typ}']
+                        # if f'fg_depth_{typ}' in results:
+                        #     to_use = results[f'fg_depth_{typ}'].view(-1)
+                        #     while to_use.shape[0] > 2 ** 24:
+                        #         to_use = to_use[::2]
+                        #     ma = torch.quantile(to_use, 0.95)
+                        #     depth_clamp = depth_map.clamp_max(ma)
+                        # else:
+                        #     depth_clamp = depth_map
+                        depth_clamp = depth_map
+
+                        depth_vis = torch.from_numpy(Runner.visualize_scalars(
+                            torch.log(depth_clamp + 1e-8).view(*viz_result_rgbs.shape[:-1]).cpu()))
+                        img_list.append(depth_vis)
+                    
+                    
+                    img_list = [torch.zeros_like(viz_result_rgbs) if element is None else element for element in img_list]
+                    img_list = torch.stack(img_list).permute(0,3,1,2)
+                    img = make_grid(img_list, nrow=3)
+                    img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+
         else:
             if 'residence'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
                 from tools.unetformer.uavid2rgb import remapping_remove_ground as remapping
@@ -1536,7 +1631,7 @@ class Runner:
                 sam_feature_path = candidate
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, sam_feature_path)
-        elif self.hparams.dataset_type == 'sam_project':
+        elif self.hparams.dataset_type == 'sam_project' or self.hparams.dataset_type == 'mega_sa3d':
             sam_feature_path = None
             candidate = metadata_path.parent.parent / 'sam_features' / '{}.npy'.format(metadata_path.stem)
             if candidate.exists():
