@@ -41,7 +41,7 @@ class MemoryDataset_SAM_sa3d(Dataset):
         print(f"train_on_1_val_corresponding_images: {hparams.debug_one_images_sam}")
 
         
-
+        self.num_semantic_classes = hparams.num_semantic_classes
         self.online_sam_label = hparams.online_sam_label
         self.visualization = False
         
@@ -145,16 +145,17 @@ class MemoryDataset_SAM_sa3d(Dataset):
         self.random_points = []
         self.num_save=0
         self.random_points = [
-                            #   torch.tensor([[105, 690 ]]), 
-                            #   torch.tensor([[460, 1075]]), 
+                              torch.tensor([[105, 690 ]]), 
+                              torch.tensor([[460, 1075]]), 
                               torch.tensor([[490, 685]]), 
-                            #   torch.tensor([[630, 1150]]), 
-                            #   torch.tensor([[250, 400]]), 
+                              torch.tensor([[630, 1150]]), 
+                              torch.tensor([[250, 400]]), 
                             #   torch.tensor([[101, 171]]), 
                             #   torch.tensor([[775, 103]]), 
                             #   torch.tensor([[40, 1073]])
                             ]
         self.sam_points = []
+        assert len(self.random_points) == self.num_semantic_classes   
         
         if self._is_vals[idx]:
             print('is val')
@@ -186,6 +187,7 @@ class MemoryDataset_SAM_sa3d(Dataset):
         depth_map = (depth_map * self.depth_scale).numpy()
 
         if self.select_origin == True:
+            labels = []
             self.num_depth_process = 27
             self.num_depth_process = self.num_depth_process + 1
 
@@ -194,6 +196,7 @@ class MemoryDataset_SAM_sa3d(Dataset):
 
             # while len(self.world_points) < num_random_points:
             for random_point in self.random_points:
+                temp_labels = torch.zeros((self.H, self.W), dtype=torch.int)
                 
                 # print('select one point to project')
                 self.object_id = self.object_id + 1
@@ -239,9 +242,15 @@ class MemoryDataset_SAM_sa3d(Dataset):
                 # selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
                 # selected_points.append(selected_point)
                 self._labels[idx][masks_max] = self.object_id
+                temp_labels[masks_max]=1
+                labels.append(temp_labels.view(-1))
+
+
             self.select_origin = False   
-            labels = self._labels[idx].view(-1)
-            if self.visualization:
+            # labels = self._labels[idx].view(-1)
+            labels = torch.stack(labels, dim=1)
+
+            if self.visualization and idx == 27:
 
                 save_dir = f'zyq/project'
                 Path(save_dir).parent.mkdir(exist_ok=True)

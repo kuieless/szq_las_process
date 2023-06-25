@@ -2,7 +2,7 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=6
 
-exp_name='logs_357/0623_horns_grid_X'
+exp_name='logs_357/0625_horns_grid_3obj'
 
 batch_size=1
 train_iterations=500
@@ -14,10 +14,10 @@ enable_semantic=True
 dataset_path=/data/yuqi/Datasets/NeRF/nerf_llff_data/horns 
 ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0618_geo_horns_bound1/0/models/20000.pt
 dataset_type='llff_sa3d'
-num_semantic_classes=1
+num_semantic_classes=3
 aabb_bound=1
 use_densegrid_mask=True
-sa3d_whole_image=False
+sa3d_whole_image=True
 
 python gp_nerf/train.py  --use_densegrid_mask  $use_densegrid_mask --sa3d_whole_image  $sa3d_whole_image  \
         --num_semantic_classes   $num_semantic_classes  \

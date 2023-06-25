@@ -230,7 +230,7 @@ class NeRF(nn.Module):
         # semantic 
         if self.enable_semantic:
             if self.use_densegrid_mask:
-                sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim]).unsqueeze(-1)
+                sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
             else:
                 input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])  ######
                 if self.separate_semantic:
@@ -280,7 +280,7 @@ class NeRF(nn.Module):
         # semantic 
         if self.enable_semantic:
             if self.use_densegrid_mask:
-                sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim]).unsqueeze(-1)
+                sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
             else:
                 input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
                 if self.separate_semantic:

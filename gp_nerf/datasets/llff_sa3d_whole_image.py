@@ -114,7 +114,7 @@ class NeRFDataset:
         self.rand_pose = -1  # opt.rand_pose
 
         self.enable_semantic = opt.enable_semantic
-
+        self.num_semantic_classes = opt.num_semantic_classes
         # auto-detect transforms.json and split mode.
         if os.path.exists(os.path.join(self.root_path, 'transforms.json')):
             self.mode = 'colmap' # manually split, use view-interpolation for test.
@@ -342,14 +342,20 @@ class NeRFDataset:
         
         
         selected_points = []
-        self._labels = torch.zeros((self.H, self.W), dtype=torch.int)
         sam_feature = (self._sam_features[index]).to(self.device)
 
         if index == 0:
+            labels = []
+            self._labels = torch.zeros((self.H, self.W), dtype=torch.int)
+
             # self.random_points = [torch.tensor([[self.H // 2, self.W // 2]])]  # fern
-            self.random_points = [torch.tensor([[self.H // 3, self.W // 3]])]  # horn 
-            # self.random_points = [torch.tensor([[405, 815]])]  # horn 
-            
+            # self.random_points = [torch.tensor([[self.H // 3, self.W // 3]])]  # horn 
+            self.random_points=[
+                                torch.tensor([[405, 815]]),
+                                torch.tensor([[self.H // 3, self.W // 3]]),
+                                torch.tensor([[self.H // 2, 100]]),
+                                ]  # horn 
+            assert len(self.random_points) == self.num_semantic_classes   
             img = self.imgs[index].copy()
 
             
@@ -357,6 +363,7 @@ class NeRFDataset:
             in_labels = np.array([1])
 
             for random_point in self.random_points:
+                temp_labels = torch.zeros((self.H, self.W), dtype=torch.int)
                 visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
                 bool_tensor = torch.zeros((H, W), dtype=torch.int).bool()
 
@@ -381,9 +388,10 @@ class NeRFDataset:
                 # N_sample = min(int(self.N_total), mask_size)
                 # selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
                 # selected_points.append(selected_point)
-                
+                temp_labels[masks_max]=1
                 self._labels[masks_max] = 1
-            
+                labels.append(temp_labels.view(-1))
+
             
             # if len(selected_points) == 0:
             #     return None
@@ -398,12 +406,11 @@ class NeRFDataset:
             # else:
             #     selected_points = torch.cat([selected_points, selected_points1], dim=0)
             
-            labels = self._labels.view(-1)
-
+            labels = torch.stack(labels, dim=1)
         else:
             labels = None
 
-        if self.visualization:
+        if self.visualization and index == 0:
 
             save_dir = f'zyq/project'
             Path(save_dir).parent.mkdir(exist_ok=True)

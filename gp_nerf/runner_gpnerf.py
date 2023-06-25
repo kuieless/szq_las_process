@@ -571,7 +571,7 @@ class Runner:
             
                 if (train_iterations > 0 and train_iterations % self.hparams.val_interval == 0) or train_iterations == self.hparams.train_iterations:
                     val_metrics = self._run_validation(train_iterations)
-                    if 'llff' not in self.hparams.dataset_type:
+                    if 'llff' not in self.hparams.dataset_type and 'sa3d' not in self.hparams.dataset_type:
                         self._write_final_metrics(val_metrics, train_iterations)
                 
                 
@@ -603,7 +603,6 @@ class Runner:
             experiment_path_current = self.experiment_path / "eval_{}".format(train_iterations)
             with (experiment_path_current /'metrics.txt').open('a') as f:
                 for key in val_metrics:
-
                     avg_val = val_metrics[key] / len(self.val_items)
                     if key== 'val/psnr':
                         if self.wandb is not None:
@@ -738,7 +737,9 @@ class Runner:
                 if labels is not None:  # 第一祯
                     sem_logits = results[f'sem_map_{typ}']
                     # print(sem_logits.unique())
-                    loss_sam = seg_loss(labels, None, sem_logits)
+                    loss_sam = 0
+                    for seg_idx in range(sem_logits.shape[-1]):
+                        loss_sam += seg_loss(labels[:, seg_idx], None, sem_logits[:, seg_idx])
 
                     ###  查看第一祯的监督，正常（从grid训练正常也能判断）
                     # tmp_mask = np.zeros((H,W,3))
@@ -749,7 +750,7 @@ class Runner:
 
                 else:   #其他祯
                     if self.hparams.sa3d_whole_image:
-                        sem_logits = results[f'sem_map_{typ}'].view(H, W, 1)
+                        sem_logits = results[f'sem_map_{typ}'].view(H, W, -1)
                         if sem_logits.max() < 0:
                             print('There is no positive value in sem_logits')
                             return None, None
@@ -960,8 +961,11 @@ class Runner:
                                 visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
                                 img_list.append(torch.from_numpy(visualize_sem))
                             else:
-                                img_list.append((sem_logits>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
-
+                                colorize_mask = torch.zeros((self.H, self.W, 3))
+                                for seg_idx in range(sem_logits.shape[-1]):
+                                    img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+                                    colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = torch.randint(0, 255,(3,)).to(torch.float32)
+                                img_list.append(colorize_mask)
                     if f'depth_{typ}' in results:
                         depth_map = results[f'depth_{typ}']
                         # if f'fg_depth_{typ}' in results:
@@ -1032,8 +1036,11 @@ class Runner:
                                 visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
                                 img_list.append(torch.from_numpy(visualize_sem))
                             else:
-                                img_list.append((sem_logits>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
-
+                                colorize_mask = torch.zeros((self.H, self.W, 3))
+                                for seg_idx in range(sem_logits.shape[-1]):
+                                    img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+                                    colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = torch.randint(0, 255,(3,)).to(torch.float32)
+                                img_list.append(colorize_mask)
                     if f'depth_{typ}' in results:
                         depth_map = results[f'depth_{typ}']
                         # if f'fg_depth_{typ}' in results:
