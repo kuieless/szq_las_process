@@ -82,6 +82,7 @@ def init_predictor(device):
     model_type = "vit_h"
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
+    print("SAM initializd.")
     predictor = SamPredictor(sam)
     return predictor
 
@@ -396,7 +397,7 @@ class Runner:
             if self.hparams.sa3d_whole_image:
                 from gp_nerf.datasets.llff_sa3d_whole_image import NeRFDataset
             else:
-                from gp_nerf.datasets.llff_sa3d import NeRFDataset
+                from gp_nerf.datasets.llff_sa3d_N import NeRFDataset
             dataset = NeRFDataset(self.hparams, device=self.device, type='train', predictor=self.predictor)
             self.H = dataset.H
             self.W = dataset.W
@@ -727,13 +728,31 @@ class Runner:
                 if labels is not None:  # 第一祯
                     sem_logits = results[f'sem_map_{typ}']
                     loss_sam = seg_loss(labels, None, sem_logits)
+
+                    ###  查看第一祯的监督，正常（从grid训练正常也能判断）
+                    # tmp_mask = np.zeros((H,W,3))
+                    # selected_points = item['selected_points']
+                    # for index_c in range(len(selected_points)):
+                    #     x, y = selected_points[index_c, 0], selected_points[index_c, 1]
+                    #     tmp_mask[x, y] = [0, 0, 255] if labels[index_c]==1 else [0, 255, 0]
+
                 else:   #其他祯
                     if self.hparams.sa3d_whole_image:
                         sem_logits = results[f'sem_map_{typ}'].view(H, W, 1)
-                        # cv2.imwrite("00000.jpg", (sem_logits>0).repeat(1,1,3).cpu().numpy()*255)
+                        # cv2.imwrite("00001.jpg", (sem_logits>0).repeat(1,1,3).cpu().numpy()*255)
                         depth = item['depth'].view(H, W, 1)
+                        # set feature
                         sam_feature = item['sam_feature'].squeeze(0).to(self.device)
                         self.predictor.set_feature(sam_feature, [H, W])
+                        # set_image
+                        # init_image = item['rgbs'].view(H, W, -1)
+                        # init_image = to8b(init_image.cpu().numpy())
+                        # self.predictor.set_image(init_image)
+                        
+                        # a = torch.HalfTensor(np.load('/data/yuqi/code/SegmentAnythingin3D/depth/0001.npy'))
+                        # b= _generate_index_matrix(H, W, a.detach().clone())
+                        # loss_sam, sam_seg_show = prompting_coarse(self, H, W, sem_logits, b.to(self.device), self.hparams.num_semantic_classes)    
+
                         index_matrix = _generate_index_matrix(H, W, depth.detach().clone())  # 【H,W,3】分别存储的是x y depth
                         loss_sam, sam_seg_show = prompting_coarse(self, H, W, sem_logits, index_matrix.to(self.device), self.hparams.num_semantic_classes)    
                     else:

@@ -306,6 +306,8 @@ class NeRFDataset:
 
 
     def __getitem__(self, index):
+        if self.num_depth_process == self.__len__():
+            return "end"
         occluded_threshold=0.01
         # print(index)
         poses1 = self.poses[index].to(self.device).unsqueeze(0) # [B, 4, 4]
@@ -336,7 +338,7 @@ class NeRFDataset:
         directions = directions.view(self.H, self.W, 3)
         self.depth_scale = torch.abs(directions.cpu()[:, :, 2]) # z-axis's values
         depth_map = self.depths[index].view(self.H, self.W)
-        depth_map = (depth_map * self.depth_scale).numpy()
+        depth_map = (depth_map * self.depth_scale)
         
         
         selected_points = []
@@ -350,8 +352,6 @@ class NeRFDataset:
             
             img = self.imgs[index].copy()
 
-            self.num_depth_process = 0
-            self.num_depth_process = self.num_depth_process + 1
             
             self.predictor.set_feature(sam_feature, [H, W])
             in_labels = np.array([1])
@@ -436,10 +436,11 @@ class NeRFDataset:
                 } 
         if labels is not None:
             item['labels'] = labels
-        item['depth'] = torch.tensor(depth_map).view(-1)
+        item['depth'] = depth_map.view(-1)
         item['sam_feature'] = sam_feature.cpu()
         # if index == 0:
         #     item['labels'] = labels
+        self.num_depth_process = self.num_depth_process + 1
 
         return item
         

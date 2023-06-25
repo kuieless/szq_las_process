@@ -12,7 +12,7 @@ import os
 import torch
 import math
 import numpy as np
-
+import cv2
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 
 @torch.no_grad()
@@ -46,7 +46,10 @@ def mask_to_prompt_N(predictor, rendered_mask_score, index_matrix, num_prompts =
         tmp_mask[x, y] = rendered_mask_score[index_c]
     # tmp_mask = rendered_mask_score.clone().detach()
     # NOTE 下面这个部分具体看的不是很明白，大概作用是mask out the last prompt point
-    area = to8b(tmp_mask.cpu().numpy()).sum() / 255
+    # area = to8b(tmp_mask.cpu().numpy()).sum() / 255
+    area = ((255*(tmp_mask.cpu().numpy()>0)).astype(np.uint8)).sum() / 255
+
+    
     r = np.sqrt(area / math.pi)
     masked_r = max(int(r) // 2, 2)
     
@@ -127,10 +130,12 @@ def mask_to_prompt(predictor, rendered_mask_score, index_matrix, num_prompts = 3
 
     tmp_mask = rendered_mask_score.clone().detach()
     # NOTE 下面这个部分具体看的不是很明白，大概作用是mask out the last prompt point
-    area = to8b(tmp_mask.cpu().numpy()).sum() / 255
+    # area = to8b(tmp_mask.cpu().numpy()).sum() / 255
+    area = ((255*(tmp_mask.cpu().numpy()>0)).astype(np.uint8)).sum() / 255
     r = np.sqrt(area / math.pi)
     masked_r = max(int(r) // 2, 2)
     # masked_r = max(int(r) // 3, 2)
+    # masked_r=200
 
     pre_tmp_mask_score = None
     for _ in range(num_prompts - 1):

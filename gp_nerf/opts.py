@@ -30,10 +30,10 @@ def get_opts_base():
     #sa3d
     parser.add_argument('--use_densegrid_mask', type=eval, default=False, help='')
     parser.add_argument('--sa3d_whole_image', type=eval, default=False, help='')
+    parser.add_argument('--wgt_sam_loss', default=1, type=float, help='llff_sa3d')
 
    
     #sam 
-    parser.add_argument('--wgt_sam_loss', default=1, type=float, help='llff_sa3d')
 
     parser.add_argument('--sam_sample_each', type=int, default=256, help='')
     parser.add_argument('--group_loss', default=False, type=eval, choices=[True, False], help='supervise normal')

@@ -28,10 +28,15 @@ def semantic_mlp(in_f, out_f, dim_mlp, num_hidden):
     
 
     for i in range(num_hidden):
-        semantic_linears.append(torch.nn.ReLU(inplace=True))
+        semantic_linears.append(torch.nn.ReLU(inplace=False))
+        # semantic_linears.append(torch.nn.LeakyReLU(inplace=True))
+        # semantic_linears.append(torch.nn.PReLU())
         semantic_linears.append(torch.nn.Linear(dim_mlp, dim_mlp))
         
     semantic_linears.append(torch.nn.ReLU(inplace=False))
+    # semantic_linears.append(torch.nn.PReLU())
+    semantic_linears.append(torch.nn.Softplus())
+
     semantic_linears.append(torch.nn.Linear(dim_mlp, out_f))
     return torch.nn.Sequential(*semantic_linears)
 

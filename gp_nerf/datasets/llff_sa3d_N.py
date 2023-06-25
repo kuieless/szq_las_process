@@ -306,7 +306,7 @@ class NeRFDataset:
 
 
     def __getitem__(self, index):
-        # index = 0
+        index = 0
         occluded_threshold=0.01
         # print(index)
         poses1 = self.poses[index].to(self.device).unsqueeze(0) # [B, 4, 4]
@@ -457,10 +457,11 @@ class NeRFDataset:
         if labels is not None:
             labels = labels.view(H, W)[selected_points[:, 0], selected_points[:, 1]]
             item['labels'] = labels
+        
+        item['selected_points']=selected_points
 
         if index !=0:
             item['depth'] = torch.tensor(depth_map)#[selected_points[:, 0], selected_points[:, 1]]
-            item['selected_points']=selected_points
             item['sam_feature'] = sam_feature.cpu()
 
         return item
