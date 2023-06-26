@@ -101,6 +101,7 @@ class Runner:
         
         self.group_loss_feat = lambda pred, target: nn.CosineSimilarity(dim=1)(pred, target)
 
+        self.color_list = torch.randint(0, 255,(100, 3)).to(torch.float32)
 
         if hparams.depth_loss:
             from gp_nerf.loss_monosdf import ScaleAndShiftInvariantLoss
@@ -963,8 +964,9 @@ class Runner:
                             else:
                                 colorize_mask = torch.zeros((self.H, self.W, 3))
                                 for seg_idx in range(sem_logits.shape[-1]):
-                                    img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
-                                    colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = torch.randint(0, 255,(3,)).to(torch.float32)
+                                    if self.hparams.num_semantic_classes <5:
+                                        img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+                                    colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = self.color_list[seg_idx] #torch.randint(0, 255,(3,)).to(torch.float32)
                                 img_list.append(colorize_mask)
                     if f'depth_{typ}' in results:
                         depth_map = results[f'depth_{typ}']
@@ -1038,8 +1040,9 @@ class Runner:
                             else:
                                 colorize_mask = torch.zeros((self.H, self.W, 3))
                                 for seg_idx in range(sem_logits.shape[-1]):
-                                    img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
-                                    colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = torch.randint(0, 255,(3,)).to(torch.float32)
+                                    if self.hparams.num_semantic_classes <5:
+                                        img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+                                    colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = self.color_list[seg_idx]  # torch.randint(0, 255,(3,)).to(torch.float32)
                                 img_list.append(colorize_mask)
                     if f'depth_{typ}' in results:
                         depth_map = results[f'depth_{typ}']

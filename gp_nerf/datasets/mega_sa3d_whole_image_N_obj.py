@@ -144,8 +144,18 @@ class MemoryDataset_SAM_sa3d(Dataset):
         selected_points = []
         self.random_points = []
         self.num_save=0
-        
+        self.random_points = [
+                              torch.tensor([[105, 690 ]]), 
+                              torch.tensor([[460, 1075]]), 
+                              torch.tensor([[490, 685]]), 
+                              torch.tensor([[630, 1150]]), 
+                              torch.tensor([[250, 400]]), 
+                            #   torch.tensor([[101, 171]]), 
+                            #   torch.tensor([[775, 103]]), 
+                            #   torch.tensor([[40, 1073]])
+                            ]
         self.sam_points = []
+        assert len(self.random_points) == self.num_semantic_classes   
         
         if self._is_vals[idx]:
             print('is val')
@@ -184,13 +194,61 @@ class MemoryDataset_SAM_sa3d(Dataset):
             if self.visualization:
                 img= cv2.imread(f"{str(self.metadata_items[idx].image_path)}")
 
+            # while len(self.world_points) < num_random_points:
+            for random_point in self.random_points:
+                temp_labels = torch.zeros((self.H, self.W), dtype=torch.int)
+                
+                # print('select one point to project')
+                self.object_id = self.object_id + 1
+                self.object_ids.append(self.object_id)
+                # 选择未被分配的点作为初始点，后续投影到其他图像上
+                bool_tensor = self._labels[idx].bool()
+                if torch.sum(~bool_tensor) == 0:  # 图上所有点都取完了
+                    break
+
+                
+                ######## SAM ######
+                in_labels = np.array([1])
+                H, W = self.H, self.W
+                
+                self.predictor.set_feature(sam_feature, [H, W])
+                
+                #visualize
+                visual = torch.zeros((H, W), dtype=torch.int).to(self.device) 
+                # visual_rgb = self.metadata_items[idx].load_image()
+                # visual_rgb = np.flip(visual_rgb.numpy(), axis=2)
+                visual_pseudo = np.flip(custom2rgb(remapping(self.metadata_items[idx].load_label().numpy())), axis=2)
+                
+                #从初始点采样 sam mask
+                random_point = random_point.flip(1)
+                masks, iou_preds, _ = self.predictor.predict(random_point.cpu().numpy(), in_labels, return_torch=True)
+                masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
+                masks_max = masks_max * ~bool_tensor.to(self.device)
+                # TODO: 这里需要考虑上面初始采样点的问题
+                if masks_max.nonzero().size(0) == 0: 
+                    continue
+                
+                # sam_points_10 = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(10,))]
+                # self.sam_points.append(sam_points_10)
+                # sam_points_10 = sam_points_10.flip(1).cpu().numpy()
+
+                # masks, iou_preds, _ = self.predictor.predict(sam_points_10, np.array([1]*sam_points_10.shape[0]), multimask_output=False, return_torch=True)
+                # masks_max = masks[:, torch.argmax(iou_preds),:,:].squeeze(0)
+                # masks_max = masks_max * ~bool_tensor.to(self.device)  
+
+
+                # mask_size = masks_max.nonzero().size(0)
+                # N_sample = min(int(self.N_total), mask_size)
+                # selected_point = torch.nonzero(masks_max)[torch.randint(high=torch.sum(masks_max), size=(N_sample,))]
+                # selected_points.append(selected_point)
+                self._labels[idx][masks_max] = self.object_id
+                temp_labels[masks_max]=1
+                labels.append(temp_labels.view(-1))
+
 
             self.select_origin = False   
-            labels = np.load('/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/residence_000027_sam_order.npy')
-            labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,90:90+self.num_semantic_classes]
-            # labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,:self.num_semantic_classes]
-
-            # labels = torch.stack(labels, dim=1)
+            # labels = self._labels[idx].view(-1)
+            labels = torch.stack(labels, dim=1)
 
             if self.visualization and idx == 27:
 

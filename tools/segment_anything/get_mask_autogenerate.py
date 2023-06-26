@@ -41,19 +41,43 @@ def show_anns2(colors, anns):
 
     img = np.ones((anns[0]['segmentation'].shape[0], anns[0]['segmentation'].shape[1], 3))  # 255 denotes white
     
-    mask = np.zeros((anns[0]['segmentation'].shape[0], anns[0]['segmentation'].shape[1], 3))
-    
+    mask = np.zeros((anns[0]['segmentation'].shape[0], anns[0]['segmentation'].shape[1], 1))
+    mask_visual = np.zeros((anns[0]['segmentation'].shape[0], anns[0]['segmentation'].shape[1], 3))
+    visual = np.zeros((anns[0]['segmentation'].shape[0], anns[0]['segmentation'].shape[1], 3))
+    temp_mask_list=[]
+    save =0
     for i in range(len(sorted_anns)):
-        m = sorted_anns[i]['segmentation']
-        mask[m] = np.random.random((1,3))
-        cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/"+"%04d.png" % i, mask*255)
+    # for i in range(12):
 
-    cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/final.png", mask*255)
+        m = sorted_anns[i]['segmentation']
+        visual[m] = np.random.random((1,3))
+        overlap = (m * mask[:,:,0]).astype(bool)
+        if overlap.sum() / m.sum() < 0.2:
+            # if save >=12:
+                # break
+            save += 1
+            mask[m] = i + 1
+            temp_mask = torch.zeros((anns[0]['segmentation'].shape[0], anns[0]['segmentation'].shape[1], 1))
+            temp_mask[m] = i + 1
+            temp_mask_list.append(temp_mask)
+            mask_visual[m] = np.random.random((1,3))
+            cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/"+"mask_%04d.png" % i, mask_visual*255)
+
+        cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/"+"visual_%04d.png" % i, visual*255)
+
+
+    cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/visual_final.png", visual*255)
+    cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/mask_final.png", mask_visual*255)
+    temp_mask_list=torch.cat(temp_mask_list, dim=-1)
+    np.save(f"./tools/segment_anything/000027_sam.npy", temp_mask_list.numpy())
+    # labels = np.load('/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/000027_sam.npy')
+
+
     
     # for i in range(len(sorted_anns)):
     #     m = anns[i]['segmentation']
     #     mask = mask + m[:,:,np.newaxis] * np.random.random((1,3))
-    return mask
+    return visual
 
 
 if __name__ == "__main__":

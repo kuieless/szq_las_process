@@ -2,11 +2,11 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=7
 
-exp_name='logs_357/0625_residence_sa3d_grid_5obj'
+exp_name='logs_357/0626_residence_sa3d_N_obj'
 
 batch_size=1
 train_iterations=3000
-val_interval=200
+val_interval=5
 ckpt_interval=200
 sample_ray_num=8192
 
@@ -15,7 +15,7 @@ dataset_path=/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-label
 ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G_geo_residence/0/models/200000.pt
 # ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0625_residence_sa3d_grid/4/models/991.pt
 dataset_type='mega_sa3d'
-num_semantic_classes=5
+num_semantic_classes=12
 use_densegrid_mask=True
 sa3d_whole_image=True
 
