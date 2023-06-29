@@ -28,7 +28,8 @@ def get_opts_base():
     parser.add_argument('--remove_cluster', type=eval, default=False, help='')
 
     #sa3d
-    parser.add_argument('--use_densegrid_mask', type=eval, default=False, help='')
+    # parser.add_argument('--use_densegrid_mask', type=eval, default=False, help='')
+    parser.add_argument('--use_mask_type', type=str, default='mlp', choices=['mlp', 'densegrid', 'hashgrid'],help='')
     parser.add_argument('--sa3d_whole_image', type=eval, default=False, help='')
     parser.add_argument('--wgt_sam_loss', default=1, type=float, help='llff_sa3d')
 
@@ -95,7 +96,7 @@ def get_opts_base():
 
     parser.add_argument('--use_scaling', default=True, type=eval, choices=[True, False], help='scale plane feature')
     parser.add_argument('--contract_norm', type=str, default='l2', choices=['l2', 'inf'], help='')
-    parser.add_argument('--contract_bg_len', default=1, type=float, help='set 0.4 of 1：1')
+    parser.add_argument('--contract_bg_len', default=1, type=float, help='set 0.4 of 1:1')
     parser.add_argument('--aabb_bound', default=1.6, type=float, help='work only when not use ellipsoid')
 
 

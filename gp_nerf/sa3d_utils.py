@@ -186,7 +186,6 @@ def prompting_coarse(self, H, W, seg_m, index_matrix, num_obj):
 
             if masks is not None:
                 tmp_seg_m = seg_m[:,:,num]
-                # cv2.imwrite("00001.jpg", (seg_m>0).repeat(1,1,3).cpu().numpy()*255)
                 tmp_rendered_mask = tmp_seg_m.detach().clone()
                 tmp_rendered_mask[torch.logical_or(tmp_rendered_mask <= tmp_rendered_mask.mean(), tmp_rendered_mask <= 0)] = 0
                 tmp_rendered_mask[tmp_rendered_mask != 0] = 1
@@ -195,6 +194,8 @@ def prompting_coarse(self, H, W, seg_m, index_matrix, num_obj):
                 if tmp_IoU < 0.5:
                     print("SKIP, unacceptable sam prediction, IoU is", tmp_IoU)
                     continue
+                cv2.imwrite("00000.jpg", to8b(masks[selected]))
+                cv2.imwrite("00001.jpg", (tmp_seg_m[:,:,None]>0).repeat(1,1,3).cpu().numpy()*255)
 
                 loss += seg_loss(masks, selected, tmp_seg_m)
                 for neg_i in range(seg_m.shape[-1]):

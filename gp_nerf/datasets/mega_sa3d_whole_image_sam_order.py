@@ -43,7 +43,7 @@ class MemoryDataset_SAM_sa3d(Dataset):
         
         self.num_semantic_classes = hparams.num_semantic_classes
         self.online_sam_label = hparams.online_sam_label
-        self.visualization = True
+        self.visualization = False
         
         # sam
         self.device = device # device 'cpu'
@@ -134,7 +134,7 @@ class MemoryDataset_SAM_sa3d(Dataset):
         return self._labels.shape[0]
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        idx =27
+        
         #27是初始祯
         if idx < 27:
             return None
@@ -161,6 +161,8 @@ class MemoryDataset_SAM_sa3d(Dataset):
 
 
         if self.num_depth_process % self._labels.shape[0] == 0:
+            self.object_ids = []
+            self.world_points = []
             self.select_origin = True
             # 测试一个点的投影影响
             if self.num_depth_process == self._labels.shape[0]:
@@ -174,8 +176,7 @@ class MemoryDataset_SAM_sa3d(Dataset):
         depth_map = self._depths[idx].view(self.H, self.W)
         depth_map = (depth_map * self.depth_scale).numpy()
 
-        # if self.select_origin == True:
-        if True:
+        if self.select_origin == True:
             labels = []
             self.num_depth_process = 27
             self.num_depth_process = self.num_depth_process + 1
@@ -186,21 +187,18 @@ class MemoryDataset_SAM_sa3d(Dataset):
 
             self.select_origin = False   
             labels = np.load('/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/residence_000027_sam_order.npy')
-            labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,90:90+self.num_semantic_classes]
-            # labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,:self.num_semantic_classes]
+            # labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,90:90+self.num_semantic_classes]
+            labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,:self.num_semantic_classes]
 
             # labels = torch.stack(labels, dim=1)
 
             if self.visualization and idx == 27:
-                rgb_array = np.zeros((self.H, self.W, 3))
-                label_num_obj = labels.view(self.H, self.W, -1).numpy()
-                for num_obj in range(label_num_obj.shape[-1]):
-                    rgb_array[label_num_obj[:,:,num_obj].astype(np.bool)] = np.random.random((1,3))*255
-                    
+
                 save_dir = f'zyq/project'
                 Path(save_dir).parent.mkdir(exist_ok=True)
                 Path(save_dir).mkdir(exist_ok=True)
                 (Path(save_dir) / "sample").mkdir(exist_ok=True)
+                rgb_array = np.stack([self._labels[idx].bool(), self._labels[idx].bool(), self._labels[idx].bool()], axis=2)* 255
                 image_cat = np.concatenate([img, rgb_array], axis=1)
                 cv2.imwrite(f"{save_dir}/first_{self.num_save}.jpg", image_cat)
                 self.num_save = self.num_save + 1

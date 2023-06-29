@@ -84,30 +84,27 @@ class NeRF(nn.Module):
         self.stop_semantic_grad = hparams.stop_semantic_grad
         self.use_pano_lift = hparams.use_pano_lift
         if self.enable_semantic:
-            if self.separate_semantic:
-                print('separate the semantic mlp from nerf')
-                self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
-                self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+            self.use_mask_type = hparams.use_mask_type
+            self.num_semantic_classes == hparams.num_semantic_classes
+            if self.use_mask_type == 'densegird':
+                self.seg_mask_grid = grid.create_grid(
+                'DenseGrid', channels=hparams.num_semantic_classes, world_size=torch.tensor([375,333,261]),
+                xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
+            elif self.use_mask_type == 'hashgrid':
+                seg_mask_grid, self.seg_mask_grids_dim = get_encoder("hashgrid", base_resolution=64, desired_resolution=1024, log2_hashmap_size=19, num_levels=2, level_dim=1)
+                self.seg_mask_grids = torch.nn.ModuleList([seg_mask_grid for i in range(self.num_semantic_classes)])
+                sefl.mask_linears = torch.nn.ModuleList([torch.nn.Linear(self.seg_mask_grids_dim, 1) for i in range(self.num_semantic_classes)])
             else:
-                print('add the semantic head to nerf')
-                self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
-                self.semantic_linear_bg = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
-            # for module in self.semantic_linear.modules():
-            #     if isinstance(module, nn.Linear):
-            #         # 使用零初始化将权重设置为零
-            #         nn.init.zeros_(module.weight)
-            #         # 使用零初始化将偏置项设置为零
-            #         nn.init.zeros_(module.bias)
-            # for module in self.semantic_linear_bg.modules():
-            #     if isinstance(module, nn.Linear):
-            #         # 使用零初始化将权重设置为零
-            #         nn.init.zeros_(module.weight)
-            #         # 使用零初始化将偏置项设置为零
-            #         nn.init.zeros_(module.bias)
-            # for name, param in self.semantic_linear.named_parameters():
-            #     print(f'{name}: {param.data}')
-            # for name, param in self.semantic_linear_bg.named_parameters():
-            #     print(f'{name}: {param.data}')
+                if self.separate_semantic:
+                    print('separate the semantic mlp from nerf')
+                    self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                    self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                else:
+                    print('add the semantic head to nerf')
+                    self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
+                    self.semantic_linear_bg = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
+
+
         #hash
         base_resolution = hparams.base_resolution
         desired_resolution = hparams.desired_resolution
@@ -148,10 +145,6 @@ class NeRF(nn.Module):
         self.sigma_net, self.color_net, self.encoder_dir = self.get_nerf_mlp()
         self.sigma_net_bg, self.color_net_bg, self.encoder_dir_bg = self.get_nerf_mlp(nerf_type='bg')
 
-        self.seg_mask_grid = grid.create_grid(
-                'DenseGrid', channels=hparams.num_semantic_classes, world_size=torch.tensor([375,333,261]),
-                xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
-        self.use_densegrid_mask = hparams.use_densegrid_mask
 
     def get_nerf_mlp(self, nerf_type='fg'):
         encoding_dir = "sphere_harmonics"
@@ -193,6 +186,14 @@ class NeRF(nn.Module):
         color_net = nn.ModuleList(color_nets)  
         return sigma_net, color_net, encoder_dir
 
+    def mask_fc(sefl, logits)
+        outs = []
+        for i in range(self.num_semantic_classes):
+            out = self.mask_linears[i](logits[:,i*self.seg_mask_grids_dim:(i+1)*self.seg_mask_grids_dim])
+            outs.append(out)
+        outs = torch.cat(outs, dim=-1)
+        return outs
+
     def forward(self, point_type, x: torch.Tensor, sigma_only: bool = False,
                 sigma_noise: Optional[torch.Tensor] = None,train_iterations=-1) -> torch.Tensor:
         
@@ -229,8 +230,16 @@ class NeRF(nn.Module):
 
         # semantic 
         if self.enable_semantic:
-            if self.use_densegrid_mask:
+            if self.use_mask_type == 'densegrid':
                 sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
+            
+            elif self.use_mask_type == 'hashgrid':
+                sem_logits = []
+                for seg_mask_grid in self.seg_mask_grids:
+                    sem_logit = seg_mask_grid(x[:, :self.xyz_dim], bound==1.5)
+                    sem_logits.append(sem_logit)
+                sem_logits = torch.cat(sem_logits, dim=-1)
+
             else:
                 input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])  ######
                 if self.separate_semantic:
@@ -279,8 +288,15 @@ class NeRF(nn.Module):
 
         # semantic 
         if self.enable_semantic:
-            if self.use_densegrid_mask:
+            if self.use_mask_type == 'densegrid':
                 sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
+
+            elif self.use_mask_type == 'hashgrid':
+                sem_logits = []
+                for seg_mask_grid in self.seg_mask_grids:
+                    sem_logit = seg_mask_grid(x[:, :self.xyz_dim], bound==1.5)
+                    sem_logits.append(sem_logit)
+                sem_logits = torch.cat(sem_logits, dim=-1)
             else:
                 input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
                 if self.separate_semantic:

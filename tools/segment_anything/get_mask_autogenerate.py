@@ -53,15 +53,19 @@ def show_anns2(colors, anns):
         visual[m] = np.random.random((1,3))
         overlap = (m * mask[:,:,0]).astype(bool)
         if overlap.sum() / m.sum() < 0.2:
-            # if save >=12:
-                # break
+            if save==90:
+                mask_visual = np.zeros((anns[0]['segmentation'].shape[0], anns[0]['segmentation'].shape[1], 3))
+                
+            if save>=102:
+                break
             save += 1
             mask[m] = i + 1
             temp_mask = torch.zeros((anns[0]['segmentation'].shape[0], anns[0]['segmentation'].shape[1], 1))
             temp_mask[m] = i + 1
             temp_mask_list.append(temp_mask)
             mask_visual[m] = np.random.random((1,3))
-            cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/"+"mask_%04d.png" % i, mask_visual*255)
+            if save>=90:
+                cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/"+"mask_%04d.png" % i, mask_visual*255)
 
         cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/"+"visual_%04d.png" % i, visual*255)
 

@@ -318,8 +318,7 @@ def _inference(point_type,
 
     if hparams.enable_semantic:
         out_semantic = torch.cat(out_semantic_chunk, 0)
-        out = out_semantic.view(N_rays_, N_samples_, out_semantic.shape[-1])
-        sem_logits = out[..., 0:0 + hparams.num_semantic_classes]
+        sem_logits = out_semantic.view(N_rays_, N_samples_, out_semantic.shape[-1])
         if hparams.dataset_type == 'sam':
             out_semantic_fea = torch.cat(out_semantic_feature_chunk, 0)
             sem_feature = out_semantic_fea.view(N_rays_, N_samples_, out_semantic_fea.shape[-1])  

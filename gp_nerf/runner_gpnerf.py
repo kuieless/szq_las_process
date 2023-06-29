@@ -696,7 +696,7 @@ class Runner:
                 del results_chunk, results_chunk_dict
                 # gc.collect()
                 torch.cuda.empty_cache()
-                
+            
             H, W = self.H, self.W
             results = {
                 k: torch.cat([ret[k] for ret in results_chunks])#.reshape(H,W,-1)
@@ -735,8 +735,11 @@ class Runner:
         #semantic loss
         if self.hparams.enable_semantic:
             if 'sa3d' in self.hparams.dataset_type:
+                sem_logits = results[f'sem_map_{typ}']
+                if self.hparams.use_mask_type == 'hashgrid':
+                    sem_logits = self.nerf.mask_fc(sem_logits)
+
                 if labels is not None:  # 第一祯
-                    sem_logits = results[f'sem_map_{typ}']
                     # print(sem_logits.unique())
                     loss_sam = 0
                     for seg_idx in range(sem_logits.shape[-1]):
@@ -751,7 +754,7 @@ class Runner:
 
                 else:   #其他祯
                     if self.hparams.sa3d_whole_image:
-                        sem_logits = results[f'sem_map_{typ}'].view(H, W, -1)
+                        sem_logits = sem_logits.view(H, W, -1)
                         if sem_logits.max() < 0:
                             print('There is no positive value in sem_logits')
                             return None, None
@@ -957,6 +960,7 @@ class Runner:
                     if self.hparams.enable_semantic:
                         if f'sem_map_{typ}' in results:
                             sem_logits = results[f'sem_map_{typ}']
+                            
                             if self.hparams.dataset_type == 'llff':
                                 sem_label = self.logits_2_label(sem_logits)
                                 visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
@@ -1033,6 +1037,8 @@ class Runner:
                     if self.hparams.enable_semantic:
                         if f'sem_map_{typ}' in results:
                             sem_logits = results[f'sem_map_{typ}']
+                            if self.hparams.use_mask_type == 'hashgrid':
+                                sem_logits = self.nerf.mask_fc(sem_logits.to(self.device)).cpu()
                             if self.hparams.dataset_type == 'llff':
                                 sem_label = self.logits_2_label(sem_logits)
                                 visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
