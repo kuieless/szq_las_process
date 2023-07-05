@@ -737,13 +737,16 @@ class Runner:
             if 'sa3d' in self.hparams.dataset_type:
                 sem_logits = results[f'sem_map_{typ}']
                 if self.hparams.use_mask_type == 'hashgrid':
-                    sem_logits = self.nerf.mask_fc(sem_logits)
-
+                    sem_logits = self.nerf.mask_fc_hash(sem_logits)
+                elif self.hparams.use_mask_type == 'densegrid_mlp':
+                    sem_logits = self.nerf.mask_fc_dense(sem_logits)
+                 
                 if labels is not None:  # 第一祯
                     # print(sem_logits.unique())
                     loss_sam = 0
                     for seg_idx in range(sem_logits.shape[-1]):
                         loss_sam += seg_loss(labels[:, seg_idx], None, sem_logits[:, seg_idx])
+                    # cv2.imwrite("00001.jpg", (labels[:, 0]>0).view(H, W, 1).repeat(1,1,3).cpu().numpy()*255)
 
                     ###  查看第一祯的监督，正常（从grid训练正常也能判断）
                     # tmp_mask = np.zeros((H,W,3))
@@ -1038,7 +1041,9 @@ class Runner:
                         if f'sem_map_{typ}' in results:
                             sem_logits = results[f'sem_map_{typ}']
                             if self.hparams.use_mask_type == 'hashgrid':
-                                sem_logits = self.nerf.mask_fc(sem_logits.to(self.device)).cpu()
+                                sem_logits = self.nerf.mask_fc_hash(sem_logits.to(self.device)).cpu()
+                            elif self.hparams.use_mask_type == 'densegrid_mlp':
+                                sem_logits = self.nerf.mask_fc_dense(sem_logits.to(self.device)).cpu()
                             if self.hparams.dataset_type == 'llff':
                                 sem_label = self.logits_2_label(sem_logits)
                                 visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())

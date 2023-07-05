@@ -1,8 +1,8 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=6
 
-exp_name='logs_357/0626_residence_sa3d_N_obj'
+exp_name='logs_357/0704_residence_sa3d_N_obj'
 
 batch_size=1
 train_iterations=100
@@ -16,7 +16,7 @@ ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G_geo_residence/0/model
 # ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0626_residence_sa3d_N_obj/26/models/200.pt
 dataset_type='mega_sa3d'
 num_semantic_classes=3
-use_mask_type='hashgrid'
+use_mask_type='densegrid_mlp'  # densegrid_mlp
 sa3d_whole_image=True
 
 config_file=configs/residence.yaml

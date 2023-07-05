@@ -43,7 +43,9 @@ class DenseGrid(nn.Module):
         self.world_size = world_size
         self.register_buffer('xyz_min', torch.Tensor(xyz_min))
         self.register_buffer('xyz_max', torch.Tensor(xyz_max))
-        self.grid = nn.Parameter(torch.zeros([1, channels, *world_size]))
+        # self.grid = nn.Parameter(torch.zeros([1, channels, *world_size]))
+        self.grid = nn.Parameter(0.001*torch.randn((1, channels, *world_size)))
+
         print(self.xyz_min, self.xyz_max, self.world_size)
 
     def forward(self, xyz):

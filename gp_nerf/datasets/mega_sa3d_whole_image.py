@@ -134,7 +134,7 @@ class MemoryDataset_SAM_sa3d(Dataset):
         return self._labels.shape[0]
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        idx =27
+        idx = 27
         #27是初始祯
         if idx < 27:
             return None
@@ -186,8 +186,8 @@ class MemoryDataset_SAM_sa3d(Dataset):
 
             self.select_origin = False   
             labels = np.load('/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/residence_000027_sam_order.npy')
-            labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,90:90+self.num_semantic_classes]
-            # labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,:self.num_semantic_classes]
+            # labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,90:90+self.num_semantic_classes]
+            labels=torch.HalfTensor(labels).view(-1, labels.shape[-1])[:,:self.num_semantic_classes]
 
             # labels = torch.stack(labels, dim=1)
 

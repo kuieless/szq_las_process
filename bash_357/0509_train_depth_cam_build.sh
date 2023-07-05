@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-# gpu=${1:-6}
+# gpu=${1:-6}   
 # exp=${2:-''}
 export CUDA_VISIBLE_DEVICES=4   #${gpu}
 
