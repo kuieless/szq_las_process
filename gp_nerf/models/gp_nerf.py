@@ -100,8 +100,8 @@ class NeRF(nn.Module):
 
                 # self.mask_linear = nn.Sequential(torch.nn.LeakyReLU(), torch.nn.Linear(hparams.densegird_mlp_dim, hparams.num_semantic_classes))
                 self.mask_linear = torch.nn.Linear(hparams.densegird_mlp_dim, hparams.num_semantic_classes)
-                self.mask_linear.weight.requires_grad_(False)
-                self.mask_linear.bias.requires_grad_(False)
+                # self.mask_linear.weight.requires_grad_(False)
+                # self.mask_linear.bias.requires_grad_(False)
                 # nn.init.zeros_(self.mask_linear.bias)
             elif self.use_mask_type == 'hashgrid':
                 seg_mask_grid, self.seg_mask_grids_dim = get_encoder("hashgrid", base_resolution=64, desired_resolution=1024, log2_hashmap_size=19, num_levels=2, level_dim=1)
@@ -313,7 +313,8 @@ class NeRF(nn.Module):
             if self.use_mask_type == 'densegrid':
                 sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
             elif self.use_mask_type == 'densegrid_mlp':
-                sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
+                with torch.enable_grad():
+                    sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
 
             elif self.use_mask_type == 'hashgrid':
                 sem_logits = []

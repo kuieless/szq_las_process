@@ -85,9 +85,9 @@ def render_rays(nerf: nn.Module,
                            depth_real=None,
                            xyz_fine_fn=lambda fine_z_vals: (rays_o + rays_d * fine_z_vals.unsqueeze(-1), None),
                            train_iterations=train_iterations)
-    use_bg_or_not = rays_with_bg.shape[0]
-    use_bg_or_not = 0
-    if use_bg_or_not != 0:
+    
+    
+    if hparams.use_bg_or_not:
         z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4+1, hparams.coarse_samples // 2, rays.device)
         z_vals_outer = _expand_and_perturb_z_vals(z_vals_outer, hparams.coarse_samples // 2, perturb, rays_with_bg.shape[0])
 
@@ -116,7 +116,7 @@ def render_rays(nerf: nn.Module,
     if hparams.use_cascade and hparams.fine_samples > 0:
         types.append('coarse')
     for typ in types:
-        if use_bg_or_not > 0:
+        if hparams.use_bg_or_not:
             bg_lambda = results[f'bg_lambda_{typ}'][rays_with_bg]
 
             for key in TO_COMPOSITE:
@@ -382,15 +382,15 @@ def _inference(point_type,
         if hparams.enable_semantic:
             if hparams.stop_semantic_grad:
                 w = weights[..., None].detach()
-                # sem_map = torch.sum(w * sem_logits, -2)
-                ray_id = torch.arange(0, N_rays_)
+                sem_map = torch.sum(w * sem_logits, -2)
+                # ray_id = torch.arange(0, N_rays_)
                 # ray_id = ray_id.unsqueeze(-1).repeat(1, N_samples_*2).view(-1)
-                ray_id = ray_id.unsqueeze(-1).repeat(1, N_samples_).view(-1)
-                sem_map = segment_coo(
-                            src=(w.view(-1).unsqueeze(-1) * sem_logits.view(-1, sem_logits.shape[-1])),
-                            index=ray_id.to(rgbs.device),
-                            out=torch.zeros([N_rays_, sem_logits.shape[-1]]).to(rgbs.device),
-                            reduce='sum')
+                # # ray_id = ray_id.unsqueeze(-1).repeat(1, N_samples_).view(-1)
+                # sem_map = segment_coo(
+                #             src=(w.view(-1).unsqueeze(-1) * sem_logits.view(-1, sem_logits.shape[-1])),
+                #             index=ray_id.to(rgbs.device),
+                #             out=torch.zeros([N_rays_, sem_logits.shape[-1]]).to(rgbs.device),
+                #             reduce='sum')
 
                 
                 
