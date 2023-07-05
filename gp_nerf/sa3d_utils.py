@@ -53,7 +53,7 @@ def seg_loss(mask: Tensor, selected_mask: Optional[Tensor], seg_m: Tensor, lamda
         out_mask_loss = lamda * ((1 - to_tensor(mask, device)) * seg_m.squeeze(-1)).sum()
 
     return mask_loss + out_mask_loss
-
+    
 
 def _generate_index_matrix(H, W, depth_map):
     '''generate the index matrix, which contains the coordinate of each pixel and cooresponding depth'''
@@ -197,7 +197,7 @@ def prompting_coarse(self, H, W, seg_m, index_matrix, num_obj):
                 cv2.imwrite("00000.jpg", to8b(masks[selected]))
                 cv2.imwrite("00001.jpg", (tmp_seg_m[:,:,None]>0).repeat(1,1,3).cpu().numpy()*255)
 
-                loss += seg_loss(masks, selected, tmp_seg_m)
+                loss += seg_loss(masks, selected, tmp_seg_m, 1)
                 for neg_i in range(seg_m.shape[-1]):
                     if neg_i == num:
                         continue

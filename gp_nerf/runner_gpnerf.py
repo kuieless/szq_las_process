@@ -294,11 +294,19 @@ class Runner:
                 p_base.requires_grad = False
             for p_base in self.nerf.embedding_a.parameters():
                 p_base.requires_grad = False
+            for p_base in self.nerf.embedding_xyz.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.encoder_dir.parameters():
+                p_base.requires_grad = False
+            for p_base in self.nerf.encoder_dir_bg.parameters():
+                p_base.requires_grad = False
+            
+                
                 
             non_frozen_parameters = [p for p in self.nerf.parameters() if p.requires_grad]
             optimizers = {}
-            optimizers['nerf'] = Adam(non_frozen_parameters, lr=self.hparams.lr)
-            # optimizers['nerf'] = torch.optim.SGD(non_frozen_parameters, lr=self.hparams.lr)
+            # optimizers['nerf'] = Adam(non_frozen_parameters, lr=self.hparams.lr)
+            optimizers['nerf'] = torch.optim.SGD(non_frozen_parameters, lr=self.hparams.lr)
             
         else:
             optimizers = {}
@@ -520,7 +528,7 @@ class Runner:
                         item['img_indices'].to(self.device, non_blocking=True), 
                         labels, groups, train_iterations, item)
                     
-                    if metrics == None and self.hparams.dataset_type == 'mega_sa3d':
+                    if metrics == None and 'sa3d' in self.hparams.dataset_type:
                         continue
 
                     with torch.no_grad():
@@ -534,10 +542,17 @@ class Runner:
 
 
                 for optimizer in optimizers.values():
-                    optimizer.zero_grad(set_to_none=True)
+                    # optimizer.zero_grad(set_to_none=True)
+                    optimizer.zero_grad()
 
                 scaler.scale(metrics['loss']).backward()   # 在这之后用torch.cuda.empty_cache() 有效
-                
+
+                if self.hparams.use_mask_type == 'densegrid_mlp':
+                    with torch.no_grad():
+                        self.nerf.seg_mask_grid.grid *= self.nerf.mask_view_counts
+                        prev_mask_grid = self.nerf.seg_mask_grid.grid.detach().clone()
+
+
                 if self.hparams.clip_grad_max != 0:
                     torch.nn.utils.clip_grad_norm_(self.nerf.parameters(), self.hparams.clip_grad_max)
 
@@ -551,10 +566,16 @@ class Runner:
                         if self.writer is not None and train_iterations % self.hparams.logger_interval == 0:
                             self.writer.add_scalar('1_train/optimizer_{}_lr'.format(key), lr_temp, train_iterations)
                         scaler.step(optimizer)
+                
 
                 scaler.update()
                 for scheduler in schedulers.values():
                     scheduler.step()
+
+                if self.hparams.use_mask_type == 'densegrid_mlp':
+                    with torch.no_grad():
+                        self.nerf.mask_view_counts += (self.nerf.seg_mask_grid.grid != prev_mask_grid)
+                        self.nerf.seg_mask_grid.grid /= (self.nerf.mask_view_counts + 1e-9)
 
                 train_iterations += 1
                 if self.is_master:
@@ -675,7 +696,7 @@ class Runner:
             B = rays.shape[0]
             keys = ['rgb_fine', 'sem_map_fine', 'depth_variance_fine']
             for i in range(0, B, self.hparams.ray_chunk_size):
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
                 ray_chunk = rays[i:i + self.hparams.ray_chunk_size]
                 image_indices_chunk= image_indices[i:i + self.hparams.ray_chunk_size]
                 results_chunk, _ = render_rays(nerf=self.nerf,
@@ -695,7 +716,7 @@ class Runner:
                 results_chunks += [results_chunk_dict]
                 del results_chunk, results_chunk_dict
                 # gc.collect()
-                torch.cuda.empty_cache()
+                # torch.cuda.empty_cache()
             
             H, W = self.H, self.W
             results = {
@@ -727,7 +748,7 @@ class Runner:
             metrics['photo_loss'] = photo_loss
         else:
             metrics = {}
-            photo_loss = 0
+            photo_loss = torch.zeros(1, device='cuda')
             metrics['photo_loss'] = photo_loss
         metrics['loss'] = photo_loss
 
@@ -744,8 +765,9 @@ class Runner:
                 if labels is not None:  # 第一祯
                     # print(sem_logits.unique())
                     loss_sam = 0
+                    print(sem_logits.max())
                     for seg_idx in range(sem_logits.shape[-1]):
-                        loss_sam += seg_loss(labels[:, seg_idx], None, sem_logits[:, seg_idx])
+                        loss_sam += seg_loss(labels[:, seg_idx].view(H, W), None, sem_logits[:, seg_idx:seg_idx+1].view(H, W, 1))
                     # cv2.imwrite("00001.jpg", (labels[:, 0]>0).view(H, W, 1).repeat(1,1,3).cpu().numpy()*255)
 
                     ###  查看第一祯的监督，正常（从grid训练正常也能判断）
@@ -963,7 +985,11 @@ class Runner:
                     if self.hparams.enable_semantic:
                         if f'sem_map_{typ}' in results:
                             sem_logits = results[f'sem_map_{typ}']
-                            
+                            if self.hparams.use_mask_type == 'hashgrid':
+                                sem_logits = self.nerf.mask_fc_hash(sem_logits.to(self.device)).cpu()
+                            elif self.hparams.use_mask_type == 'densegrid_mlp':
+                                sem_logits = self.nerf.mask_fc_dense(sem_logits.to(self.device)).cpu()
+
                             if self.hparams.dataset_type == 'llff':
                                 sem_label = self.logits_2_label(sem_logits)
                                 visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
@@ -1040,6 +1066,7 @@ class Runner:
                     if self.hparams.enable_semantic:
                         if f'sem_map_{typ}' in results:
                             sem_logits = results[f'sem_map_{typ}']
+
                             if self.hparams.use_mask_type == 'hashgrid':
                                 sem_logits = self.nerf.mask_fc_hash(sem_logits.to(self.device)).cpu()
                             elif self.hparams.use_mask_type == 'densegrid_mlp':

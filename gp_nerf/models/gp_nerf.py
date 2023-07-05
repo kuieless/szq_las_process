@@ -91,14 +91,18 @@ class NeRF(nn.Module):
                 'DenseGrid', channels=hparams.num_semantic_classes, world_size=torch.tensor([375,333,261]),
                 xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
             elif self.use_mask_type == 'densegrid_mlp':
-                self.seg_mask_grid = grid.create_grid(
-                'DenseGrid', channels=hparams.densegird_mlp_dim, world_size=torch.tensor([375,333,261]),
-                xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
+                with torch.enable_grad():
+                    self.seg_mask_grid = grid.create_grid(
+                    'DenseGrid', channels=hparams.densegird_mlp_dim, world_size=torch.tensor([375,333,261]),
+                    xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
+                
+                self.mask_view_counts = torch.zeros_like(self.seg_mask_grid.grid, requires_grad=False, device='cuda')
+
                 # self.mask_linear = nn.Sequential(torch.nn.LeakyReLU(), torch.nn.Linear(hparams.densegird_mlp_dim, hparams.num_semantic_classes))
                 self.mask_linear = torch.nn.Linear(hparams.densegird_mlp_dim, hparams.num_semantic_classes)
-                # print(self.mask_linear.bias)
+                self.mask_linear.weight.requires_grad_(False)
+                self.mask_linear.bias.requires_grad_(False)
                 # nn.init.zeros_(self.mask_linear.bias)
-                # print(self.mask_linear.bias)
             elif self.use_mask_type == 'hashgrid':
                 seg_mask_grid, self.seg_mask_grids_dim = get_encoder("hashgrid", base_resolution=64, desired_resolution=1024, log2_hashmap_size=19, num_levels=2, level_dim=1)
                 self.seg_mask_grids = torch.nn.ModuleList([seg_mask_grid for i in range(self.num_semantic_classes)])
@@ -203,10 +207,12 @@ class NeRF(nn.Module):
         outs = torch.cat(outs, dim=-1)
         return outs
     
-    def mask_fc_dense(self, logits):
-        out = self.mask_linear(logits)
+    # @torch.no_grad()
+    def mask_fc_dense(self, x):
+        out = self.mask_linear(x)
         return out
-
+    # @torch.no_grad()
+    
     def forward(self, point_type, x: torch.Tensor, sigma_only: bool = False,
                 sigma_noise: Optional[torch.Tensor] = None,train_iterations=-1) -> torch.Tensor:
         
@@ -217,6 +223,7 @@ class NeRF(nn.Module):
         else:
             NotImplementedError('Unkonwn point type')
         return out
+    
     def forward_fg(self, point_type, x: torch.Tensor, sigma_only: bool = False, sigma_noise: Optional[torch.Tensor] = None,train_iterations=-1) -> torch.Tensor:
 
         position = x[:, :self.xyz_dim]
@@ -246,7 +253,8 @@ class NeRF(nn.Module):
             if self.use_mask_type == 'densegrid':
                 sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
             elif self.use_mask_type == 'densegrid_mlp':
-                sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
+                with torch.enable_grad():
+                    sem_logits = self.seg_mask_grid(x[:, :self.xyz_dim])
             elif self.use_mask_type == 'hashgrid':
                 sem_logits = []
                 for seg_mask_grid in self.seg_mask_grids:

@@ -309,6 +309,7 @@ class NeRFDataset:
         if self.num_depth_process == self.__len__():
             return "end"
         occluded_threshold=0.01
+        # index=0
         # print(index)
         poses1 = self.poses[index].to(self.device).unsqueeze(0) # [B, 4, 4]
         
@@ -351,9 +352,9 @@ class NeRFDataset:
             # self.random_points = [torch.tensor([[self.H // 2, self.W // 2]])]  # fern
             # self.random_points = [torch.tensor([[self.H // 3, self.W // 3]])]  # horn 
             self.random_points=[
-                                torch.tensor([[405, 815]]),
+                                # torch.tensor([[405, 815]]),
                                 torch.tensor([[self.H // 3, self.W // 3]]),
-                                torch.tensor([[self.H // 2, 100]]),
+                                # torch.tensor([[self.H // 2, 100]]),
                                 ]  # horn 
             assert len(self.random_points) == self.num_semantic_classes   
             img = self.imgs[index].copy()

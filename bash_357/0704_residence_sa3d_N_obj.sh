@@ -15,7 +15,7 @@ dataset_path=/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-label
 ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0504_G_geo_residence/0/models/200000.pt
 # ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_357/0626_residence_sa3d_N_obj/26/models/200.pt
 dataset_type='mega_sa3d'
-num_semantic_classes=3
+num_semantic_classes=1
 use_mask_type='densegrid_mlp'  # densegrid_mlp
 sa3d_whole_image=True
 
