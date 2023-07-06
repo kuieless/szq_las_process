@@ -106,6 +106,9 @@ class NeRF(nn.Module):
                 seg_mask_grid, self.seg_mask_grids_dim = get_encoder("hashgrid", base_resolution=64, desired_resolution=1024, log2_hashmap_size=19, num_levels=2, level_dim=1)
                 self.seg_mask_grids = torch.nn.ModuleList([seg_mask_grid for i in range(self.num_semantic_classes)])
                 self.mask_linears = torch.nn.ModuleList([torch.nn.Linear(self.seg_mask_grids_dim, 1) for i in range(self.num_semantic_classes)])
+                for linear in self.mask_linears:
+                    linear.weight.requires_grad_(False)
+                    linear.bias.requires_grad_(False)
             else:
                 if self.separate_semantic:
                     print('separate the semantic mlp from nerf')

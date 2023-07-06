@@ -765,7 +765,7 @@ class Runner:
                 if labels is not None:  # 第一祯
                     # print(sem_logits.unique())
                     loss_sam = 0
-                    print(sem_logits.max())
+                    # print(sem_logits.max())
                     for seg_idx in range(sem_logits.shape[-1]):
                         loss_sam += seg_loss(labels[:, seg_idx].view(H, W), None, sem_logits[:, seg_idx:seg_idx+1].view(H, W, 1))
                     # cv2.imwrite("00001.jpg", (labels[:, 0]>0).view(H, W, 1).repeat(1,1,3).cpu().numpy()*255)
@@ -1079,7 +1079,7 @@ class Runner:
                             else:
                                 colorize_mask = torch.zeros((self.H, self.W, 3))
                                 for seg_idx in range(sem_logits.shape[-1]):
-                                    if self.hparams.num_semantic_classes <5:
+                                    if self.hparams.num_semantic_classes <10:
                                         img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
                                     colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = self.color_list[seg_idx]  # torch.randint(0, 255,(3,)).to(torch.float32)
                                 img_list.append(colorize_mask)

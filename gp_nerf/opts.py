@@ -33,7 +33,6 @@ def get_opts_base():
     parser.add_argument('--sa3d_whole_image', type=eval, default=False, help='')
     parser.add_argument('--wgt_sam_loss', default=1, type=float, help='llff_sa3d')
     parser.add_argument('--densegird_mlp_dim', type=int, default=10, help='')
-    parser.add_argument('--use_bg_or_not', type=eval, default=True, help='')
 
     
    

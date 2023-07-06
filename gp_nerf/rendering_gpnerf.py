@@ -87,7 +87,7 @@ def render_rays(nerf: nn.Module,
                            train_iterations=train_iterations)
     
     
-    if hparams.use_bg_or_not:
+    if rays_with_bg.shape[0] != 0:
         z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4+1, hparams.coarse_samples // 2, rays.device)
         z_vals_outer = _expand_and_perturb_z_vals(z_vals_outer, hparams.coarse_samples // 2, perturb, rays_with_bg.shape[0])
 
@@ -116,7 +116,7 @@ def render_rays(nerf: nn.Module,
     if hparams.use_cascade and hparams.fine_samples > 0:
         types.append('coarse')
     for typ in types:
-        if hparams.use_bg_or_not:
+        if rays_with_bg.shape[0] > 0:
             bg_lambda = results[f'bg_lambda_{typ}'][rays_with_bg]
 
             for key in TO_COMPOSITE:

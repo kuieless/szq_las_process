@@ -1,6 +1,7 @@
 
 
 # Byte-compiled / optimized / DLL files
+*.jpg
 *.npy
 *.mp4
 tools/segment_anything/SAM_mask_autogenerate*
