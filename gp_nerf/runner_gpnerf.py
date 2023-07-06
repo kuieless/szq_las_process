@@ -757,7 +757,7 @@ class Runner:
         if self.hparams.enable_semantic:
             if 'sa3d' in self.hparams.dataset_type:
                 sem_logits = results[f'sem_map_{typ}']
-                if self.hparams.use_mask_type == 'hashgrid':
+                if self.hparams.use_mask_type == 'hashgrid_mlp':
                     sem_logits = self.nerf.mask_fc_hash(sem_logits)
                 elif self.hparams.use_mask_type == 'densegrid_mlp':
                     sem_logits = self.nerf.mask_fc_dense(sem_logits)
@@ -778,6 +778,7 @@ class Runner:
                     #     tmp_mask[x, y] = [0, 0, 255] if labels[index_c]==1 else [0, 255, 0]
 
                 else:   #其他祯
+
                     if self.hparams.sa3d_whole_image:
                         sem_logits = sem_logits.view(H, W, -1)
                         if sem_logits.max() < 0:
@@ -985,7 +986,7 @@ class Runner:
                     if self.hparams.enable_semantic:
                         if f'sem_map_{typ}' in results:
                             sem_logits = results[f'sem_map_{typ}']
-                            if self.hparams.use_mask_type == 'hashgrid':
+                            if self.hparams.use_mask_type == 'hashgrid_mlp':
                                 sem_logits = self.nerf.mask_fc_hash(sem_logits.to(self.device)).cpu()
                             elif self.hparams.use_mask_type == 'densegrid_mlp':
                                 sem_logits = self.nerf.mask_fc_dense(sem_logits.to(self.device)).cpu()
@@ -1067,7 +1068,7 @@ class Runner:
                         if f'sem_map_{typ}' in results:
                             sem_logits = results[f'sem_map_{typ}']
 
-                            if self.hparams.use_mask_type == 'hashgrid':
+                            if self.hparams.use_mask_type == 'hashgrid_mlp':
                                 sem_logits = self.nerf.mask_fc_hash(sem_logits.to(self.device)).cpu()
                             elif self.hparams.use_mask_type == 'densegrid_mlp':
                                 sem_logits = self.nerf.mask_fc_dense(sem_logits.to(self.device)).cpu()

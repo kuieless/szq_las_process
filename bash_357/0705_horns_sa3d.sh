@@ -28,7 +28,7 @@ python gp_nerf/train.py  --use_mask_type  $use_mask_type --sa3d_whole_image  $sa
         --dataset_path  $dataset_path     --batch_size  $batch_size   \
         --train_iterations   $train_iterations      --val_interval  $val_interval    --ckpt_interval   $ckpt_interval    \
         --lr  10   --lr_decay_factor  1  \
-        #--no_amp  #--use_bg_or_not False   --fine_samples   0  --use_cascade  
+        --no_amp  #--use_bg_or_not False   --fine_samples   0  --use_cascade  
 
 
 
