@@ -13,16 +13,16 @@ import numpy as np
 class MemoryDataset(Dataset):
 
     def __init__(self, metadata_items: List[ImageMetadata], near: float, far: float, ray_altitude_range: List[float],
-                 center_pixels: bool, device: torch.device):
+                 center_pixels: bool, device: torch.device, hparams=None):
         super(MemoryDataset, self).__init__()
-
+        self.hparams = hparams
         rgbs = []
         rays = []
         indices = []
         labels = []
 
         main_print('Loading data')
-
+        # metadata_items = metadata_items[:40]
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
             image_data = get_rgb_index_mask(metadata_item)
@@ -50,21 +50,28 @@ class MemoryDataset(Dataset):
             rgbs.append(image_rgbs)
             rays.append(image_rays)
             indices.append(image_indices)
-            labels.append(torch.tensor(label, dtype=torch.int))
+            if label is not None:
+                labels.append(torch.tensor(label, dtype=torch.int))
         main_print('Finished loading data')
 
         self._rgbs = torch.cat(rgbs)
         self._rays = torch.cat(rays)
         self._img_indices = torch.cat(indices)
-        self._labels = torch.cat(labels)
+        if labels != []:
+            self._labels = torch.cat(labels)
+        else:
+            self._labels = []
 
     def __len__(self) -> int:
         return self._rgbs.shape[0]
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        return {
+        item = {
             'rgbs': self._rgbs[idx].float() / 255.,
             'rays': self._rays[idx],
             'img_indices': self._img_indices[idx],
-            'labels': self._labels[idx].int()
         }
+        if self._labels != []:
+            item['labels'] = self._labels[idx].int()
+        return item
+    

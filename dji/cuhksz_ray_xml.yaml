@@ -1,0 +1,3 @@
+#ray_altitude_range: [0.9517738430163295, 2.507749633446527] # colmap
+
+ray_altitude_range: [-138, -35]   # xml

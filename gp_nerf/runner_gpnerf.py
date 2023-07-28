@@ -28,7 +28,6 @@ from tqdm import tqdm
 import gc
 
 from gp_nerf.datasets.filesystem_dataset import FilesystemDataset
-from gp_nerf.datasets.memory_dataset import MemoryDataset
 
 from gp_nerf.image_metadata import ImageMetadata
 from mega_nerf.metrics import psnr, ssim, lpips
@@ -122,8 +121,9 @@ class Runner:
             random.seed(hparams.random_seed)
 
         self.hparams = hparams
-        assert hparams.sample_random_num % hparams.batch_size ==0
-        self.hparams.sample_random_num_each = int(hparams.sample_random_num / hparams.batch_size)
+        if self.hparams.dataset_type == 'sam' and self.hparams.add_random_rays:
+            assert hparams.sample_random_num % hparams.batch_size ==0
+            self.hparams.sample_random_num_each = int(hparams.sample_random_num / hparams.batch_size)
  
         
 
@@ -361,14 +361,15 @@ class Runner:
             dataset = FilesystemDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                         self.hparams.center_pixels, self.device,
                                         [Path(x) for x in sorted(self.hparams.chunk_paths)], self.hparams.num_chunks,
-                                        self.hparams.train_scale_factor, self.hparams.disk_flush_size,self.hparams.desired_chunks)
+                                        self.hparams.train_scale_factor, self.hparams.disk_flush_size,self.hparams.desired_chunks, self.hparams)
             if self.hparams.ckpt_path is not None and ((self.hparams.resume_ckpt_state and not self.hparams.debug) and (not self.hparams.freeze_geo)):
                 dataset.set_state(checkpoint['dataset_state'])
             if 'RANK' in os.environ and self.is_local_master:
                 dist.barrier()
         elif self.hparams.dataset_type == 'memory':
+            from gp_nerf.datasets.memory_dataset import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
-                                    self.hparams.center_pixels, self.device)
+                                    self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'sam':
             if self.hparams.add_random_rays:
                 from gp_nerf.datasets.memory_dataset_sam_random import MemoryDataset_SAM
@@ -492,16 +493,17 @@ class Runner:
                     
 
                     # 调整shape
-                    for key in item.keys():
-                        if item[key].dim() == 2:
-                            item[key] = item[key].reshape(-1)
-                        elif item[key].dim() == 3:
-                            item[key] = item[key].reshape(-1, *item[key].shape[2:])
-                    for key in item.keys():
-                        if 'random' in key:
-                            continue
-                        elif 'random_'+key in item.keys():
-                            item[key] = torch.cat((item[key], item['random_'+key]))
+                    if self.hparams.enable_semantic:
+                        for key in item.keys():
+                            if item[key].dim() == 2:
+                                item[key] = item[key].reshape(-1)
+                            elif item[key].dim() == 3:
+                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                        for key in item.keys():
+                            if 'random' in key:
+                                continue
+                            elif 'random_'+key in item.keys():
+                                item[key] = torch.cat((item[key], item['random_'+key]))
                     
 
                     if self.hparams.enable_semantic and 'labels' in item.keys():

@@ -53,6 +53,8 @@ class ImageMetadata:
         return keep_mask
     
     def load_label(self) -> torch.Tensor:
+        if self.label_path is None:
+            return None
         labels = Image.open(self.label_path)    #.convert('RGB')
         # labels = cv2.imread(str(self.label_path))
         size = labels.size

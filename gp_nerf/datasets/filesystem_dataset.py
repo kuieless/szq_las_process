@@ -25,14 +25,14 @@ class FilesystemDataset(Dataset):
 
     def __init__(self, metadata_items: List[ImageMetadata], near: float, far: float, ray_altitude_range: List[float],
                  center_pixels: bool, device: torch.device, chunk_paths: List[Path], num_chunks: int,
-                 scale_factor: int, disk_flush_size: int, desired_chunks=1000):
+                 scale_factor: int, disk_flush_size: int, desired_chunks=1000, hparams=None):
         super(FilesystemDataset, self).__init__()
         self._device = device
         self._c2ws = torch.cat([x.c2w.unsqueeze(0) for x in metadata_items])
         self._near = near
         self._far = far
         self._ray_altitude_range = ray_altitude_range
-
+        self.hparams = hparams
         intrinsics = torch.cat(
             [torch.cat([torch.FloatTensor([x.W, x.H]), x.intrinsics]).unsqueeze(0) for x in metadata_items])
         if (intrinsics - intrinsics[0]).abs().max() == 0:
@@ -60,7 +60,7 @@ class FilesystemDataset(Dataset):
         else:
             self._parquet_paths = []
             self._write_chunks(metadata_items, center_pixels, device, chunk_paths, num_chunks, scale_factor,
-                               disk_flush_size,desired_chunks)
+                               disk_flush_size, desired_chunks)
 
         self._parquet_paths.sort(key=lambda x: x.name)
 
