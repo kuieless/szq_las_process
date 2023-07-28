@@ -31,8 +31,6 @@ def _get_opts():
     parser.add_argument('--AT_images_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/origin/undistort',type=str, required=False)
     parser.add_argument('--original_images_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/origin/original_image',type=str, required=False)
     parser.add_argument('--original_images_list_json_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/origin/original_image_list.json',type=str, required=False)
-
-
     parser.add_argument('--infos_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/origin/BlocksExchangeUndistortAT.xml',type=str, required=False)
     parser.add_argument('--output_path', default='./test',type=str, required=False)
     parser.add_argument('--resume', default=True, action='store_false')  # debug
@@ -205,36 +203,36 @@ def main(hparams):
                 split_dir = output_path / 'val'
             else:
                 split_dir = output_path / 'train'
-            # if True:
-            #     rgb_ori = str(AT_images_path) + '/' + rgb_name
-            #     distorted = cv2.imread(rgb_ori)
-            #     undistorted = cv2.undistort(distorted, camera_matrix, distortion)#这里因为distortion为[0,0,0,0,0],所以等于没有做任何操作
-            #     cv2.imwrite(str(split_dir / 'rgbs' / '{0:06d}.jpg'.format(i)), undistorted)
+            if True:
+                rgb_ori = str(AT_images_path) + '/' + rgb_name
+                distorted = cv2.imread(rgb_ori)
+                undistorted = cv2.undistort(distorted, camera_matrix, distortion)#这里因为distortion为[0,0,0,0,0],所以等于没有做任何操作
+                cv2.imwrite(str(split_dir / 'rgbs' / '{0:06d}.jpg'.format(i)), undistorted)
 
-            # # label = 'others'
-            # # omega, phi, kappa = xml_pose_sorted[i][3], xml_pose_sorted[i][4], xml_pose_sorted[i][5]
-            # # if (140 <= omega <= 150) and (25 <= phi <= 36) and (45 <= kappa <= 55):
-            # #     label = 'right'
-            # # elif (-150 <= omega <= -140) and (-36 <= phi <= -25) and (-135 <= kappa <= -125):
-            # #     label = 'right'
-            # # elif (145 <= omega <= 155) and (25 <= phi <= 36) and (-135 <= kappa <= -125):
-            # #     label = 'left'
-            # # elif (-155 <= omega <= -145) and (-36 <= phi <= -25) and (45 <= kappa <= 55):
-            # #     label = 'left'
+            # label = 'others'
+            # omega, phi, kappa = xml_pose_sorted[i][3], xml_pose_sorted[i][4], xml_pose_sorted[i][5]
+            # if (140 <= omega <= 150) and (25 <= phi <= 36) and (45 <= kappa <= 55):
+            #     label = 'right'
+            # elif (-150 <= omega <= -140) and (-36 <= phi <= -25) and (-135 <= kappa <= -125):
+            #     label = 'right'
+            # elif (145 <= omega <= 155) and (25 <= phi <= 36) and (-135 <= kappa <= -125):
+            #     label = 'left'
+            # elif (-155 <= omega <= -145) and (-36 <= phi <= -25) and (45 <= kappa <= 55):
+            #     label = 'left'
 
 
-            # metadata_name = '{0:06d}.pt'.format(i)
-            # torch.save({
-            #     'H': distorted.shape[0],
-            #     'W': distorted.shape[1],
-            #     'c2w': torch.FloatTensor(c2w[i]),
-            #     'intrinsics': torch.FloatTensor(
-            #         [camera_matrix[0][0], camera_matrix[1][1], camera_matrix[0][2], camera_matrix[1][2]]),
-            #     'distortion': torch.FloatTensor(distortion),
-            #     # 'label': label
-            # }, split_dir / 'metadata' / metadata_name)
+            metadata_name = '{0:06d}.pt'.format(i)
+            torch.save({
+                'H': distorted.shape[0],
+                'W': distorted.shape[1],
+                'c2w': torch.FloatTensor(c2w[i]),
+                'intrinsics': torch.FloatTensor(
+                    [camera_matrix[0][0], camera_matrix[1][1], camera_matrix[0][2], camera_matrix[1][2]]),
+                'distortion': torch.FloatTensor(distortion),
+                # 'label': label
+            }, split_dir / 'metadata' / metadata_name)
 
-            # f.write('{},{}\n'.format(rgb_name, metadata_name))
+            f.write('{},{}\n'.format(rgb_name, metadata_name))
 
 
             torch.save(sorted_process_data[i], split_dir / 'image_metadata' / '{0:06d}.pt'.format(i))
