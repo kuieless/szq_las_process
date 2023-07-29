@@ -5,7 +5,7 @@ export CUDA_VISIBLE_DEVICES=7
 exp_name='logs_357/0729_G_DJI'
 
 
-dataset_path=/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan_new
+dataset_path=/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan
 config_file=dji/cuhksz_ray_xml.yaml
 dataset_type=memory
 

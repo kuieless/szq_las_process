@@ -928,16 +928,17 @@ class Runner:
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
                 for dataset_index, item in enumerate(data_loader): #, start=10462):
                     #semantic 
-                    for key in item.keys():
-                        if item[key].dim() == 2:
-                            item[key] = item[key].reshape(-1)
-                        elif item[key].dim() == 3:
-                            item[key] = item[key].reshape(-1, *item[key].shape[2:])
-                    for key in item.keys():
-                        if 'random' in key:
-                            continue
-                        elif 'random_'+key in item.keys():
-                            item[key] = torch.cat((item[key], item['random_'+key]))
+                    if self.hparams.enable_semantic:
+                        for key in item.keys():
+                            if item[key].dim() == 2:
+                                item[key] = item[key].reshape(-1)
+                            elif item[key].dim() == 3:
+                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                        for key in item.keys():
+                            if 'random' in key:
+                                continue
+                            elif 'random_'+key in item.keys():
+                                item[key] = torch.cat((item[key], item['random_'+key]))
                     
                     
 
@@ -1134,7 +1135,8 @@ class Runner:
                         indices_to_eval = np.arange(len(self.val_items))
                     elif val_type == 'train':
                         # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
-                        indices_to_eval = [0] #np.arange(len(self.train_items))  
+                        # indices_to_eval = [0] #np.arange(len(self.train_items))  
+                        indices_to_eval = np.arange(800,1200)  
                         # used_files = []
                         # import glob
                         # for ext in ('*.jpg'):
@@ -1188,6 +1190,7 @@ class Runner:
                             # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                             img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
 
+                            
                             get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
                                                 self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
                                 
