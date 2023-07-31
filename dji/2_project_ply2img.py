@@ -144,10 +144,20 @@ def main(hparams):
         image = 255*np.ones((image_height, image_width, 3), dtype=np.uint8)
         # 绘制投影点到图像上（根据颜色信息进行着色）
         count = 0
+        mask_x1 = projected_points[0, :]>=0
+        mask_x2 = projected_points[0, :]<=image_width
+        mask_y1 = projected_points[1, :]>=0
+        mask_y2 = projected_points[1, :]<=image_height
+
+        mask = mask_x1 * mask_x2 * mask_y1 * mask_y2
+
+        projected_points = projected_points[:, mask]
+        colors_mask = colors[mask]
+
         for j in tqdm(range(projected_points.shape[1])):
             x, y = projected_points[:,j]
             if y >= 0 and y <= image_height and x >= 0 and x <= image_width:
-                color = colors[j]
+                color = colors_mask[j]
                 cv2.circle(image, (int(x), int(y)), 2, (float(color[2]), float(color[1]), float(color[0])), -1)
                 count += 1
         cv2.imwrite('dji/ply/output/{0:06d}_project.jpg'.format(i), image)
