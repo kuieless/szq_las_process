@@ -5,6 +5,7 @@
 #  ps：根据xml的yaw pitch roll赋予label，在训练中去除黑影（脚架）
 #
 
+
 from argparse import Namespace
 from pathlib import Path
 import numpy as np
@@ -239,8 +240,8 @@ def main(hparams):
 
             metadata_name = '{0:06d}.pt'.format(i)
             torch.save({
-                'H': distorted.shape[0],
-                'W': distorted.shape[1],
+                'H': img1.shape[0],
+                'W': img1.shape[1],
                 'c2w': torch.FloatTensor(c2w[i]),
                 'intrinsics': torch.FloatTensor(
                     [camera_matrix[0][0], camera_matrix[1][1], camera_matrix[0][2], camera_matrix[1][2]]),
