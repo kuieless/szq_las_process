@@ -96,12 +96,12 @@ def main(hparams):
                             [0, 3695.607, 1811.31],
                             [0, 0, 1]])
     
-    (Path('dji/ply') / 'output').mkdir(parents=True,exist_ok=True)
+    (Path('dji/project_script/ply') / 'output').mkdir(parents=True,exist_ok=True)
 
 
     # 读取点云数据和颜色信息
-    points = np.load('dji/ply/points.npy')
-    colors = np.load('dji/ply/colors.npy')
+    points = np.load('dji/project_script/ply/points.npy')
+    colors = np.load('dji/project_script/ply/colors.npy')
 
 
     
@@ -116,7 +116,7 @@ def main(hparams):
 
         img1 = cv2.imread(str(original_images_path) + '/' + original_image_name_sorted[i]) 
         img_change = cv2.undistort(img1, camera_matrix1, distortion_coeffs1, None, camera_matrix)
-        cv2.imwrite('dji/ply/output/{0:06d}_rgbs.jpg'.format(i), img_change)
+        cv2.imwrite('dji/project_script/ply/output/{0:06d}_rgbs.jpg'.format(i), img_change)
 
         # 相机的姿态信息（相机的位置和旋转矩阵）
         camera_rotation = euler2rotation(camera_rotations[i])
@@ -160,7 +160,7 @@ def main(hparams):
                 color = colors_mask[j]
                 cv2.circle(image, (int(x), int(y)), 2, (float(color[2]), float(color[1]), float(color[0])), -1)
                 count += 1
-        cv2.imwrite('dji/ply/output/{0:06d}_project.jpg'.format(i), image)
+        cv2.imwrite('dji/project_script/ply/output/{0:06d}_project.jpg'.format(i), image)
 
 
 
