@@ -36,7 +36,7 @@ def _get_opts():
     parser.add_argument('--original_images_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/original_image',type=str, required=False)
     parser.add_argument('--original_images_list_json_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/original_image_list.json',type=str, required=False)
     parser.add_argument('--infos_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/BlocksExchangeUndistortAT.xml',type=str, required=False)
-    parser.add_argument('--output_path', default='./test',type=str, required=False)
+    parser.add_argument('--output_path', default='dji/project_script/ply/output',type=str, required=False)
     parser.add_argument('--resume', default=True, action='store_false')  # debug
     # parser.add_argument('--resume', default=False, action='store_true')  # run
     parser.add_argument('--num_val', type=int, default=20, help='Number of images to hold out in validation set')
@@ -104,11 +104,11 @@ def main(hparams):
     #######-------------以上是dji/process_dji_v8_color.py中的内容，对pose和img进行了排序和转换-------------#########
 
     
-    (Path('dji/project_script/ply') / 'output').mkdir(parents=True,exist_ok=True)
+    (output_path).mkdir(parents=True,exist_ok=True)
 
     # 读取点云数据和颜色信息
-    points = np.load('dji/project_script/ply1_M1/points.npy')
-    colors = np.load('dji/project_script/ply1_M1/colors.npy')
+    points = np.load('dji/project_script/ply2_Mmerge/points.npy')
+    colors = np.load('dji/project_script/ply2_Mmerge/colors.npy')
 
     # scale 变化
     coordinate_info = torch.load('/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/coordinates.pt')
@@ -126,7 +126,7 @@ def main(hparams):
         
         img1 = cv2.imread(str(original_images_path) + '/' + original_image_name_sorted[i]) 
         img_change = cv2.undistort(img1, camera_matrix1, distortion_coeffs1, None, camera_matrix)
-        cv2.imwrite('dji/project_script/ply/output/{0:06d}_1_rgbs.jpg'.format(i), img_change)
+        cv2.imwrite(str(output_path)+'/'+'{0:06d}_1_rgbs.jpg'.format(i), img_change)
 
 
         metadata = torch.load('/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/' + split_dir + '/metadata/{0:06d}.pt'.format(i), map_location='cpu')
@@ -228,11 +228,19 @@ def main(hparams):
             color = colors_mask[j]
             cv2.circle(image, (x, y), 3, (float(color[2]), float(color[1]), float(color[0])), -1)
             # image[y, x] = color[::-1]
+            
+            
+
             if depth_z[j] < depth_map[y, x]:
-                depth_map[y, x] = depth_z[j]
+                step = 2
+                x_range = range(max(0, x-step), min(image_width, x+step))
+                y_range = range(max(0, y-step), min(image_height, y+step))
+                for x_i in x_range:
+                    for y_i in y_range:
+                        depth_map[y_i, x_i] = depth_z[j]
             count += 1
-        cv2.imwrite('dji/project_script/ply/output/{0:06d}_2_project.jpg'.format(i), image)
-        # np.save('dji/project_script/ply/output/{0:06d}.npy'.format(i), depth_map)
+        # cv2.imwrite(str(output_path)+'/'+'{0:06d}_2_project.jpg'.format(i), image)
+        # np.save(str(output_path)+'/'+'{0:06d}.npy'.format(i), depth_map)
         # print(sum(sum(image!=255)))
 
 
@@ -262,7 +270,7 @@ def main(hparams):
         img = make_grid(img_list1, nrow=3)
         img_grid1 = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
         img_grid1[~depth_mask[:,:,0]] = [255,255,255]
-        Image.fromarray(img_grid1).save('dji/project_script/ply/output/{0:06d}_3_depth.jpg'.format(i))
+        Image.fromarray(img_grid1).save(str(output_path)+'/'+'{0:06d}_3_depth.jpg'.format(i))
 
 
         img_list =[]
@@ -273,7 +281,7 @@ def main(hparams):
         img_list = torch.stack(img_list).permute(0,3,1,2)
         img = make_grid(img_list, nrow=3)
         img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-        Image.fromarray(img_grid).save('dji/project_script/ply/output/{0:06d}_4_depth_nerf.jpg'.format(i))
+        Image.fromarray(img_grid).save(str(output_path)+'/'+'{0:06d}_4_depth_nerf.jpg'.format(i))
         
     a = 1 
 
