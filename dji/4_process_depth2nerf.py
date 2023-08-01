@@ -83,22 +83,14 @@ def main(hparams):
     pose_dji = xml_pose_sorted
     camera_positions = pose_dji[:,0:3]#.astype(np.float32)
     camera_rotations = pose_dji[:, 3:6]#.astype(np.float32)
-
     camera = np.array([float(root.findall('Block/Photogroups/Photogroup/FocalLengthPixels')[0].text),
                         float(root.findall('Block/Photogroups/Photogroup/PrincipalPoint/x')[0].text),
                         float(root.findall('Block/Photogroups/Photogroup/PrincipalPoint/y')[0].text)])
     aspect_ratio = float(root.findall('Block/Photogroups/Photogroup/AspectRatio')[0].text)
-
-    distortion_coeffs = np.array([float(root.findall('Block/Photogroups/Photogroup/Distortion/K1')[0].text),
-                            float(root.findall('Block/Photogroups/Photogroup/Distortion/K2')[0].text),
-                            float(root.findall('Block/Photogroups/Photogroup/Distortion/P1')[0].text),
-                            float(root.findall('Block/Photogroups/Photogroup/Distortion/P2')[0].text),
-                            float(root.findall('Block/Photogroups/Photogroup/Distortion/K3')[0].text)])  # k1 k2 p1 p2 k3
     camera_matrix = np.array([[camera[0], 0, camera[1]],
                                 [0, camera[0]*aspect_ratio, camera[2]],
                                 [0, 0, 1]])
-    
-    #######-------------以上是dji/process_dji_v8_color.py中的内容，对pose和img进行了排序和转换-------------#########
+
     
     # 质量报告里面的相机参数及畸变
     distortion_coeffs1 = np.array([float(-0.009831534),
@@ -109,16 +101,18 @@ def main(hparams):
     camera_matrix1 = np.array([[3695.607, 0, 2713.97],
                             [0, 3695.607, 1811.31],
                             [0, 0, 1]])
+    #######-------------以上是dji/process_dji_v8_color.py中的内容，对pose和img进行了排序和转换-------------#########
+
     
     (Path('dji/ply') / 'output').mkdir(parents=True,exist_ok=True)
 
     # 读取点云数据和颜色信息
-    points = np.load('dji/ply/points.npy')
-    colors = np.load('dji/ply/colors.npy')
+    points = np.load('dji/ply1_M1/points.npy')
+    colors = np.load('dji/ply1_M1/colors.npy')
 
     # scale 变化
     coordinate_info = torch.load('/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/coordinates.pt')
-    origin_drb = coordinate_info['origin_drb']
+    origin_drb = coordinate_info['origin_drb'].numpy()
     pose_scale_factor = coordinate_info['pose_scale_factor']
 
     for i, rgb_name in enumerate(tqdm(images_name_sorted)):
@@ -129,46 +123,127 @@ def main(hparams):
             split_dir = 'val'
         else:
             split_dir = 'train'
+        
+        img1 = cv2.imread(str(original_images_path) + '/' + original_image_name_sorted[i]) 
+        img_change = cv2.undistort(img1, camera_matrix1, distortion_coeffs1, None, camera_matrix)
+        cv2.imwrite('dji/ply/output/{0:06d}_1_rgbs.jpg'.format(i), img_change)
+
+
+        metadata = torch.load('/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/' + split_dir + '/metadata/{0:06d}.pt'.format(i), map_location='cpu')
+        
+
+        #######################################
+        ZYQ = torch.DoubleTensor([[0, 0, -1],
+                                [0, 1, 0],
+                                [1, 0, 0]])
+        ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
+                                [0, math.cos(rad(135)), math.sin(rad(135))],
+                                [0, -math.sin(rad(135)), math.cos(rad(135))]])      
+
+
+        c2w_R = euler2rotation(camera_rotations[i])
+        c2w_T = camera_positions[i]
+
+        P = [[1, 0, 0, 0],
+            [0, -1, 0, 0],
+            [0, 0, -1, 0],
+            [0, 0, 0, 1]]
+        
+        ######### 这里的代码是debug用的##############
+        # aaa = np.concatenate((c2w_R, c2w_T[:, np.newaxis]), axis=1)
+        # fff = np.concatenate((aaa, [[0,0,0,1]]), axis=0)
+        # bbb = (fff @ P)[:3, :]
+        # ccc = ZYQ.numpy() @ bbb
+        # ddd = ZYQ_1.numpy() @ ccc
+
+
+        # temp = np.concatenate((c2w_R, c2w_T[:, np.newaxis]), axis=1)
+        # temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
+        # temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
+        # temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
+        # temp = temp.numpy()
+        # c2w = np.array(temp)
+        ##########################
+
+
+
+
+        points_nerf = points
+        # points_nerf = np.hstack((points_nerf, np.ones((points_nerf.shape[0], 1))))
+        # points_nerf = (points_nerf @ P)[:,:3]
+        points_nerf = ZYQ.numpy() @ points_nerf.T
+        points_nerf = (ZYQ_1.numpy() @ points_nerf).T
+
+        points_nerf = (points_nerf - origin_drb) / pose_scale_factor
 
         # 相机的姿态信息（相机的位置和旋转矩阵）
-        camera_rotation = euler2rotation(camera_rotations[i])
-        camera_position = camera_positions[i]
-
+        camera_rotation = metadata['c2w'][:3,:3]
+        camera_position = metadata['c2w'][:3, 3]
+        camera_matrix = np.array([[metadata['intrinsics'][0], 0, metadata['intrinsics'][2]],
+                                [0, metadata['intrinsics'][1], metadata['intrinsics'][3]],
+                                [0, 0, 1]])
         # NOTE: 2. 自己写，正确
-        E2 = np.hstack((camera_rotation,camera_position[:, np.newaxis]))
-        # E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
+        E2 = np.hstack((camera_rotation, camera_position[:, np.newaxis]))
+        E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
         w2c = np.linalg.inv(np.concatenate((E2, [[0,0,0,1]]), 0))
-        points_homogeneous = np.hstack((points, np.ones((points.shape[0], 1))))
+        points_homogeneous = np.hstack((points_nerf, np.ones((points_nerf.shape[0], 1))))
         pt_3d_trans = np.dot(w2c, points_homogeneous.T)
 
         pt_2d_trans = np.dot(camera_matrix, pt_3d_trans[:3]) 
         pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
         projected_points = (pt_2d_trans)[:2, :]
 
+        # 创建空白图像
+        image_width, image_height = 5472, 3648
+        image = 255*np.ones((image_height, image_width, 3), dtype=np.uint8)
+        depth_map = 1e6 * np.ones((image_height, image_width, 1), dtype=np.uint8)
 
-        depth_map = np.load('dji/ply/depth/{0:06d}.npy'.format(i))
+        # 绘制投影点到图像上（根据颜色信息进行着色）
+        count = 0
+        mask_x1 = projected_points[0, :]>=0
+        mask_x2 = projected_points[0, :]<=image_width
+        mask_y1 = projected_points[1, :]>=0
+        mask_y2 = projected_points[1, :]<=image_height
+
+        mask = mask_x1 * mask_x2 * mask_y1 * mask_y2
+
+        projected_points = projected_points[:, mask]
+        colors_mask = colors[mask]
+        
+        pt_3d_trans_x = pt_3d_trans[0, mask]
+        pt_3d_trans_y = pt_3d_trans[1, mask]
+        pt_3d_trans_z = pt_3d_trans[2, mask]
+        camera_position_x = camera_position[0]
+        camera_position_y = camera_position[1]
+
+        # 表示的是三维点到相机图像平面的距离, 不考虑相机的朝向
+        depth_z = pt_3d_trans_z
+        # 考虑相机朝向， 则用 三维投影点的（x,y）-> 相机中心的距离
+        # depth_z = 
+
+        for j in tqdm(range(projected_points.shape[1])):
+            x, y = projected_points[:,j]
+            x, y = int(x), int(y)
+            # if y >= 0 and y <= image_height and x >= 0 and x <= image_width:
+            color = colors_mask[j]
+            cv2.circle(image, (x, y), 2, (float(color[2]), float(color[1]), float(color[0])), -1)
+            # image[y, x] = color[::-1]
+            if depth_z[j] < depth_map[y, x]:
+                depth_map[y, x] = depth_z[j]
+            count += 1
+        cv2.imwrite('dji/ply/output/{0:06d}_2_project.jpg'.format(i), image)
+        # np.save('dji/ply/output/{0:06d}.npy'.format(i), depth_map)
+        # print(sum(sum(image!=255)))
+
 
         depth_mask = (depth_map!=1e6)
 
         depth_map[depth_mask] = depth_map[depth_mask] / pose_scale_factor
 
-        depth_0 = np.load('/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/' + split_dir + '/depths/{0:06d}.npy'.format(i))
-        depth_vis_0 = torch.from_numpy(visualize_scalars(torch.log(torch.from_numpy(depth_0) + 1e-8).cpu()))
-
-        r_d0 = (depth_0.max() - depth_0.min()) / 2
-        o_d0 = (depth_0.max() + depth_0.min()) / 2
-        r_d = (depth_map[depth_mask].max() - depth_map[depth_mask].min()) / 2
-        o_d = (depth_map[depth_mask].max() + depth_map[depth_mask].min()) / 2
-
-        depth_map[depth_mask] = (depth_map[depth_mask] - o_d)/(r_d / r_d0) + o_d0
-
-
-
 
         depth_map_valid = depth_map[depth_mask]
-        min_depth =  depth_map_valid.min()
-        max_depth =  depth_map_valid.max()
-    
+        min_depth = depth_map_valid.min()
+        max_depth = depth_map_valid.max()
 
         depth_vis1 = depth_map
         depth_vis1[depth_map==1e6] =  min_depth 
@@ -191,16 +266,16 @@ def main(hparams):
         Image.fromarray(img_grid1).save('dji/ply/output/{0:06d}_3_depth.jpg'.format(i))
 
 
-
+        img_list =[]
+        depth_0 = np.load('/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/' + split_dir + '/depths/{0:06d}.npy'.format(i))
+        depth_vis = torch.from_numpy(visualize_scalars(
+                    torch.log(torch.from_numpy(depth_0) + 1e-8).cpu()))
+        img_list.append(depth_vis)
+        img_list = torch.stack(img_list).permute(0,3,1,2)
+        img = make_grid(img_list, nrow=3)
+        img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+        Image.fromarray(img_grid).save('dji/ply/output/{0:06d}_4_depth_nerf.jpg'.format(i))
         
-        
-
-
-
-
-
-
-
     a = 1 
 
 if __name__ == '__main__':
