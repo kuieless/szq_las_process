@@ -1456,6 +1456,8 @@ class Runner:
                 (val_depth).mkdir(exist_ok=True)
                 
                 for i in tqdm(indices_to_eval):
+                    if i % 50 != 0 :
+                        continue
                     metadata_item = self.train_items[i]
                     results, _ = self.render_image(metadata_item, train_index)
                     typ = 'fine' if 'rgb_fine' in results else 'coarse'
