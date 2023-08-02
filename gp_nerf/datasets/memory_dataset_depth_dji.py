@@ -23,7 +23,8 @@ class MemoryDataset(Dataset):
         depth_djis = []
         depth_scales = []
         main_print('Loading data')
-        metadata_items = metadata_items[:40]
+        if hparams.debug:
+            metadata_items = metadata_items[:20]
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
             image_data = get_rgb_index_mask_depth_dji(metadata_item)
@@ -43,7 +44,7 @@ class MemoryDataset(Dataset):
                                             metadata_item.intrinsics[3],
                                             center_pixels,
                                             device)
-            depth_scale = torch.abs(directions[:, :, 2]).view(-1)
+            depth_scale = torch.abs(directions[:, :, 2]).view(-1).cpu()
             image_rays = get_rays(directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
             
             if image_keep_mask is not None:
@@ -77,13 +78,11 @@ class MemoryDataset(Dataset):
             'rgbs': self._rgbs[idx].float() / 255.,
             'rays': self._rays[idx],
             'img_indices': self._img_indices[idx],
+            'depth_dji': self._depth_djis[idx],
+            'depth_scale': self._depth_scales[idx],
         }
         if self._labels != []:
             item['labels'] = self._labels[idx].int()
-        
-        # depth_dji_loss
-        item['depth_dji'] = self._depth_djis[idx]
-        item['depth_scale'] = self._depth_scales[idx]
         
         return item
     

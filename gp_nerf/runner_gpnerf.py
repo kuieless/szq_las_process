@@ -453,14 +453,14 @@ class Runner:
                 if 'sam' in self.hparams.dataset_type:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
-                elif self.hparams.dataset_type == 'memory_depth' or self.hparams.dataset_type == 'memory_depth_dji':
+                elif self.hparams.dataset_type == 'memory_depth':  # or self.hparams.dataset_type == 'memory_depth_dji':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
                                                 pin_memory=False)
                 elif 'llff' in self.hparams.dataset_type or self.hparams.dataset_type =='mega_sa3d':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 else:
-                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=4,
+                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=64,
                                                 pin_memory=False)
                 
             for dataset_index, item in enumerate(data_loader): #, start=10462):
@@ -759,28 +759,29 @@ class Runner:
 
         # depth_dji loss
         if self.hparams.depth_dji_loss:
-            pred_depths = results['depth_fine'] * item['depth_scale']
+            depth_scale = item['depth_scale'].to(self.device, non_blocking=True)
+            pred_depths = results['depth_fine'] * depth_scale
             gt_depths = item['depth_dji'].to(self.device, non_blocking=True)
             valid_depth_mask = ~torch.isinf(gt_depths)
             pred_depths_valid = pred_depths[valid_depth_mask]
             gt_depths_valid = gt_depths[valid_depth_mask]
-
             depth_dji_loss = torch.mean((pred_depths_valid - gt_depths_valid)**2)
-            
-            
-            # sigma_loss from dsnerf (Ray distribution loss): add additional depth supervision
-            z_vals = results['zvals_fine'][valid_depth_mask]
-            deltas = results['deltas_fine'][valid_depth_mask]
-            weights = results[f'weights_fine'][valid_depth_mask]
-            rays_d = rays[valid_depth_mask, 3:6]
-            err = 1
-            dists = deltas * torch.norm(rays_d[...,None,:], dim=-1)
-            sigma_loss = -torch.log(weights + 1e-5) * torch.exp(-(z_vals - (gt_depths_valid[:,None]/item['depth_scale'])) ** 2 / (2 * err)) * dists
-            sigma_loss = torch.sum(sigma_loss, dim=1).mean()
-
             metrics['depth_dji_loss'] = depth_dji_loss
-            metrics['sigma_loss'] = sigma_loss
-            metrics['loss'] += self.hparams.wgt_depth_loss * depth_dji_loss + self.hparams.wgt_sigma_loss * sigma_loss
+            metrics['loss'] += self.hparams.wgt_depth_dji_loss * depth_dji_loss
+
+            if self.hparams.wgt_sigma_loss != 0:
+                # sigma_loss from dsnerf (Ray distribution loss): add additional depth supervision
+                z_vals = results['zvals_fine'][valid_depth_mask]
+                deltas = results['deltas_fine'][valid_depth_mask]
+                weights = results[f'weights_fine'][valid_depth_mask]
+                rays_d = rays[valid_depth_mask, 3:6]
+                err = 1
+                dists = deltas * torch.norm(rays_d[...,None,:], dim=-1)
+                sigma_loss = -torch.log(weights + 1e-5) * torch.exp(-(z_vals - (gt_depths_valid / (depth_scale[valid_depth_mask]))[:,None]) ** 2 / (2 * err)) * dists
+                sigma_loss = torch.sum(sigma_loss, dim=1).mean()
+
+                metrics['sigma_loss'] = sigma_loss
+                metrics['loss'] += self.hparams.wgt_sigma_loss * sigma_loss
 
 
 

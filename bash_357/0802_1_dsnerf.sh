@@ -27,7 +27,7 @@ python gp_nerf/train.py  --wandb_id  None   --exp_name  $exp_name   --enable_sem
     --label_name   $label_name   --separate_semantic   $separate_semantic    --network_type    $network_type   --config_file  $config_file     \
     --dataset_path  $dataset_path       \
     --train_iterations   $train_iterations     --val_interval  $val_interval    --ckpt_interval   $ckpt_interval   --batch_size  $batch_size   \
-    --dataset_type $dataset_type   --depth_dji_loss   True     --wgt_sigma_loss  0
+    --dataset_type $dataset_type   --depth_dji_loss   True     --wgt_sigma_loss  0    --wgt_depth_dji_loss  0.0001
 
 
 
