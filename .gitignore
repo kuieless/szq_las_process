@@ -1,6 +1,7 @@
 
-
 # Byte-compiled / optimized / DLL files
+test/
+logs_dji/
 *.jpg
 *.npy
 *.mp4

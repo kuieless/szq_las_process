@@ -2,7 +2,7 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=6
 
-exp_name='logs_357/0802_1_dsnerf'
+exp_name='logs_dji/0802_1_dsnerf'
 
 
 dataset_path=/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan
