@@ -41,7 +41,7 @@ def _get_opts():
     parser.add_argument('--resume', default=True, action='store_false')  # debug
     # parser.add_argument('--resume', default=False, action='store_true')  # run
     parser.add_argument('--num_val', type=int, default=20, help='Number of images to hold out in validation set')
-    parser.add_argument('--down_scale', type=int, default=1, help='')
+    parser.add_argument('--down_scale', type=int, default=4, help='')
     return parser.parse_known_args()[0]
 
 def main(hparams):
@@ -115,8 +115,9 @@ def main(hparams):
 
     for i, rgb_name in enumerate(tqdm(images_name_sorted)):
         # if i %50 !=0:
-        # if i != 350:
-            # continue
+        # if i <= 1750:
+        if i <= 1500 or i > 1750 :
+            continue
         if i % int(camera_positions.shape[0] / hparams.num_val) == 0:
             split_dir = output_path / 'val'
         else:

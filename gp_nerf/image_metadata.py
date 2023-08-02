@@ -11,7 +11,7 @@ import cv2
 class ImageMetadata:
     #zyq : add label_path for semantic 
     def __init__(self, image_path: Path, c2w: torch.Tensor, W: int, H: int, intrinsics: torch.Tensor, image_index: int,
-                 mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None, normal_path=None, depth_path=None):
+                 mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None, normal_path=None, depth_path=None, depth_dji_path=None):
         self.image_path = image_path
         self.c2w = c2w
         self.W = W
@@ -24,6 +24,8 @@ class ImageMetadata:
         self.sam_feature_path = sam_feature_path
         self.normal_path = normal_path
         self.depth_path = depth_path
+        self.depth_dji_path = depth_dji_path
+
 
     def load_image(self) -> torch.Tensor:
         rgbs = Image.open(self.image_path).convert('RGB')
@@ -95,6 +97,12 @@ class ImageMetadata:
     def load_depth(self):
         depth = np.load(self.depth_path)
         return torch.HalfTensor(depth)
+    
+    def load_depth_dji(self):
+        depth = np.load(self.depth_dji_path)
+        depth = torch.HalfTensor(depth)
+        assert depth.shape[0] == self.H and depth.shape[1] == self.W
+        return depth
     
     
     

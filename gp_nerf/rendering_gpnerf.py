@@ -372,7 +372,10 @@ def _inference(point_type,
 
     if composite_rgb: # coarse = False, fine = True
         results[f'rgb_{typ}'] = (weights.unsqueeze(-1) * rgbs).sum(dim=1)  # n1 n2 c -> n1 c
-        
+        if hparams.depth_dji_loss:
+            results[f'zvals_{typ}'] = z_vals
+            results[f'deltas_{typ}'] = deltas
+            results[f'weights_{typ}'] = weights
         # results[f'rgb_{typ}'] = segment_coo(
         #                         src=(weights.view(-1).unsqueeze(-1) * rgbs.view(-1, 3)),
         #                         index=ray_id.to(rgbs.device),
@@ -391,8 +394,6 @@ def _inference(point_type,
                 #             index=ray_id.to(rgbs.device),
                 #             out=torch.zeros([N_rays_, sem_logits.shape[-1]]).to(rgbs.device),
                 #             reduce='sum')
-
-                
                 
                 if hparams.dataset_type == 'sam':
                     semantic_feature = torch.sum(w * sem_feature, -2)
@@ -419,19 +420,18 @@ def _inference(point_type,
             results[f'raw_sem_logits_{typ}'] = sem_logits
             if hparams.dataset_type == 'sam':
                 results[f'raw_sem_feature_{typ}'] = sem_feature
-                
         
         if point_type == 'fg' and normals is not None:
             results[f'raw_normal_{typ}'] = normals
         
-    if hparams.depth_loss:
+    if hparams.depth_loss or hparams.depth_dji_loss:
         depth_map = (weights * z_vals).sum(dim=1)  # n1 n2 -> n1
         results[f'depth_{typ}'] = depth_map
-
         with torch.no_grad():
             if get_depth_variance:# coarse = False, fine = True
                 results[f'depth_variance_{typ}'] = (weights * (z_vals - depth_map.unsqueeze(1)).square()).sum(
                     axis=-1)
+        
 
     else:
         with torch.no_grad():

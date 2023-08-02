@@ -370,6 +370,10 @@ class Runner:
             from gp_nerf.datasets.memory_dataset import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
+        elif self.hparams.dataset_type == 'memory_depth_dji':
+            from gp_nerf.datasets.memory_dataset_depth_dji import MemoryDataset
+            dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'sam':
             if self.hparams.add_random_rays:
                 from gp_nerf.datasets.memory_dataset_sam_random import MemoryDataset_SAM
@@ -449,7 +453,7 @@ class Runner:
                 if 'sam' in self.hparams.dataset_type:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
-                elif self.hparams.dataset_type == 'memory_depth':
+                elif self.hparams.dataset_type == 'memory_depth' or self.hparams.dataset_type == 'memory_depth_dji':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
                                                 pin_memory=False)
                 elif 'llff' in self.hparams.dataset_type or self.hparams.dataset_type =='mega_sa3d':
@@ -504,7 +508,6 @@ class Runner:
                                 continue
                             elif 'random_'+key in item.keys():
                                 item[key] = torch.cat((item[key], item['random_'+key]))
-                    
 
                     if self.hparams.enable_semantic and 'labels' in item.keys():
                         labels = item['labels'].to(self.device, non_blocking=True)
@@ -523,7 +526,8 @@ class Runner:
                     else:
                         rgbs = item['rgbs'].to(self.device, non_blocking=True)
                         groups = None
-                    # print(labels.shape[0])
+
+                    # training_step
                     metrics, bg_nerf_rays_present = self._training_step(
                         rgbs,
                         item['rays'].to(self.device, non_blocking=True),
@@ -541,7 +545,6 @@ class Runner:
                             if not math.isfinite(val):
                                 np.save(f"{train_iterations}.npy", item)
                                 raise Exception('Train metrics not finite: {}'.format(metrics))
-
 
                 for optimizer in optimizers.values():
                     # optimizer.zero_grad(set_to_none=True)
@@ -754,6 +757,33 @@ class Runner:
             metrics['photo_loss'] = photo_loss
         metrics['loss'] = photo_loss
 
+        # depth_dji loss
+        if self.hparams.depth_dji_loss:
+            pred_depths = results['depth_fine'] * item['depth_scale']
+            gt_depths = item['depth_dji'].to(self.device, non_blocking=True)
+            valid_depth_mask = ~torch.isinf(gt_depths)
+            pred_depths_valid = pred_depths[valid_depth_mask]
+            gt_depths_valid = gt_depths[valid_depth_mask]
+
+            depth_dji_loss = torch.mean((pred_depths_valid - gt_depths_valid)**2)
+            
+            
+            # sigma_loss from dsnerf (Ray distribution loss): add additional depth supervision
+            z_vals = results['zvals_fine'][valid_depth_mask]
+            deltas = results['deltas_fine'][valid_depth_mask]
+            weights = results[f'weights_fine'][valid_depth_mask]
+            rays_d = rays[valid_depth_mask, 3:6]
+            err = 1
+            dists = deltas * torch.norm(rays_d[...,None,:], dim=-1)
+            sigma_loss = -torch.log(weights + 1e-5) * torch.exp(-(z_vals - (gt_depths_valid[:,None]/item['depth_scale'])) ** 2 / (2 * err)) * dists
+            sigma_loss = torch.sum(sigma_loss, dim=1).mean()
+
+            metrics['depth_dji_loss'] = depth_dji_loss
+            metrics['sigma_loss'] = sigma_loss
+            metrics['loss'] += self.hparams.wgt_depth_loss * depth_dji_loss + self.hparams.wgt_sigma_loss * sigma_loss
+
+
+
 
         #semantic loss
         if self.hparams.enable_semantic:
@@ -850,7 +880,6 @@ class Runner:
                         metrics['loss'] += self.hparams.wgt_group_loss * group_loss
             
                 
-
         if self.hparams.depth_loss or self.hparams.normal_loss:
             decay_min = 0.00 # arrive decay_min in 1/4 training iterationsc
             nloss_decay = (1 - decay_min) * (1 - train_iterations / (self.hparams.train_iterations/4.)) + decay_min
@@ -1706,6 +1735,10 @@ class Runner:
             depth_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_depth.npy' % metadata_path.stem) 
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                  intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_path=depth_path)
+        elif self.hparams.depth_dji_loss:
+            depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_dji_path=depth_dji_path)
 
         else:
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
