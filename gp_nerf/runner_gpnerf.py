@@ -460,7 +460,7 @@ class Runner:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 else:
-                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=64,
+                    data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=16,
                                                 pin_memory=False)
                 
             for dataset_index, item in enumerate(data_loader): #, start=10462):
@@ -636,6 +636,11 @@ class Runner:
                             self.wandb.log({'val/psnr_avg': avg_val, 'epoch':train_iterations})
                         if self.writer is not None:
                             self.writer.add_scalar('2_val_metric_average/psnr_avg', avg_val, train_iterations)
+                    if key== 'val/ssim':
+                        if self.wandb is not None:
+                            self.wandb.log({'val/ssim_avg': avg_val, 'epoch':train_iterations})
+                        if self.writer is not None:
+                            self.writer.add_scalar('2_val_metric_average/ssim_avg', avg_val, train_iterations)
 
                     message = 'Average {}: {}'.format(key, avg_val)
                     main_print(message)
@@ -765,9 +770,9 @@ class Runner:
             valid_depth_mask = ~torch.isinf(gt_depths)
             pred_depths_valid = pred_depths[valid_depth_mask]
             gt_depths_valid = gt_depths[valid_depth_mask]
-            depth_dji_loss = torch.mean((pred_depths_valid - gt_depths_valid)**2)
-            metrics['depth_dji_loss'] = depth_dji_loss
-            metrics['loss'] += self.hparams.wgt_depth_dji_loss * depth_dji_loss
+            depth_mse_loss = torch.mean((pred_depths_valid - gt_depths_valid)**2)
+            metrics['depth_mse_loss'] = depth_mse_loss
+            metrics['loss'] += self.hparams.wgt_depth_mse_loss * depth_mse_loss
 
             if self.hparams.wgt_sigma_loss != 0:
                 # sigma_loss from dsnerf (Ray distribution loss): add additional depth supervision

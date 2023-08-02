@@ -54,7 +54,7 @@ def get_opts_base():
     parser.add_argument('--normal_iterations', type=int, default=50000, help='training iterations')
     # depth_dji_loss
     parser.add_argument('--depth_dji_loss', default=False, type=eval, choices=[True, False], help='')
-    parser.add_argument('--wgt_depth_dji_loss', default=1e-4, type=float, help='')
+    parser.add_argument('--wgt_depth_mse_loss', default=1e-4, type=float, help='')
     parser.add_argument('--wgt_sigma_loss', default=1e-4, type=float, help='')
 
 

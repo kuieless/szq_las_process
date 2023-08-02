@@ -32,16 +32,16 @@ def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, wr
         writer.add_scalar('3_val_each_image/ssim/{}'.format(train_index), val_ssim, i)
     val_metrics['val/ssim'] += val_ssim
 
-    #val_lpips_metrics = lpips(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs)
-    #for network in val_lpips_metrics:
-    #    agg_key = 'val/lpips/{}'.format(network)
-    #    metric_key = '{}/{}'.format(agg_key, train_index)
-    #    # TODO: 暂时不放lpips
-    #    # if self.wandb is not None:
-    #    #     self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
-    #    # if self.writer is not None:
-    #    #     self.writer.add_scalar('3_val_each_image/lpips/{}'.format(network), val_lpips_metrics[network], i)
-    #    val_metrics[agg_key] += val_lpips_metrics[network]
+    val_lpips_metrics = lpips(eval_result_rgbs.view(*eval_rgbs.shape), eval_rgbs)
+    for network in val_lpips_metrics:
+       agg_key = 'val/lpips/{}'.format(network)
+       metric_key = '{}/{}'.format(agg_key, train_index)
+       # TODO: 暂时不放lpips
+       # if self.wandb is not None:
+       #     self.wandb.log({'val/lpips/{}/{}'.format(network, train_index): val_lpips_metrics[network], 'epoch':i})
+       # if self.writer is not None:
+       #     self.writer.add_scalar('3_val_each_image/lpips/{}'.format(network), val_lpips_metrics[network], i)
+       val_metrics[agg_key] += val_lpips_metrics[network]
     return val_metrics
 
 def get_depth_vis(results, typ):
@@ -218,6 +218,12 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         depth_cue = metadata_item.load_depth().float()
         depth_cue = torch.from_numpy(visualize_scalars(depth_cue))
         img_list.append(depth_cue)
+    
+    if hparams.depth_dji_loss:  # DJI Gt depth
+        depth_dji = metadata_item.load_depth_dji().float()
+        depth_dji = torch.from_numpy(visualize_scalars(depth_dji))
+        img_list.append(depth_dji)
+
 
 
     if f'normal_map_{typ}' in results:

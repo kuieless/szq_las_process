@@ -1,8 +1,8 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=7
 
-exp_name='logs_357/0729_G_DJI_1'
+exp_name='logs_dji/0802_2_G_DJI'
 
 
 dataset_path=/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan
