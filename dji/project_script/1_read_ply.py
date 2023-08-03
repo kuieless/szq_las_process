@@ -6,10 +6,10 @@ from tqdm import tqdm
 # 读取PLY文件
 print('loading')
 # plydata = PlyData.read('/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/M1_cloud_merged.ply')
-plydata = PlyData.read('/data/yuqi/Datasets/DJI/Mmerge_from_las.ply')
+plydata = PlyData.read('/data/yuqi/Datasets/DJI/M1_from_las.ply')
 
 print('load ply done')
-vertex_data = plydata['vertex']
+vertex_data = plydata['vertex'][::100]
 points = []
 colors = []
 

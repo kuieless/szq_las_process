@@ -27,7 +27,9 @@ def render_rays(nerf: nn.Module,
                 get_depth: bool,
                 get_depth_variance: bool,
                 get_bg_fg_rgb: bool,
-                train_iterations=-1) -> Tuple[Dict[str, torch.Tensor], bool]:
+                train_iterations=-1,
+                gt_depths=None,
+                depth_scale=None) -> Tuple[Dict[str, torch.Tensor], bool]:
 
     N_rays = rays.shape[0]
 
@@ -84,7 +86,9 @@ def render_rays(nerf: nn.Module,
                            get_bg_lambda=True,
                            depth_real=None,
                            xyz_fine_fn=lambda fine_z_vals: (rays_o + rays_d * fine_z_vals.unsqueeze(-1), None),
-                           train_iterations=train_iterations)
+                           train_iterations=train_iterations,
+                           gt_depths=gt_depths,
+                           depth_scale=gt_depths)
     
     
     if rays_with_bg.shape[0] != 0:
@@ -109,7 +113,9 @@ def render_rays(nerf: nn.Module,
                                   get_bg_lambda=False,
                                   depth_real=None,
                                   xyz_fine_fn=lambda fine_z_vals: (rays_o[rays_with_bg] + rays_d[rays_with_bg] * fine_z_vals.unsqueeze(-1), None),
-                                  train_iterations=train_iterations)
+                                  train_iterations=train_iterations,
+                                  gt_depths=gt_depths,
+                                  depth_scale=gt_depths)
         
     # merge the result of inner and outer
     types = ['fine' if hparams.fine_samples > 0 else 'coarse']
@@ -170,8 +176,9 @@ def _get_results(point_type,
                  get_bg_lambda: bool,
                  depth_real: Optional[torch.Tensor],
                  xyz_fine_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, Optional[torch.Tensor]]],
-                 train_iterations=-1) \
-        -> Dict[str, torch.Tensor]:
+                 train_iterations=-1,
+                 gt_depths=None,
+                 depth_scale=None)-> Dict[str, torch.Tensor]:
     results = {}
 
     last_delta_diff = torch.zeros_like(last_delta)
@@ -194,7 +201,9 @@ def _get_results(point_type,
                get_weights=hparams.fine_samples > 0,
                get_bg_lambda=get_bg_lambda and hparams.use_cascade,
                depth_real=depth_real,
-               train_iterations=train_iterations)
+               train_iterations=train_iterations,
+               gt_depths=gt_depths,
+               depth_scale=gt_depths)
 
 
     if hparams.fine_samples > 0:  # sample points for fine model
@@ -234,7 +243,9 @@ def _get_results(point_type,
                    get_weights=False,
                    get_bg_lambda=get_bg_lambda,
                    depth_real=depth_real_fine,
-                   train_iterations=train_iterations)
+                   train_iterations=train_iterations,
+                   gt_depths=gt_depths,
+                   depth_scale=gt_depths)
 
         for key in INTERMEDIATE_KEYS:
             if key in results:
@@ -259,7 +270,9 @@ def _inference(point_type,
                get_weights: bool,
                get_bg_lambda: bool,
                depth_real: Optional[torch.Tensor],
-               train_iterations=-1):
+               train_iterations=-1,
+               gt_depths=None,
+               depth_scale=None):
 
 
     N_rays_ = xyz.shape[0]
@@ -359,6 +372,7 @@ def _inference(point_type,
 
     alphas = 1 - torch.exp(-deltas * sigmas)  # (N_rays, N_samples_)
 
+
     T = torch.cumprod(1 - alphas + 1e-8, -1)
     if get_bg_lambda: # only when foreground fine =True
         results[f'bg_lambda_{typ}'] = T[..., -1]
@@ -373,14 +387,20 @@ def _inference(point_type,
     if composite_rgb: # coarse = False, fine = True
         results[f'rgb_{typ}'] = (weights.unsqueeze(-1) * rgbs).sum(dim=1)  # n1 n2 c -> n1 c
         if hparams.depth_dji_loss:
-            results[f'zvals_{typ}'] = z_vals
-            results[f'deltas_{typ}'] = deltas
-            results[f'weights_{typ}'] = weights
-        # results[f'rgb_{typ}'] = segment_coo(
-        #                         src=(weights.view(-1).unsqueeze(-1) * rgbs.view(-1, 3)),
-        #                         index=ray_id.to(rgbs.device),
-        #                         out=torch.zeros([N_rays_, 3]).to(rgbs.device),
-        #                         reduce='sum')
+            valid_depth_mask = ~torch.isinf(gt_depths)
+            err = 1
+            dists = z_vals[:, 1:] - z_vals[:, :-1]
+            dists = torch.cat([dists, last_delta], -1)  # (N_rays, N_samples_)
+            # dists = torch.cat([dists, torch.Tensor([1e10]).to(weights.device).expand(dists[...,:1].shape)], -1)  # [N_rays, N_samples]
+
+            dists = dists * torch.norm(rays_d, dim=-1)
+            sigma_loss = -torch.log(weights + 1e-5) * torch.exp(-(z_vals - (gt_depths / (depth_scale))[:,None]) ** 2 / (2 * err)) * dists
+            sigma_loss = sigma_loss[valid_depth_mask]
+            sigma_loss = torch.sum(sigma_loss, dim=1).mean()
+            if 'sigma_loss' in results:
+                results['sigma_loss'] += sigma_loss
+            else:
+                results['sigma_loss'] = sigma_loss
                 
         if hparams.enable_semantic:
             if hparams.stop_semantic_grad:

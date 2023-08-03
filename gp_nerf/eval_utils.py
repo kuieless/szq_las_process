@@ -6,6 +6,7 @@ from tools.unetformer.uavid2rgb import custom2rgb
 import numpy as np
 from PIL import Image
 
+### https://github.com/nianticlabs/monodepth2/blob/b676244e5a1ca55564eb5d16ab521a48f823af31/evaluate_depth.py#L214
 def compute_errors(gt, pred):
     """Computation of error metrics between predicted and ground truth depths
     """
