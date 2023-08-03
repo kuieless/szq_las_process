@@ -128,7 +128,7 @@ def main(hparams):
     visualize_poses(c2w[290:310])
 
 
-    NOTE: 下面代码是可视化所有深度图
+    ######NOTE: 下面代码是可视化所有深度图
     for i, rgb_name in enumerate(tqdm(images_name_sorted)):
         # # if i %50 !=0:
         # # if i <= 1750:

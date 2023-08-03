@@ -645,6 +645,14 @@ class Runner:
                     message = 'Average {}: {}'.format(key, avg_val)
                     main_print(message)
                     f.write('{}\n'.format(message))
+                psnr = val_metrics['val/psnr'] / len(self.val_items)
+                ssim = val_metrics['val/ssim'] / len(self.val_items)
+                abs_rel = val_metrics['val/abs_rel'] / len(self.val_items)
+                rmse_actual = val_metrics['val/rmse_actual'] / len(self.val_items)
+
+                # f.write('arg_psnr, arg_ssim: {arg_psnr:.5f}, {arg_ssim:.5f}\n')  
+                f.write(f'\n psnr, ssim, rmse_actual, abs_rel: {psnr:.5f}, {ssim:.5f}, {rmse_actual:.5f} ,{abs_rel:.5f}\n')  
+                print(f'psnr, ssim, rmse_actual, abs_rel: {psnr:.5f}, {ssim:.5f}, {rmse_actual:.5f} ,{abs_rel:.5f}')
 
             self.writer.flush()
             self.writer.close()
@@ -1219,7 +1227,8 @@ class Runner:
                             viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
                             viz_result_rgbs = viz_result_rgbs.clamp(0,1)
                             if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
-                                val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f)
+                                val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
+                                
                             viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
                             
                             # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
@@ -1230,7 +1239,8 @@ class Runner:
                                                 self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
                                 
                             prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
-                                
+                            
+
                             # NOTE: 对需要可视化的list进行处理
                             # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
                             # 将None元素转换为zeros矩阵

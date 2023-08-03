@@ -6,8 +6,30 @@ from tools.unetformer.uavid2rgb import custom2rgb
 import numpy as np
 from PIL import Image
 
+def compute_errors(gt, pred):
+    """Computation of error metrics between predicted and ground truth depths
+    """
+    thresh = np.maximum((gt / pred), (pred / gt))
+    a1 = (thresh < 1.25     ).mean()
+    a2 = (thresh < 1.25 ** 2).mean()
+    a3 = (thresh < 1.25 ** 3).mean()
 
-def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, writer, val_metrics, i, f):                            
+    rmse = (gt - pred) ** 2
+    rmse = np.sqrt(rmse.mean())
+
+    rmse_log = (np.log(gt) - np.log(pred)) ** 2
+    rmse_log = np.sqrt(rmse_log.mean())
+
+    abs_rel = np.mean(np.abs(gt - pred) / gt)
+
+    sq_rel = np.mean(((gt - pred) ** 2) / gt)
+
+    return abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
+
+
+
+
+def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, writer, val_metrics, i, f, hparams, metadata_item, typ, results, device, pose_scale_factor):                            
     eval_rgbs = viz_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
     eval_result_rgbs = viz_result_rgbs[:, viz_rgbs.shape[1] // 2:].contiguous()
     
@@ -42,7 +64,45 @@ def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, wr
        # if self.writer is not None:
        #     self.writer.add_scalar('3_val_each_image/lpips/{}'.format(network), val_lpips_metrics[network], i)
        val_metrics[agg_key] += val_lpips_metrics[network]
+
+
+    # Depth metric
+    if hparams.depth_dji_loss:
+        gt_depths = metadata_item.load_depth_dji()
+        valid_depth_mask = ~torch.isinf(gt_depths)
+        gt_depths_valid = gt_depths[valid_depth_mask]
+        
+        from mega_nerf.ray_utils import get_ray_directions
+        directions = get_ray_directions(metadata_item.W,
+                                        metadata_item.H,
+                                        metadata_item.intrinsics[0],
+                                        metadata_item.intrinsics[1],
+                                        metadata_item.intrinsics[2],
+                                        metadata_item.intrinsics[3],
+                                        hparams.center_pixels,
+                                        torch.device('cpu'))
+        depth_scale = torch.abs(directions[:, :, 2])
+        pred_depths = (results[f'depth_{typ}'].view(*gt_depths.shape)) * (depth_scale.unsqueeze(-1))
+        pred_depths_valid = pred_depths[valid_depth_mask]
+        abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3 = compute_errors(gt_depths_valid.numpy(), pred_depths_valid.numpy())
+        rmse_actual = rmse * pose_scale_factor
+        
+        if wandb is not None:
+            wandb.log({'val/depth_abs_rel/{}'.format(train_index): abs_rel, 'epoch':i})
+        if writer is not None:
+            writer.add_scalar('3_val_each_image/abs_rel/{}'.format(train_index), abs_rel, i)
+        val_metrics['val/abs_rel'] += abs_rel
+
+        if wandb is not None:
+            wandb.log({'val/depth_rmse_actual/{}'.format(train_index): rmse_actual, 'epoch':i})
+        if writer is not None:
+            writer.add_scalar('3_val_each_image/rmse_actual/{}'.format(train_index), rmse_actual, i)
+        val_metrics['val/rmse_actual'] += rmse_actual
+        
+
+
     return val_metrics
+
 
 def get_depth_vis(results, typ):
     if f'depth_{typ}' in results:
