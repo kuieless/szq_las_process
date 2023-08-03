@@ -13,6 +13,8 @@ import trimesh
 import json
 from scripts.colmap_to_mega_nerf import * #read_model, qvec2rotmat, RDF_TO_DRB
 
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 def visualize_poses(poses1, poses2=None, size=0.01, flipz=True):
     # poses: [B, 4, 4]

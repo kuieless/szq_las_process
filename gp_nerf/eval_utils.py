@@ -221,7 +221,8 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
     
     if hparams.depth_dji_loss:  # DJI Gt depth
         depth_dji = metadata_item.load_depth_dji().float()
-        depth_dji = torch.from_numpy(visualize_scalars(depth_dji))
+        invalid_mask = torch.isinf(depth_dji)
+        depth_dji = torch.from_numpy(visualize_scalars(depth_dji,invalid_mask))
         img_list.append(depth_dji)
 
 

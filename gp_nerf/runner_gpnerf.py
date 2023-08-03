@@ -1626,8 +1626,12 @@ class Runner:
         return res_list
     
     @staticmethod
-    def visualize_scalars(scalar_tensor: torch.Tensor) -> np.ndarray:
-        to_use = scalar_tensor.view(-1)
+    def visualize_scalars(scalar_tensor: torch.Tensor, invalid_mask=None) -> np.ndarray:
+        if invalid_mask is not None:
+            w, h, _ = invalid_mask.shape
+            to_use = scalar_tensor[~invalid_mask].view(-1)
+        else:
+            to_use = scalar_tensor.view(-1)
         while to_use.shape[0] > 2 ** 24:
             to_use = to_use[::2]
 
