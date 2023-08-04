@@ -31,8 +31,8 @@ def _get_opts():
     parser.add_argument('--num_val', type=int, default=20, help='Number of images to hold out in validation set')
     parser.add_argument('--down_scale', type=int, default=4, help='')
     parser.add_argument('--debug', type=eval, default=True, choices=[True, False],help='')
-    parser.add_argument('--start', type=int, default=311, help='')
-    parser.add_argument('--end', type=int, default=676, help='')
+    parser.add_argument('--start', type=int, default=1169, help='')
+    parser.add_argument('--end', type=int, default=1530, help='')
 
     return parser.parse_known_args()[0]
 
@@ -125,15 +125,21 @@ def main(hparams):
 
 
     for i, rgb_name in enumerate(tqdm(images_name_sorted)):
+        ## 确保在las文件范围内
         if i < hparams.start or i >= hparams.end:
             continue
-        # if i < 1525:
-        #     continue
-        # if i % 50 !=0:
-        #     continue
+        
+        #### 最后几张图的结果
+        if i < (hparams.end-3):
+            continue
+        
+        # 调试用，输出前几张和后几张，以及中间几张的结果
         if hparams.debug:
             if i % 50 !=0:
-                continue
+                if i > (hparams.end-4) or i < (hparams.start+2):
+                    pass
+                else:
+                    continue
             
 
         if i % int(camera_positions.shape[0] / hparams.num_val) == 0:
@@ -149,19 +155,27 @@ def main(hparams):
         if hparams.debug:
             cv2.imwrite(str(output_path / 'debug' / '{0:06d}_1_rgbs.png'.format(i)), img_change)
             
-            points_color = points_lidar_list[current_i][:,3:] 
-            #### 获取前后两帧的颜色
-            if current_i - 1 >= 0:
-                points_color = np.concatenate((points_color, points_lidar_list[current_i-1][:,3:]), axis=0)
-            if current_i + 1 < (hparams.end - hparams.start):
-                points_color = np.concatenate((points_color, points_lidar_list[current_i+1][:,3:]), axis=0)
-        
-        points_nerf = points_lidar_list[current_i][:,:3] 
+            
+            if current_i < (hparams.end - hparams.start - 2):
+                points_color = points_lidar_list[current_i][:,3:] 
+                #### 获取前后两帧的颜色
+                if current_i - 1 >= 0:
+                    points_color = np.concatenate((points_color, points_lidar_list[current_i-1][:,3:]), axis=0)
+                if current_i + 1 < (hparams.end - hparams.start):
+                    points_color = np.concatenate((points_color, points_lidar_list[current_i+1][:,3:]), axis=0)
+            else:
+                points_color = np.concatenate((points_lidar_list[-1][:,3:], points_lidar_list[-2][:,3:], points_lidar_list[-3][:,3:]), axis=0)
+                
         # ####获取前后两帧的点云
-        if current_i - 1 >= 0:
-            points_nerf = np.concatenate((points_nerf, points_lidar_list[current_i-1][:,:3]), axis=0)
-        if current_i + 1 < (hparams.end - hparams.start):
-            points_nerf = np.concatenate((points_nerf, points_lidar_list[current_i+1][:,:3]), axis=0)
+        if current_i < (hparams.end - hparams.start - 2):
+            points_nerf = points_lidar_list[current_i][:,:3] 
+            if current_i - 1 >= 0:
+                points_nerf = np.concatenate((points_nerf, points_lidar_list[current_i-1][:,:3]), axis=0)
+            if current_i + 1 < (hparams.end - hparams.start):
+                points_nerf = np.concatenate((points_nerf, points_lidar_list[current_i+1][:,:3]), axis=0)
+        else:
+            points_nerf = np.concatenate((points_lidar_list[-1][:,:3], points_lidar_list[-2][:,:3], points_lidar_list[-3][:,:3]), axis=0)
+
         
         
         #######################################
