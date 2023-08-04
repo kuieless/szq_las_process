@@ -26,8 +26,8 @@ def _get_opts():
     parser.add_argument('--original_images_list_json_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/original_image_list.json',type=str, required=False)
     parser.add_argument('--infos_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/BlocksExchangeUndistortAT.xml',type=str, required=False)
     parser.add_argument('--dataset_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan',type=str, required=False)
-    parser.add_argument('--output_path', default='/data/yuqi/code/GP-NeRF-semantic/dji/process_las/output_2',type=str, required=False)
-    parser.add_argument('--las_output_path', default='dji/process_las/output_2',type=str, required=False)
+    parser.add_argument('--output_path', default='/data/yuqi/code/GP-NeRF-semantic/dji/process_las/output_5',type=str, required=False)
+    parser.add_argument('--las_output_path', default='dji/process_las/output_5',type=str, required=False)
     parser.add_argument('--num_val', type=int, default=20, help='Number of images to hold out in validation set')
     parser.add_argument('--down_scale', type=int, default=4, help='')
     parser.add_argument('--debug', type=eval, default=True, choices=[True, False],help='')
@@ -127,6 +127,8 @@ def main(hparams):
     for i, rgb_name in enumerate(tqdm(images_name_sorted)):
         if i < hparams.start or i >= hparams.end:
             continue
+        # if i < 1525:
+        #     continue
         # if i % 50 !=0:
         #     continue
         if hparams.debug:
@@ -149,16 +151,16 @@ def main(hparams):
             
             points_color = points_lidar_list[current_i][:,3:] 
             #### 获取前后两帧的颜色
-            if current_i - 1 >= hparams.start:
+            if current_i - 1 >= 0:
                 points_color = np.concatenate((points_color, points_lidar_list[current_i-1][:,3:]), axis=0)
-            if current_i + 1 <= hparams.end:
+            if current_i + 1 < (hparams.end - hparams.start):
                 points_color = np.concatenate((points_color, points_lidar_list[current_i+1][:,3:]), axis=0)
         
         points_nerf = points_lidar_list[current_i][:,:3] 
         # ####获取前后两帧的点云
-        if current_i - 1 >= hparams.start:
+        if current_i - 1 >= 0:
             points_nerf = np.concatenate((points_nerf, points_lidar_list[current_i-1][:,:3]), axis=0)
-        if current_i + 1 <= hparams.end:
+        if current_i + 1 < (hparams.end - hparams.start):
             points_nerf = np.concatenate((points_nerf, points_lidar_list[current_i+1][:,:3]), axis=0)
         
         
@@ -269,27 +271,28 @@ def main(hparams):
             if expand:
                 # cv2.imwrite(str(output_path / 'debug' / '{0:06d}_2_project_size3.png'.format(i)), image_expand)
 
-                img_list3=[]
-                invalid_mask3 = (depth_map_expand==large_int)
-                depth_map_valid3 = depth_map_expand[~invalid_mask3]
-                min_depth3 = depth_map_valid3.min()
-                max_depth3 = depth_map_valid3.max()
-                depth_vis3 = depth_map_expand
-                depth_vis3[invalid_mask3] =  min_depth3
-                depth_vis3 = (depth_vis3 - min_depth3) / max(max_depth3 - min_depth3, 1e-8)  # normalize to 0~1
-                depth_vis3 = torch.from_numpy(depth_vis3).clamp_(0, 1)
-                depth_vis3 = ((1 - depth_vis3) * 255).byte().numpy()  # inverse heatmap
-                depth_vis3 = cv2.cvtColor(cv2.applyColorMap(depth_vis3, cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
 
-                img_list3.append(torch.from_numpy(depth_vis3))
-                img_list3 = torch.stack(img_list3).permute(0,3,1,2)
-                img3 = make_grid(img_list3, nrow=3)
-                img_grid3 = img3.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                img_grid3[invalid_mask3[:,:,0]] = [255,255,255]
-                Image.fromarray(img_grid3).save(str(output_path / 'debug' / '{0:06d}_3_depth_expand.png').format(i))
+                #####  膨胀的深度图  ############################ ############################
+                # img_list3=[]
+                # invalid_mask3 = (depth_map_expand==large_int)
+                # depth_map_valid3 = depth_map_expand[~invalid_mask3]
+                # min_depth3 = depth_map_valid3.min()
+                # max_depth3 = depth_map_valid3.max()
+                # depth_vis3 = depth_map_expand
+                # depth_vis3[invalid_mask3] =  min_depth3
+                # depth_vis3 = (depth_vis3 - min_depth3) / max(max_depth3 - min_depth3, 1e-8)  # normalize to 0~1
+                # depth_vis3 = torch.from_numpy(depth_vis3).clamp_(0, 1)
+                # depth_vis3 = ((1 - depth_vis3) * 255).byte().numpy()  # inverse heatmap
+                # depth_vis3 = cv2.cvtColor(cv2.applyColorMap(depth_vis3, cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
+                # img_list3.append(torch.from_numpy(depth_vis3))
+                # img_list3 = torch.stack(img_list3).permute(0,3,1,2)
+                # img3 = make_grid(img_list3, nrow=3)
+                # img_grid3 = img3.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                # img_grid3[invalid_mask3[:,:,0]] = [255,255,255]
+                # Image.fromarray(img_grid3).save(str(output_path / 'debug' / '{0:06d}_3_depth_expand.png').format(i))
 
 
-
+                #####  过滤的深度图 ############################ ############################
                 depth_filter = (abs(depth_map-depth_map_expand)>(2/pose_scale_factor))
                 depth_map2 = depth_map.copy()
                 depth_map2[depth_filter]=large_int
@@ -304,45 +307,34 @@ def main(hparams):
                 depth_vis2 = torch.from_numpy(depth_vis2).clamp_(0, 1)
                 depth_vis2 = ((1 - depth_vis2) * 255).byte().numpy()  # inverse heatmap
                 depth_vis2 = cv2.cvtColor(cv2.applyColorMap(depth_vis2, cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
-            
                 img_list2.append(torch.from_numpy(depth_vis2))
                 img_list2 = torch.stack(img_list2).permute(0,3,1,2)
                 img2 = make_grid(img_list2, nrow=3)
                 img_grid2 = img2.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
                 img_grid2[invalid_mask2[:,:,0]] = [255,255,255]
                 Image.fromarray(img_grid2).save(str(output_path / 'debug' / '{0:06d}_3_depth_filter.png').format(i))
+                ############################ ############################ ############################
 
 
-
-            
-            img_list1=[]
-            invalid_mask = (depth_map==large_int)
-            depth_map_valid = depth_map[~invalid_mask]
-            min_depth = depth_map_valid.min()
-            max_depth = depth_map_valid.max()
-            depth_vis1 = depth_map
-            depth_vis1[invalid_mask] =  min_depth 
-            depth_vis1 = (depth_vis1 - min_depth) / max(max_depth - min_depth, 1e-8)  # normalize to 0~1
-            depth_vis1 = torch.from_numpy(depth_vis1).clamp_(0, 1)
-            depth_vis1 = ((1 - depth_vis1) * 255).byte().numpy()  # inverse heatmap
-            depth_vis1 = cv2.cvtColor(cv2.applyColorMap(depth_vis1, cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
-
-            # depth_vis1 = visualize_scalars(torch.log(torch.from_numpy(depth_vis1) + 1e-8).cpu())
-            img_list1.append(torch.from_numpy(depth_vis1))
-            img_list1 = torch.stack(img_list1).permute(0,3,1,2)
-            img = make_grid(img_list1, nrow=3)
-            img_grid1 = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-            img_grid1[invalid_mask[:,:,0]] = [255,255,255]
-            Image.fromarray(img_grid1).save(str(output_path / 'debug' / '{0:06d}_3_depth.png').format(i))
-            
-            # depth_vis = torch.from_numpy(Runner.visualize_scalars(torch.from_numpy(depth_map),invalid_mask))
-            # img_list1.append(depth_vis)
-
+            #####  没有过滤的原始深度图   ############################ ############################
+            # img_list1=[]
+            # invalid_mask = (depth_map==large_int)
+            # depth_map_valid = depth_map[~invalid_mask]
+            # min_depth = depth_map_valid.min()
+            # max_depth = depth_map_valid.max()
+            # depth_vis1 = depth_map
+            # depth_vis1[invalid_mask] =  min_depth 
+            # depth_vis1 = (depth_vis1 - min_depth) / max(max_depth - min_depth, 1e-8)  # normalize to 0~1
+            # depth_vis1 = torch.from_numpy(depth_vis1).clamp_(0, 1)
+            # depth_vis1 = ((1 - depth_vis1) * 255).byte().numpy()  # inverse heatmap
+            # depth_vis1 = cv2.cvtColor(cv2.applyColorMap(depth_vis1, cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
+            # img_list1.append(torch.from_numpy(depth_vis1))
             # img_list1 = torch.stack(img_list1).permute(0,3,1,2)
             # img = make_grid(img_list1, nrow=3)
             # img_grid1 = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
             # img_grid1[invalid_mask[:,:,0]] = [255,255,255]
             # Image.fromarray(img_grid1).save(str(output_path / 'debug' / '{0:06d}_3_depth.png').format(i))
+             ############################ ############################ ############################
 
             
 

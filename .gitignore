@@ -1,5 +1,8 @@
 
 # Byte-compiled / optimized / DLL files
+logs_bk/
+dji/project_script/ply/
+dji/process_las/output_*
 test/
 logs_dji/
 *.jpg

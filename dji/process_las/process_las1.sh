@@ -27,7 +27,7 @@ start=counts_list[1]
 
 # custom_numbers=(1 2 3 5 6)
 # for ((i = 1; i <= ${#custom_numbers[@]}; i++)); do
-custom_numbers=(1 2 3 5)
+custom_numbers=(1)
 for ((i = 1; i <= ${#custom_numbers[@]}; i++)); do
     index=$((i - 1))
 
