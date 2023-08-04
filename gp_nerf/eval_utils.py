@@ -105,18 +105,7 @@ def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, wr
     return val_metrics
 
 
-def get_depth_vis(results, typ):
-    if f'depth_{typ}' in results:
-        viz_depth = results[f'depth_{typ}']
-        if f'fg_depth_{typ}' in results:
-            to_use = results[f'fg_depth_{typ}'].view(-1)
-            while to_use.shape[0] > 2 ** 24:
-                to_use = to_use[::2]
-            ma = torch.quantile(to_use, 0.95)
 
-            viz_depth = viz_depth.clamp_max(ma)
-    else: 
-        viz_depth = None
 
 def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, 
                          metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer, hparams):
@@ -257,6 +246,8 @@ def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current,
         writer.add_scalar('2_val_metric_average/F1', F1, train_index)
         # self.writer.add_scalar('val/OA', OA, train_index)
 
+
+
 def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, visualize_scalars):
     depth_map = None
     H, W = metadata_item.H, metadata_item.W
@@ -285,7 +276,6 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         invalid_mask = torch.isinf(depth_dji)
         depth_dji = torch.from_numpy(visualize_scalars(depth_dji,invalid_mask))
         img_list.append(depth_dji)
-
 
 
     if f'normal_map_{typ}' in results:
@@ -317,3 +307,16 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         img_list.append(fg_mask)
     return
 
+
+def get_depth_vis(results, typ):
+    if f'depth_{typ}' in results:
+        viz_depth = results[f'depth_{typ}']
+        if f'fg_depth_{typ}' in results:
+            to_use = results[f'fg_depth_{typ}'].view(-1)
+            while to_use.shape[0] > 2 ** 24:
+                to_use = to_use[::2]
+            ma = torch.quantile(to_use, 0.95)
+
+            viz_depth = viz_depth.clamp_max(ma)
+    else: 
+        viz_depth = None
