@@ -41,9 +41,9 @@ for ((i = 5; i <= ${#custom_numbers[@]}; i++)); do
     echo $end
     echo $las_path
     
-    python dji/process_las/1_process_each_line_las.py     \
-        --dataset_path  $dataset_path  --las_path  $las_path       --las_output_path   $las_output_path   \
-        --start  $start   --end   $end
+    # python dji/process_las/1_process_each_line_las.py     \
+    #     --dataset_path  $dataset_path  --las_path  $las_path       --las_output_path   $las_output_path   \
+    #     --start  $start   --end   $end
 
     python dji/process_las/2_convert_lidar_2_depth_color.py     \
         --original_images_path  $original_images_path  --original_images_list_json_path  $original_images_list_json_path  \

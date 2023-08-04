@@ -129,9 +129,9 @@ def main(hparams):
         if i < hparams.start or i >= hparams.end:
             continue
         
-        #### 最后几张图的结果
-        if i < (hparams.end-3):
-            continue
+        # #### 最后几张图的结果
+        # if i < (hparams.end-3):
+        #     continue
         
         # 调试用，输出前几张和后几张，以及中间几张的结果
         if hparams.debug:
