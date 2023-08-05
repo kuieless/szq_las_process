@@ -386,7 +386,8 @@ def _inference(point_type,
 
     if composite_rgb: # coarse = False, fine = True
         results[f'rgb_{typ}'] = (weights.unsqueeze(-1) * rgbs).sum(dim=1)  # n1 n2 c -> n1 c
-        if hparams.depth_dji_loss:
+        if hparams.depth_dji_loss and hparams.wgt_sigma_loss !=0:
+
             valid_depth_mask = ~torch.isinf(gt_depths)
             err = 1
             dists = z_vals[:, 1:] - z_vals[:, :-1]

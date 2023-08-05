@@ -328,6 +328,8 @@ def main(hparams):
                 img_grid2[invalid_mask2[:,:,0]] = [255,255,255]
                 Image.fromarray(img_grid2).save(str(output_path / 'debug' / '{0:06d}_3_depth_filter.png').format(i))
                 ############################ ############################ ############################
+                # image[invalid_mask2[:,:,0]] = [255,255,255]
+                # cv2.imwrite(str(output_path / 'debug' / '{0:06d}_2_project.png'.format(i)), image)
 
 
             #####  没有过滤的原始深度图   ############################ ############################

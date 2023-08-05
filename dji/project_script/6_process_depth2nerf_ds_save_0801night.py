@@ -38,6 +38,8 @@ def _get_opts():
     parser.add_argument('--original_images_list_json_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/original_image_list.json',type=str, required=False)
     parser.add_argument('--infos_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/BlocksExchangeUndistortAT.xml',type=str, required=False)
     parser.add_argument('--output_path', default='dji/project_script/ply/output',type=str, required=False)
+    # parser.add_argument('--output_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan',type=str, required=False)
+
     parser.add_argument('--resume', default=True, action='store_false')  # debug
     # parser.add_argument('--resume', default=False, action='store_true')  # run
     parser.add_argument('--num_val', type=int, default=20, help='Number of images to hold out in validation set')
@@ -140,8 +142,22 @@ def main(hparams):
         # points_nerf = (points_nerf @ P)[:,:3]
         points_nerf = ZYQ.numpy() @ points_nerf.T
         points_nerf = (ZYQ_1.numpy() @ points_nerf).T
-
         points_nerf = (points_nerf - origin_drb) / pose_scale_factor
+
+
+        ###########这里是为了得到点在contract space的范围，用于提取几何##########
+        # x= torch.from_numpy(points_nerf)
+        # contract_bg_len=1
+        # aabb_bound = 1.7028
+        # aabb = torch.tensor([-aabb_bound, -aabb_bound, -aabb_bound, aabb_bound, aabb_bound, aabb_bound])
+        # aabb_min, aabb_max = torch.split(aabb, 3, dim=-1)
+        # x = (x - aabb_min) / (aabb_max - aabb_min)
+        # x = x * 2 - 1  # aabb is at [-1, 1]
+        # mag = x.norm(dim=-1, keepdim=True)
+        # mask = mag.squeeze(-1) > 1
+        # x[mask] = (1 + contract_bg_len - contract_bg_len / mag[mask]) * (x[mask] / mag[mask])  # out of bound points trun to [-2, 2]
+
+
 
         # 相机的姿态信息（相机的位置和旋转矩阵）
         camera_rotation = metadata['c2w'][:3,:3]
