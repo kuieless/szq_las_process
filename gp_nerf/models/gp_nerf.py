@@ -131,7 +131,8 @@ class NeRF(nn.Module):
         self.xyz_dim = xyz_dim
         
         #plane
-        self.use_scaling = hparams.use_scaling
+        self.use_scaling = hparams.use_scaling and not hparams.use_fg_box_bound
+        print(f'use scaling :  {self.use_scaling}')
         if self.use_scaling:
             if 'quad' in hparams.dataset_path or 'sci' in hparams.dataset_path:
                 self.scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound

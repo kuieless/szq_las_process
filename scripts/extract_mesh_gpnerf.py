@@ -12,10 +12,10 @@ import trimesh
 
 from gp_nerf.opts import get_opts_base
 
-
 def _get_train_opts():
     parser = get_opts_base()
-    parser.add_argument('--threshold', type=int, default=2000, required=False)
+    # parser.add_argument('--threshold', type=int, default=2000, required=False)
+    parser.add_argument('--threshold', type=int, default=50, required=False)
     parser.add_argument('--exp_name', type=str, required=True, help='experiment name')
     parser.add_argument('--dataset_path', type=str, required=True)
     return parser.parse_args()
@@ -51,15 +51,24 @@ def main(hparams) -> None:
         query_pts = np.stack(np.meshgrid(t, t, t), -1).astype(np.float32)
     else:
         # bound的计算在dji/project_script/6_process_depth2nerf_ds_save_0801night.py里
-        t1 = np.linspace(0.0055, 0.1211, int(N/2) + 1)
-        t2 = np.linspace(-0.2990, 0.3280, N + 1)
-        t3 = np.linspace(-0.6344, 0.6546, N + 1)
+        # t1 = np.linspace(0.0055, 0.1211, int(N/2) + 1)
+        # t2 = np.linspace(-0.2990, 0.3280, N + 1)
+        # t3 = np.linspace(-0.6344, 0.6546, N + 1)
+
+        t1a, t1b = 0.05, 0.1051
+        t2a, t2b = -0.1590, 0.1580
+        t3a, t3b = -0.3044, 0.3046
+
+        t1 = np.linspace(t1a, t1b, N + 1)
+        t2 = np.linspace(t2a, t2b, N + 1)
+        t3 = np.linspace(t3a, t3b, N + 1)
+
 
         query_pts = np.stack(np.meshgrid(t1, t2, t3), -1).astype(np.float32)
 
     sh = query_pts.shape
     flat = query_pts.reshape([-1, 3])
-    del query_pts
+    # del query_pts
     chunk = 1024*4
     out_chunks = []
     points = []
@@ -103,8 +112,18 @@ def main(hparams) -> None:
     # out = torch.cat(out_chunks, 0)
     # sigmas = out[..., -1]  
     sigmas = out.reshape(sh[:-1])
-    
+    # print(sigmas.shape)
+    # print(flat.max(0))
+    # print(flat.min(0))
+
+    # (t1b-t1a, t2b-t2a, t3b-t3a)
+
     vertices, triangles = mcubes.marching_cubes(sigmas, threshold)
+    # print(vertices.shape)
+    # print(vertices.max(0))
+    # print(vertices.min(0))
+    
+    vertices = vertices * np.array((t2b-t2a, t1b-t1a, t3b-t3a))
 
     mesh = trimesh.Trimesh(vertices, triangles, process=False) # important, process=True leads to seg fault...
     

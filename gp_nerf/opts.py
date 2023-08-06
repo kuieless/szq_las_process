@@ -27,6 +27,14 @@ def get_opts_base():
     parser.add_argument('--online_sam_label', type=eval, default=False, help='')
     parser.add_argument('--remove_cluster', type=eval, default=False, help='')
 
+    # depth_dji_loss
+    parser.add_argument('--depth_dji_loss', default=False, type=eval, choices=[True, False], help='')
+    parser.add_argument('--wgt_depth_mse_loss', default=0, type=float, help='')
+    parser.add_argument('--wgt_sigma_loss', default=0, type=float, help='')
+    parser.add_argument('--use_fg_box_bound', type=eval, default=False, help='')
+
+
+
     #sa3d
     # parser.add_argument('--use_densegrid_mask', type=eval, default=False, help='')
     parser.add_argument('--use_mask_type', type=str, default='mlp', choices=['mlp', 'densegrid', 'hashgrid_mlp', 'densegrid_mlp'],help='')
@@ -52,10 +60,8 @@ def get_opts_base():
     parser.add_argument('--gradient_error_weight_increase', default=True, type=eval, choices=[True, False])
     parser.add_argument('--cos_iterations', type=int, default=50000, help='training iterations')
     parser.add_argument('--normal_iterations', type=int, default=50000, help='training iterations')
-    # depth_dji_loss
-    parser.add_argument('--depth_dji_loss', default=False, type=eval, choices=[True, False], help='')
-    parser.add_argument('--wgt_depth_mse_loss', default=0, type=float, help='')
-    parser.add_argument('--wgt_sigma_loss', default=0, type=float, help='')
+    
+    
 
 
 
@@ -176,7 +182,7 @@ def get_opts_base():
     parser.add_argument('--perturb', type=float, default=1.0, help='factor to perturb depth sampling points')
     parser.add_argument('--noise_std', type=float, default=1.0, help='std dev of noise added to regularize sigma')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
-    parser.add_argument('--lr_decay_factor', type=float, default=0.5, help='learning rate decay factor')
+    parser.add_argument('--lr_decay_factor', type=float, default=1, help='learning rate decay factor')
     parser.add_argument('--no_bg_nerf', dest='bg_nerf', default=True, action='store_false',help='do not use background MLP')
     parser.add_argument('--ellipse_scale_factor', type=float, default=1.1, help='Factor to scale foreground bounds')
     parser.add_argument('--no_ellipse_bounds', dest='ellipse_bounds', default=True, action='store_false', help='use spherical foreground bounds instead of ellipse')

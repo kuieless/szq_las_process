@@ -1,5 +1,7 @@
 
 # Byte-compiled / optimized / DLL files
+*.ply
+*.obj
 logs_bk/
 dji/project_script/ply/
 dji/process_las/output_*

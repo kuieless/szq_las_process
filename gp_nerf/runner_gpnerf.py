@@ -239,6 +239,10 @@ class Runner:
                 hparams.sphere_center=self.sphere_center
                 hparams.sphere_radius=self.sphere_radius
                 hparams.aabb_bound = max(self.sphere_radius)
+                # fg_box_bound
+                hparams.fg_box_bound = np.array([[0.0094, -0.5091, -1.0803], [0.2063, 0.5585, 1.1147]])
+                # hparams.fg_box_bound[0,:] = hparams.fg_box_bound[0,:] - abs(hparams.fg_box_bound[0,:]*0.1)
+                # hparams.fg_box_bound[1,:] = hparams.fg_box_bound[1,:] + abs(hparams.fg_box_bound[1,:]*0.1)
 
             else:
                 self.sphere_center = None
@@ -698,7 +702,9 @@ class Runner:
         if 'depth_dji' in item:
             depth_scale = item['depth_scale'].to(self.device, non_blocking=True)
             gt_depths = item['depth_dji'].to(self.device, non_blocking=True)
-            
+        else:
+            depth_scale = None
+            gt_depths = None
 
         if 'sa3d' not in self.hparams.dataset_type:
             results, bg_nerf_rays_present = render_rays(nerf=self.nerf,

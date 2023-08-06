@@ -146,16 +146,18 @@ def main(hparams):
 
 
         ###########这里是为了得到点在contract space的范围，用于提取几何##########
-        # x= torch.from_numpy(points_nerf)
-        # contract_bg_len=1
-        # aabb_bound = 1.7028
-        # aabb = torch.tensor([-aabb_bound, -aabb_bound, -aabb_bound, aabb_bound, aabb_bound, aabb_bound])
-        # aabb_min, aabb_max = torch.split(aabb, 3, dim=-1)
-        # x = (x - aabb_min) / (aabb_max - aabb_min)
-        # x = x * 2 - 1  # aabb is at [-1, 1]
-        # mag = x.norm(dim=-1, keepdim=True)
-        # mask = mag.squeeze(-1) > 1
-        # x[mask] = (1 + contract_bg_len - contract_bg_len / mag[mask]) * (x[mask] / mag[mask])  # out of bound points trun to [-2, 2]
+        x = torch.from_numpy(points_nerf)
+        print(f"before contract   x_max: {x.max(0)}, x_min: {x.min(0)}")
+        contract_bg_len=1
+        aabb_bound = 1.7028
+        aabb = torch.tensor([-aabb_bound, -aabb_bound, -aabb_bound, aabb_bound, aabb_bound, aabb_bound])
+        aabb_min, aabb_max = torch.split(aabb, 3, dim=-1)
+        x = (x - aabb_min) / (aabb_max - aabb_min)
+        x = x * 2 - 1  # aabb is at [-1, 1]
+        mag = x.norm(dim=-1, keepdim=True)
+        mask = mag.squeeze(-1) > 1
+        x[mask] = (1 + contract_bg_len - contract_bg_len / mag[mask]) * (x[mask] / mag[mask])  # out of bound points trun to [-2, 2]
+        print(f"after  contract   x_max: {x.max(0)}, x_min: {x.min(0)}")
 
 
 
@@ -212,7 +214,8 @@ def main(hparams):
         #     if depth_z[j] < depth_map[y, x]:
         #         step = 2
         #         depth_map[max(0, y-step):min(image_height, y+step), max(0, x-step):min(image_width, x+step)] = depth_z[j]
-        np.save(split_dir / 'depth_dji' / '{0:06d}.npy'.format(i), depth_map)
+        
+        # np.save(split_dir / 'depth_dji' / '{0:06d}.npy'.format(i), depth_map)
             
 
         # depth_mask = (depth_map!=1e6)

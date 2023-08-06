@@ -8,6 +8,7 @@ from torch import nn
 
 from mega_nerf.spherical_harmonics import eval_sh
 from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere
+from gp_nerf.sample_bg import get_box_intersection, contract_to_unisphere_box
 
 import gc
 from torch_scatter import segment_coo
@@ -43,35 +44,48 @@ def render_rays(nerf: nn.Module,
     last_delta = 1e10 * torch.ones(N_rays, 1, device=rays.device)
 
 
-    if True: #use mega's points-segmentation method with ellipsoid
+    if hparams.use_fg_box_bound:
+        box_near, box_far, mask_at_box = get_box_intersection(hparams.fg_box_bound, rays_o.cpu().numpy(), rays_d.cpu().numpy())
+        box_far = torch.from_numpy(box_far).to(dtype=torch.float32, device=rays_o.device)
+        fg_far = torch.maximum(box_far, near[mask_at_box].squeeze())
+
+        # 划分bg ray
+        rays_with_bg = torch.arange(N_rays, device=rays_o.device)[~mask_at_box]
+        rays_with_fg = torch.arange(N_rays, device=rays_o.device)[mask_at_box]
+        # 更改穿透box的near为box的交点
+        # near[rays_with_fg] = box_near.unsqueeze(-1)
+    else: #use mega's points-segmentation method with ellipsoid
         fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius)
         fg_far = torch.maximum(fg_far, near.squeeze())
         # 划分bg ray
         rays_with_bg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() > fg_far]
         rays_with_fg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() <= fg_far]
-        
-        assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
-        rays_o = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
-        rays_d = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
-        if rays_with_bg.shape[0] > 0:
-            last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
-            # if far.max() >1:
-            #     print("far.max: {}".format(far.max()))
+    
+    assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
+    rays_o = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
+    rays_d = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
+    if rays_with_bg.shape[0] > 0:
+        last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
 
-    #  zyq:    in bound points
+    #  zyq:    初始化
     far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
-    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
     z_vals_inbound = torch.zeros([rays_o.shape[0], hparams.coarse_samples], device=rays.device)
+    # 属于fg的ray采样
+    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
     z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
-
+    # 属于bg的ray，其中fg部分的点采样
     z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
     z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
+    # 随机扰动，并生成采样点
     z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
-
     xyz_coarse_fg = rays_o + rays_d * z_vals_inbound.unsqueeze(-1)
 
 
-    xyz_coarse_fg = contract_to_unisphere(xyz_coarse_fg, hparams)
+    if hparams.use_fg_box_bound:
+        xyz_coarse_fg = contract_to_unisphere_box(xyz_coarse_fg, hparams)
+        
+    else:
+        xyz_coarse_fg = contract_to_unisphere(xyz_coarse_fg, hparams)
 
     results = _get_results(point_type='fg',
                            nerf=nerf,
@@ -97,9 +111,8 @@ def render_rays(nerf: nn.Module,
 
         xyz_coarse_bg = rays_o[rays_with_bg] + rays_d[rays_with_bg] * z_vals_outer.unsqueeze(-1)
         xyz_coarse_bg = contract_to_unisphere(xyz_coarse_bg, hparams)
-        bg_point_type='bg'
         
-        bg_results = _get_results(point_type=bg_point_type,
+        bg_results = _get_results(point_type='bg',
                                   nerf=nerf,
                                   rays_d=rays_d[rays_with_bg],
                                   image_indices=image_indices[rays_with_bg] if image_indices is not None else None,

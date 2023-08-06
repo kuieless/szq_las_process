@@ -16,7 +16,7 @@ def _get_train_opts():
     parser = get_opts_base()
     parser.add_argument('--exp_name', type=str, required=True, help='experiment name')
     parser.add_argument('--dataset_path', type=str, required=True)
-    parser.add_argument('--threshold', type=int, default=2000, required=False)
+    parser.add_argument('--threshold', type=int, default=50, required=False)
 
     return parser.parse_args()
 
@@ -50,9 +50,13 @@ def main(hparams) -> None:
         query_pts = np.stack(np.meshgrid(t, t, t), -1).astype(np.float32)
     else:
         # bound的计算在dji/project_script/6_process_depth2nerf_ds_save_0801night.py里
-        t1 = np.linspace(0.0055, 0.1211, int(N/2) + 1)
-        t2 = np.linspace(-0.2990, 0.3280, N + 1)
-        t3 = np.linspace(-0.6344, 0.6546, N + 1)
+        # t1 = np.linspace(0.0055, 0.1211, int(N/2) + 1)
+        # t2 = np.linspace(-0.2990, 0.3280, N + 1)
+        # t3 = np.linspace(-0.6344, 0.6546, N + 1)
+
+        t1 = np.linspace(0.05, 0.1051, int(N/3) + 1)
+        t2 = np.linspace(-0.1590, 0.1580, N + 1)
+        t3 = np.linspace(-0.3044, 0.3046, N + 1)
 
         # t = np.linspace(0, 1, N + 1)
         # t1 = np.linspace(0, 1, int(N/5) + 1)
