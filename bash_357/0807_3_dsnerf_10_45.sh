@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=6
 
 wgt_depth_mse_loss=10
 
-exp_name=logs_dji/0805_3_dsnerf_mse_$wgt_depth_mse_loss
+exp_name=logs_dji/0807_3_dsnerf_mse_${wgt_depth_mse_loss}_45
 
 dataset_path=/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan
 config_file=dji/cuhksz_ray_xml.yaml

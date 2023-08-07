@@ -32,7 +32,7 @@ def contract_to_unisphere_box(x: torch.Tensor, hparams):
 
     
     aabb_bound = hparams.fg_box_bound
-    aabb = torch.tensor([-aabb_bound[0,0], -aabb_bound[0,1], -aabb_bound[0,2], aabb_bound[1,0], aabb_bound[1,1], aabb_bound[1,2]]).to(dtype=torch.float32, device=x.device)
+    aabb = torch.tensor([aabb_bound[0,0], aabb_bound[0,1], aabb_bound[0,2], aabb_bound[1,0], aabb_bound[1,1], aabb_bound[1,2]]).to(dtype=torch.float32, device=x.device)
 
     aabb_min, aabb_max = torch.split(aabb, 3, dim=-1)
     x = (x - aabb_min) / (aabb_max - aabb_min)
@@ -57,8 +57,8 @@ def get_box_intersection(bounds, ray_o, ray_d):
     viewdir = ray_d / norm_d
     viewdir[(viewdir < 1e-5) & (viewdir > -1e-10)] = 1e-5
     viewdir[(viewdir > -1e-5) & (viewdir < 1e-10)] = -1e-5
-    tmin = (bounds[:1] - ray_o[:1]) / viewdir
-    tmax = (bounds[1:2] - ray_o[:1]) / viewdir
+    tmin = (bounds[:1] - ray_o) / viewdir
+    tmax = (bounds[1:2] - ray_o) / viewdir
     t1 = np.minimum(tmin, tmax)
     t2 = np.maximum(tmin, tmax)
     near = np.max(t1, axis=-1)
@@ -67,3 +67,7 @@ def get_box_intersection(bounds, ray_o, ray_d):
     near = near[mask_at_box] / norm_d[mask_at_box, 0]
     far = far[mask_at_box] / norm_d[mask_at_box, 0]
     return near, far, mask_at_box
+
+# def get_box_intersection(bounds, ray_o, ray_d):
+#     tmin = (bounds[:1] - ray_o[:1]) / viewdir
+    

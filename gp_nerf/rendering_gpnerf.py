@@ -12,7 +12,7 @@ from gp_nerf.sample_bg import get_box_intersection, contract_to_unisphere_box
 
 import gc
 from torch_scatter import segment_coo
-
+from scripts.visualize_points import visualize_points
 
 # TO_COMPOSITE = {'rgb', 'depth', 'sem_map'}
 TO_COMPOSITE = {'rgb', 'depth'}
@@ -31,9 +31,8 @@ def render_rays(nerf: nn.Module,
                 train_iterations=-1,
                 gt_depths=None,
                 depth_scale=None) -> Tuple[Dict[str, torch.Tensor], bool]:
-
     N_rays = rays.shape[0]
-
+    device = rays.device
     rays_o, rays_d = rays[:, 0:3], rays[:, 3:6]  # both (N_rays, 3)
     near, far = rays[:, 6:7], rays[:, 7:8]  # both (N_rays, 1)
     near = torch.clamp(near, max=1e4-1)
@@ -41,9 +40,87 @@ def render_rays(nerf: nn.Module,
         image_indices = image_indices.unsqueeze(-1).unsqueeze(-1)
 
     perturb = hparams.perturb if nerf.training else 0
-    last_delta = 1e10 * torch.ones(N_rays, 1, device=rays.device)
+    last_delta = 1e10 * torch.ones(N_rays, 1, device=device)
 
 
+    # ######visual_points########
+    # ##  use_fg_box_bound
+    # box_near, box_far, mask_at_box = get_box_intersection(hparams.fg_box_bound, rays_o.cpu().numpy(), rays_d.cpu().numpy())
+    # box_near = torch.from_numpy(box_near).to(dtype=torch.float32, device=rays_o.device)
+    
+    # box_far = torch.from_numpy(box_far).to(dtype=torch.float32, device=rays_o.device)
+
+    # fg_far = torch.maximum(box_far, near[mask_at_box].squeeze())
+    # near_box = near.clone()
+    # # 划分bg ray
+    # rays_with_bg = torch.arange(N_rays, device=rays_o.device)[~mask_at_box]
+    # rays_with_fg = torch.arange(N_rays, device=rays_o.device)[mask_at_box]
+    
+    # near_box[mask_at_box, 0] = torch.maximum(box_near, near[mask_at_box].squeeze())
+
+
+    # assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
+    # rays_o_box = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
+    # rays_d_box = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
+    # if rays_with_bg.shape[0] > 0:
+    #     last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
+    # #  zyq:    初始化
+    # far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
+    # z_vals_inbound = torch.zeros([rays_o_box.shape[0], hparams.coarse_samples], device=rays.device)
+    # # 属于fg的ray采样
+    # z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    # z_vals_inbound[rays_with_fg] = near_box[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
+    # # 属于bg的ray，其中fg部分的点采样
+    # z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    # z_vals_inbound[rays_with_bg] = near_box[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
+    # # 随机扰动，并生成采样点
+    # z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
+    # xyz_coarse_fg_box = rays_o_box + rays_d_box * z_vals_inbound.unsqueeze(-1)
+    # xyz_coarse_fg_box = contract_to_unisphere_box(xyz_coarse_fg_box, hparams)
+    
+
+
+    # # ellipsoid
+    # fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius)
+    # fg_far = torch.maximum(fg_far, near.squeeze())
+    # # 划分bg ray
+    # rays_with_bg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() > fg_far]
+    # rays_with_fg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() <= fg_far]
+
+    # assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
+    # rays_o_ell = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
+    # rays_d_ell = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
+    # if rays_with_bg.shape[0] > 0:
+    #     last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
+
+    # #  zyq:    初始化
+    # far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
+    # z_vals_inbound = torch.zeros([rays_o_ell.shape[0], hparams.coarse_samples], device=rays.device)
+    # # 属于fg的ray采样
+    # z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    # z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
+    # # 属于bg的ray，其中fg部分的点采样
+    # z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    # z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
+    # # 随机扰动，并生成采样点
+    # z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
+    # xyz_coarse_fg_ell = rays_o_ell + rays_d_ell * z_vals_inbound.unsqueeze(-1)
+    # xyz_coarse_fg_ell = contract_to_unisphere(xyz_coarse_fg_ell, hparams)
+    
+    # # scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
+    # # scaling_factor_altitude_bottom = 0.5 * (hparams.z_range[0]+ hparams.z_range[1])/ hparams.aabb_bound
+    # # scaling_factor_altitude_range = (hparams.z_range[1]-hparams.z_range[0]) / (2 * hparams.aabb_bound)
+    # # px = (position[:, 0:1] - scaling_factor_altitude_bottom)/scaling_factor_altitude_range
+    # # py = position[:, 1:] / scaling_factor_ground
+    # # position = torch.cat([px, py], dim=-1)
+    
+
+    # xyz_coarse_fg_box, xyz_coarse_fg_ell = xyz_coarse_fg_box.view(-1, 3).cpu().numpy(), xyz_coarse_fg_ell.view(-1, 3).cpu().numpy()
+
+    # visualize_points_list = [xyz_coarse_fg_box[::100], xyz_coarse_fg_ell[::100]]
+    # visualize_points(visualize_points_list)
+
+    # ###########################
     if hparams.use_fg_box_bound:
         box_near, box_far, mask_at_box = get_box_intersection(hparams.fg_box_bound, rays_o.cpu().numpy(), rays_d.cpu().numpy())
         box_far = torch.from_numpy(box_far).to(dtype=torch.float32, device=rays_o.device)
@@ -58,9 +135,8 @@ def render_rays(nerf: nn.Module,
         fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius)
         fg_far = torch.maximum(fg_far, near.squeeze())
         # 划分bg ray
-        rays_with_bg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() > fg_far]
-        rays_with_fg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() <= fg_far]
-    
+        rays_with_bg = torch.arange(N_rays, device=device)[far.squeeze() > fg_far]
+        rays_with_fg = torch.arange(N_rays, device=device)[far.squeeze() <= fg_far]
     assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
     rays_o = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
     rays_d = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
@@ -69,12 +145,12 @@ def render_rays(nerf: nn.Module,
 
     #  zyq:    初始化
     far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
-    z_vals_inbound = torch.zeros([rays_o.shape[0], hparams.coarse_samples], device=rays.device)
+    z_vals_inbound = torch.zeros([rays_o.shape[0], hparams.coarse_samples], device=device)
     # 属于fg的ray采样
-    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
     z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
     # 属于bg的ray，其中fg部分的点采样
-    z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=device)
     z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
     # 随机扰动，并生成采样点
     z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
@@ -104,9 +180,8 @@ def render_rays(nerf: nn.Module,
                            gt_depths=gt_depths,
                            depth_scale=gt_depths)
     
-    
     if rays_with_bg.shape[0] != 0:
-        z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4+1, hparams.coarse_samples // 2, rays.device)
+        z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4+1, hparams.coarse_samples // 2, device)
         z_vals_outer = _expand_and_perturb_z_vals(z_vals_outer, hparams.coarse_samples // 2, perturb, rays_with_bg.shape[0])
 
         xyz_coarse_bg = rays_o[rays_with_bg] + rays_d[rays_with_bg] * z_vals_outer.unsqueeze(-1)
@@ -120,7 +195,7 @@ def render_rays(nerf: nn.Module,
                                   xyz_coarse=xyz_coarse_bg,
                                   z_vals=z_vals_outer,
                                   # bg_nerf的last_dalta为1e10
-                                  last_delta=1e10 * torch.ones(rays_with_bg.shape[0], 1, device=rays.device),
+                                  last_delta=1e10 * torch.ones(rays_with_bg.shape[0], 1, device=device),
                                   get_depth=get_depth,
                                   get_depth_variance=get_depth_variance,
                                   get_bg_lambda=False,
@@ -174,7 +249,7 @@ def render_rays(nerf: nn.Module,
     bg_nerf_rays_present = False
     
     return results, bg_nerf_rays_present
-    # return results
+
 
 def _get_results(point_type,
                  nerf: nn.Module,
@@ -399,8 +474,8 @@ def _inference(point_type,
 
     if composite_rgb: # coarse = False, fine = True
         results[f'rgb_{typ}'] = (weights.unsqueeze(-1) * rgbs).sum(dim=1)  # n1 n2 c -> n1 c
+        
         if hparams.depth_dji_loss and hparams.wgt_sigma_loss !=0:
-
             valid_depth_mask = ~torch.isinf(gt_depths)
             err = 1
             dists = z_vals[:, 1:] - z_vals[:, :-1]

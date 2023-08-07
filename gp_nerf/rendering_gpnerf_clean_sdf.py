@@ -7,14 +7,12 @@ import torch.nn.functional as F
 from torch import nn
 
 from mega_nerf.spherical_harmonics import eval_sh
-from gp_nerf.sample_bg import bg_sample_inv
+from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere
 
-#TO_COMPOSITE = {'rgb', 'depth'}
+# TO_COMPOSITE = {'rgb', 'depth', 'sem_map'}
 #sdf
 TO_COMPOSITE = {'rgb', 'sem_map'}
-INTERMEDIATE_KEYS = {'zvals_coarse', 'raw_rgb_coarse', 'raw_sigma_coarse', 'depth_real_coarse', 'raw_sem_logits_coarse'}
-timer_1=0
-timer=0
+INTERMEDIATE_KEYS = {'zvals_coarse', 'raw_rgb_coarse', 'raw_sigma_coarse', 'depth_real_coarse', 'raw_sem_logits_coarse', 'raw_sem_feature_coarse'}
 
 def near_far_from_bound(rays_o, rays_d, bound, type='cube'):
     # rays: [B, N, 3], [B, N, 3]
@@ -38,27 +36,6 @@ def near_far_from_bound(rays_o, rays_d, bound, type='cube'):
     return near, far
 
 
-#@torch.no_grad()
-def contract_to_unisphere(x: torch.Tensor, hparams):
-
-    aabb_bound = hparams.aabb_bound
-    aabb = torch.tensor([-aabb_bound, -aabb_bound, -aabb_bound, aabb_bound, aabb_bound, aabb_bound]).to(x.device)
-
-    aabb_min, aabb_max = torch.split(aabb, 3, dim=-1)
-    x = (x - aabb_min) / (aabb_max - aabb_min)
-    x = x * 2 - 1  # aabb is at [-1, 1]
-    if hparams.contract_norm == 'inf':
-        mag = x.abs().amax(dim=-1, keepdim=True)
-    elif hparams.contract_norm == 'l2':
-        mag = x.norm(dim=-1, keepdim=True)
-    else:
-        print("the norm of contract is wrong!")
-        raise NotImplementedError
-    mask = mag.squeeze(-1) > 1
-    x[mask] = (1 + hparams.contract_bg_len - hparams.contract_bg_len / mag[mask]) * (x[mask] / mag[mask])  # out of bound points trun to [-2, 2]
-    # if 'quad' in hparams.dataset_path:
-    #     x = x * hparams.aabb_bound
-    return x
 
 def render_rays(nerf: nn.Module,
                 bg_nerf: Optional[nn.Module],
@@ -70,13 +47,14 @@ def render_rays(nerf: nn.Module,
                 get_depth: bool,
                 get_depth_variance: bool,
                 get_bg_fg_rgb: bool,
-                train_iterations=-1) -> Tuple[Dict[str, torch.Tensor], bool]:
+                train_iterations=-1,
+                gt_depths=None,
+                depth_scale=None) -> Tuple[Dict[str, torch.Tensor], bool]:
     N_rays = rays.shape[0]
     device = rays.device
     rays_o, rays_d = rays[:, 0:3], rays[:, 3:6]  # both (N_rays, 3)
     near, far = rays[:, 6:7], rays[:, 7:8]  # both (N_rays, 1)
     near = torch.clamp(near, max=1e4-1)
-
     if image_indices is not None:
         image_indices = image_indices.unsqueeze(-1).unsqueeze(-1)
 
@@ -96,22 +74,19 @@ def render_rays(nerf: nn.Module,
         # 划分bg ray
         rays_with_bg = torch.arange(N_rays, device=device)[far.squeeze() > fg_far]
         rays_with_fg = torch.arange(N_rays, device=device)[far.squeeze() <= fg_far]
-        assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
-        rays_o = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
-        rays_d = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
-        if rays_with_bg.shape[0] > 0:
-            # last_delta中bg的部分调整为交点（针对fg_nerf的调整），fg部分不变
-            last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
-            # if far.max() >1:
-            #     print("far.max: {}".format(far.max()))
+    assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
+    rays_o = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
+    rays_d = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
+    if rays_with_bg.shape[0] > 0:
+        last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
 
-    #  zyq:    in bound points
-    # bg far变成椭圆界限, 而fg far还是原来的（小于椭圆）
+    #  zyq:    初始化
     far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
-    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
     z_vals_inbound = torch.zeros([rays_o.shape[0], hparams.coarse_samples], device=device)
+    # 属于fg的ray采样
+    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
     z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
-
+    # 属于bg的ray，其中fg部分的点采样
     z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=device)
     z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
     #z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
@@ -132,16 +107,18 @@ def render_rays(nerf: nn.Module,
                            get_bg_lambda=True,
                            depth_real=None,
                            xyz_fine_fn=lambda fine_z_vals: (rays_o + rays_d * fine_z_vals.unsqueeze(-1), None),
-                           train_iterations=train_iterations)
+                           train_iterations=train_iterations,
+                           gt_depths=gt_depths,
+                           depth_scale=gt_depths)
+    
     if rays_with_bg.shape[0] != 0:
         z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4+1, hparams.coarse_samples // 2, device)
         z_vals_outer = _expand_and_perturb_z_vals(z_vals_outer, hparams.coarse_samples // 2, perturb, rays_with_bg.shape[0])
 
         xyz_coarse_bg = rays_o[rays_with_bg] + rays_d[rays_with_bg] * z_vals_outer.unsqueeze(-1)
         xyz_coarse_bg = contract_to_unisphere(xyz_coarse_bg, hparams)
-        bg_point_type='bg'
 
-        bg_results = _get_results_bg(point_type=bg_point_type,
+        bg_results = _get_results_bg(point_type='bg',
                                   nerf=nerf,
                                   rays_d=rays_d[rays_with_bg],
                                   image_indices=image_indices[rays_with_bg] if image_indices is not None else None,
@@ -155,7 +132,10 @@ def render_rays(nerf: nn.Module,
                                   get_bg_lambda=False,
                                   depth_real=None,
                                   xyz_fine_fn=lambda fine_z_vals: (rays_o[rays_with_bg] + rays_d[rays_with_bg] * fine_z_vals.unsqueeze(-1), None),
-                                  train_iterations=train_iterations)
+                                  train_iterations=train_iterations,
+                                  gt_depths=gt_depths,
+                                  depth_scale=gt_depths)
+        
     # merge the result of inner and outer
     types = ['fine' if hparams.fine_samples > 0 else 'coarse']
     if hparams.use_cascade and hparams.fine_samples > 0:
@@ -179,9 +159,9 @@ def render_rays(nerf: nn.Module,
                 if len(val.shape) > 1:
                     mult = mult.unsqueeze(-1)
 
+
                 if hparams.stop_semantic_grad and key == 'sem_map':
                     mult = mult.detach()
-
                 expanded_bg_val[rays_with_bg] = bg_results[f'{key}_{typ}'] * mult
 
                 if get_bg_fg_rgb:
@@ -218,8 +198,9 @@ def _get_results(point_type,
                  get_bg_lambda: bool,
                  depth_real: Optional[torch.Tensor],
                  xyz_fine_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, Optional[torch.Tensor]]],
-                 train_iterations=-1) \
-        -> Dict[str, torch.Tensor]:
+                 train_iterations=-1,
+                 gt_depths=None,
+                 depth_scale=None)-> Dict[str, torch.Tensor]:
     results = {}
     device = rays_o.device
     # from nsr test_step
@@ -455,8 +436,9 @@ def _get_results_bg(point_type,
                  get_bg_lambda: bool,
                  depth_real: Optional[torch.Tensor],
                  xyz_fine_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, Optional[torch.Tensor]]],
-                 train_iterations=-1) \
-        -> Dict[str, torch.Tensor]:
+                 train_iterations=-1,
+                 gt_depths=None,
+                 depth_scale=None) -> Dict[str, torch.Tensor]:
     #print('bg')
     results = {}
     #对于bg_nerf来说不变，对fg_nerf来说，属于bg的点的last_delta会变成 交点 - z_vals
@@ -631,7 +613,6 @@ def _get_results_bg(point_type,
             else:
                 sem_map = torch.sum(weights[..., None] * sem_logits, -2)
             results[f'sem_map_{typ}'] = sem_map
-            
         with torch.no_grad():
             if get_depth or get_depth_variance:
                 if depth_real is not None:
@@ -639,7 +620,7 @@ def _get_results_bg(point_type,
                 else:
                     depth_map = (weights * z_vals).sum(dim=1)  # n1 n2 -> n1
 
-            if get_depth:  # always False
+            if get_depth: # always False
                 results[f'depth_{typ}'] = depth_map
             if get_depth_variance:
                 depth_map = (weights * z_vals).sum(dim=1)  # n1 n2 -> n1

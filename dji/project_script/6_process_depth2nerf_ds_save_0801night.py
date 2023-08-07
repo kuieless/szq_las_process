@@ -37,8 +37,8 @@ def _get_opts():
     parser.add_argument('--original_images_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/original_image',type=str, required=False)
     parser.add_argument('--original_images_list_json_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/original_image_list.json',type=str, required=False)
     parser.add_argument('--infos_path', default='/data/yuqi/Datasets/DJI/origin/DJI_20230726_xiayuan_data/BlocksExchangeUndistortAT.xml',type=str, required=False)
-    parser.add_argument('--output_path', default='dji/project_script/ply/output',type=str, required=False)
-    # parser.add_argument('--output_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan',type=str, required=False)
+    # parser.add_argument('--output_path', default='dji/project_script/ply/output',type=str, required=False)
+    parser.add_argument('--output_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan',type=str, required=False)
 
     parser.add_argument('--resume', default=True, action='store_false')  # debug
     # parser.add_argument('--resume', default=False, action='store_true')  # run
