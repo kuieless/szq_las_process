@@ -87,7 +87,7 @@ def main(hparams) -> None:
     far = 2
     ray_altitude_range = hparams.ray_altitude_range
     image_rays = get_rays(directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1,8).cpu()
-
+    
     dir = image_rays[100,3:6]
     index = torch.tensor(1,dtype = torch.int)
     del image_rays, metadata_item, directions

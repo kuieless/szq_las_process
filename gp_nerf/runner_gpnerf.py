@@ -457,7 +457,7 @@ class Runner:
                 if 'sam' in self.hparams.dataset_type:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
-                elif self.hparams.dataset_type == 'memory_depth':  # or self.hparams.dataset_type == 'memory_depth_dji':
+                elif self.hparams.dataset_type == 'memory_depth':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
                                                 pin_memory=False)
                 elif 'llff' in self.hparams.dataset_type or self.hparams.dataset_type =='mega_sa3d':
@@ -695,7 +695,10 @@ class Runner:
     def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], groups: Optional[torch.Tensor], train_iterations = -1, item=None) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
         if self.hparams.network_type == 'sdf':
-            from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
+            if self.hparams.sdf_as_gpnerf:
+                from gp_nerf.rendering_gpnerf_clean_sdf_as_gpnerf import render_rays
+            else:
+                from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
         else:
             from gp_nerf.rendering_gpnerf import render_rays
         
@@ -955,13 +958,13 @@ class Runner:
 
         if self.hparams.network_type == 'sdf':
             # sdf 
-            metrics['gradient_error'] = results[f'gradient_error_{typ}']
-            metrics['curvature_error'] = results[f'curvature_error_{typ}']
+            metrics['gradient_error'] = results[f'gradient_error_{typ}'].squeeze(-1)
+            metrics['curvature_error'] = results[f'curvature_error_{typ}'].squeeze(-1)
             if self.hparams.gradient_error_weight_increase and train_iterations > self.hparams.train_iterations / 2:
                 gradient_error_weight = 0.1
             else:
                 gradient_error_weight = self.hparams.gradient_error_weight
-            metrics['loss'] += gradient_error_weight * results[f'gradient_error_{typ}'] + 0.1 * results[f'curvature_error_{typ}']
+            metrics['loss'] += gradient_error_weight * results[f'gradient_error_{typ}'].squeeze(-1) + 0.1 * results[f'curvature_error_{typ}'].squeeze(-1)
             if self.wandb is not None:
                 self.wandb.log({"train/inv_s": 1.0 / results['inv_s'], 'epoch': train_iterations})
             if self.writer is not None:
@@ -1172,7 +1175,8 @@ class Runner:
             else:
                 from tools.unetformer.uavid2rgb import remapping
 
-            with torch.inference_mode():
+            # with torch.inference_mode():
+            with torch.no_grad():
                 #semantic 
                 self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
                 CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
@@ -1225,7 +1229,7 @@ class Runner:
                             elif val_type == 'train':
                                 metadata_item = self.train_items[i]
                             viz_rgbs = metadata_item.load_image().float() / 255.
-
+                            
                             results, _ = self.render_image(metadata_item, train_index)
                             typ = 'fine' if 'rgb_fine' in results else 'coarse'
 
@@ -1556,7 +1560,10 @@ class Runner:
 
     def render_image(self, metadata: ImageMetadata, train_index=-1) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
         if self.hparams.network_type == 'sdf':
-            from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
+            if self.hparams.sdf_as_gpnerf:
+                from gp_nerf.rendering_gpnerf_clean_sdf_as_gpnerf import render_rays
+            else:
+                from gp_nerf.rendering_gpnerf_clean_sdf import render_rays
         else:
             from gp_nerf.rendering_gpnerf import render_rays
         directions = get_ray_directions(metadata.W,

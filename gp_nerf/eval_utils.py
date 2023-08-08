@@ -287,7 +287,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         # normalize 
         normal_map = normal_map / (1e-5 + torch.linalg.norm(normal_map, ord = 2, dim=-1, keepdim=True))
 
-        if 'sdf' not in self.hparams.network_type:
+        if 'sdf' not in hparams.network_type:
             normal_map = normal_map * -1
         normal_map = normal_map.view(H, W, 3).cpu()
         

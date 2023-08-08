@@ -80,41 +80,48 @@ def render_rays(nerf: nn.Module,
     
 
 
-    # # ellipsoid
-    # fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius)
-    # fg_far = torch.maximum(fg_far, near.squeeze())
-    # # 划分bg ray
-    # rays_with_bg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() > fg_far]
-    # rays_with_fg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() <= fg_far]
+    # ######## ellipsoid
+    fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius)
+    fg_far = torch.maximum(fg_far, near.squeeze())
+    ######## 划分bg ray
+    rays_with_bg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() > fg_far]
+    rays_with_fg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() <= fg_far]
 
-    # assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
-    # rays_o_ell = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
-    # rays_d_ell = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
-    # if rays_with_bg.shape[0] > 0:
-    #     last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
+    assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
+    rays_o_ell = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
+    rays_d_ell = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
+    if rays_with_bg.shape[0] > 0:
+        last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
 
-    # #  zyq:    初始化
-    # far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
-    # z_vals_inbound = torch.zeros([rays_o_ell.shape[0], hparams.coarse_samples], device=rays.device)
-    # # 属于fg的ray采样
-    # z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
-    # z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
-    # # 属于bg的ray，其中fg部分的点采样
-    # z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
-    # z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
-    # # 随机扰动，并生成采样点
-    # z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
-    # xyz_coarse_fg_ell = rays_o_ell + rays_d_ell * z_vals_inbound.unsqueeze(-1)
-    # xyz_coarse_fg_ell = contract_to_unisphere(xyz_coarse_fg_ell, hparams)
+    ######## zyq:    初始化
+    far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
+    z_vals_inbound = torch.zeros([rays_o_ell.shape[0], hparams.coarse_samples], device=rays.device)
+    ######## 属于fg的ray采样
+    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
+    ######## 属于bg的ray，其中fg部分的点采样
+    z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
+    ######## 随机扰动，并生成采样点
+    z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
+    xyz_coarse_fg_ell = rays_o_ell + rays_d_ell * z_vals_inbound.unsqueeze(-1)
+
+    points_before_contract = xyz_coarse_fg_ell
+
+    xyz_coarse_fg_ell = contract_to_unisphere(xyz_coarse_fg_ell, hparams)
     
-    # # scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
-    # # scaling_factor_altitude_bottom = 0.5 * (hparams.z_range[0]+ hparams.z_range[1])/ hparams.aabb_bound
-    # # scaling_factor_altitude_range = (hparams.z_range[1]-hparams.z_range[0]) / (2 * hparams.aabb_bound)
-    # # px = (position[:, 0:1] - scaling_factor_altitude_bottom)/scaling_factor_altitude_range
-    # # py = position[:, 1:] / scaling_factor_ground
-    # # position = torch.cat([px, py], dim=-1)
-    
+    points_before_contract, xyz_coarse_fg_ell = points_before_contract.view(-1, 3).cpu().numpy(), xyz_coarse_fg_ell.view(-1, 3).cpu().numpy()
 
+    visualize_points_list = [points_before_contract[::100], xyz_coarse_fg_ell[::100]]
+    visualize_points(visualize_points_list)
+
+    # scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
+    # scaling_factor_altitude_bottom = 0.5 * (hparams.z_range[0]+ hparams.z_range[1])/ hparams.aabb_bound
+    # scaling_factor_altitude_range = (hparams.z_range[1]-hparams.z_range[0]) / (2 * hparams.aabb_bound)
+    # px = (position[:, 0:1] - scaling_factor_altitude_bottom)/scaling_factor_altitude_range
+    # py = position[:, 1:] / scaling_factor_ground
+    # position = torch.cat([px, py], dim=-1)
+    
     # xyz_coarse_fg_box, xyz_coarse_fg_ell = xyz_coarse_fg_box.view(-1, 3).cpu().numpy(), xyz_coarse_fg_ell.view(-1, 3).cpu().numpy()
 
     # visualize_points_list = [xyz_coarse_fg_box[::100], xyz_coarse_fg_ell[::100]]
@@ -579,59 +586,6 @@ def _intersect_sphere(rays_o: torch.Tensor, rays_d: torch.Tensor, sphere_center:
     d2 = torch.sqrt(1. - p_norm_sq) * ray_d_cos
 
     return d1 + d2
-
-
-def _depth2pts_outside(rays_o: torch.Tensor, rays_d: torch.Tensor, depth: torch.Tensor, sphere_center: torch.Tensor,
-                       sphere_radius: torch.Tensor, include_xyz_real: bool, cluster_2d: bool):
-    '''
-    rays_o, rays_d: [..., 3]
-    depth: [...]; inverse of distance to sphere origin
-    '''
-    rays_o_orig = rays_o
-    rays_d_orig = rays_d
-    if sphere_radius is not None:
-        rays_o = (rays_o - sphere_center) / sphere_radius
-        rays_d = rays_d / sphere_radius
-
-    # note: d1 becomes negative if this mid point is behind camera
-    d1 = -torch.sum(rays_d * rays_o, dim=-1) / torch.sum(rays_d * rays_d, dim=-1)
-    p_mid = rays_o + d1.unsqueeze(-1) * rays_d
-    p_mid_norm = torch.norm(p_mid, dim=-1)
-    ray_d_norm = rays_d.norm(dim=-1)
-    ray_d_cos = 1. / ray_d_norm
-    d2 = torch.sqrt(1. - p_mid_norm * p_mid_norm) * ray_d_cos
-    p_sphere = rays_o + (d1 + d2).unsqueeze(-1) * rays_d
-
-    rot_axis = torch.cross(rays_o, p_sphere, dim=-1)
-    rot_axis = rot_axis / (torch.norm(rot_axis, dim=-1, keepdim=True) + 1e-8)
-    phi = torch.asin(p_mid_norm)
-    theta = torch.asin(p_mid_norm * depth)  # depth is inside [0, 1]
-    rot_angle = (phi - theta).unsqueeze(-1)  # [..., 1]
-
-    # now rotate p_sphere
-    # Rodrigues formula: https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
-    p_sphere_new = p_sphere * torch.cos(rot_angle) + \
-                   torch.cross(rot_axis, p_sphere, dim=-1) * torch.sin(rot_angle) + \
-                   rot_axis * torch.sum(rot_axis * p_sphere, dim=-1, keepdim=True) * (1. - torch.cos(rot_angle))
-    p_sphere_new = p_sphere_new / torch.norm(p_sphere_new, dim=-1, keepdim=True)
-
-    # now calculate conventional depth
-    depth_real = 1. / (depth + 1e-8) * torch.cos(theta) + d1
-
-    if include_xyz_real:
-        if cluster_2d:
-            pts = torch.cat(
-                (rays_o_orig + rays_d_orig * depth_real.unsqueeze(-1), p_sphere_new, depth.unsqueeze(-1)),
-                dim=-1)
-        else:
-            boundary = rays_o_orig + rays_d_orig * (d1 + d2).unsqueeze(-1)
-            pts = torch.cat((boundary.repeat(1, p_sphere_new.shape[1], 1), p_sphere_new, depth.unsqueeze(-1)), dim=-1)
-
-    else:
-        pts = torch.cat((p_sphere_new, depth.unsqueeze(-1)), dim=-1)
-
-    return pts, depth_real
-
 
 def _expand_and_perturb_z_vals(z_vals, samples, perturb, N_rays):
     z_vals = z_vals.expand(N_rays, samples)

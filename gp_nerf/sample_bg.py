@@ -9,6 +9,7 @@ def  bg_sample_inv(near, far, point_num, device):
 
 
 #@torch.no_grad()
+# NOTE: 因为sdf的方法没有用scaling， 所以这里的aabb bound需要重新调整
 def contract_to_unisphere(x: torch.Tensor, hparams):
 
     aabb_bound = hparams.aabb_bound

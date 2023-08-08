@@ -24,7 +24,7 @@ class MemoryDataset(Dataset):
         depth_scales = []
         main_print('Loading data')
         if hparams.debug:
-            metadata_items = metadata_items[:20]
+            metadata_items = metadata_items[::5]
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
             image_data = get_rgb_index_mask_depth_dji(metadata_item)
@@ -58,6 +58,7 @@ class MemoryDataset(Dataset):
                 labels.append(torch.tensor(label, dtype=torch.int))
             depth_djis.append(depth_dji)
             depth_scales.append(depth_scale)
+
         main_print('Finished loading data')
 
         self._rgbs = torch.cat(rgbs)

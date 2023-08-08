@@ -111,19 +111,26 @@ class NeRF(nn.Module):
         inv_s = self.deviation_net(torch.zeros([1, 3]))[:, :1].clip(1e-6, 1e6)
         return inv_s
 
-    def gradient_neus(self, x, none):
+    def gradient_neus(self, x):
+
         x.requires_grad_(True)
 
         y = self.forward_sdf(x)
         y = y[:, :1]
+
+        if not self.training:
+            y.requires_grad_(True)
+        
         d_output = torch.ones_like(y, requires_grad=False, device=y.device)
         gradients = torch.autograd.grad(
-            outputs=y,
-            inputs=x,
-            grad_outputs=d_output,
-            create_graph=True,
-            retain_graph=True,
-            only_inputs=True)[0]
+        outputs=y,
+        inputs=x,
+        grad_outputs=d_output,
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True)[0]
+        
+        
         return gradients #.unsqueeze(1)
 
     #instant nsr
@@ -161,12 +168,14 @@ class NeRF(nn.Module):
         sigma_noise: Optional[torch.Tensor] = None, train_iterations=-1) -> torch.Tensor:
         # sdf
         # x.requires_grad_(True)
-
+        
         position = x[:, :self.xyz_dim]
+
         h = self.encoder(position, bound=self.fg_bound)
 
         if self.use_scaling:
-            with torch.no_grad():
+            # with torch.no_grad():
+                position = position.detach()
                 position[:, 0] = (position[:, 0]-self.scaling_factor_altitude_bottom)/self.scaling_factor_altitude_range
                 position[:, 1:] = position[:, 1:] / self.scaling_factor_ground
             # visualize_points(position.detach().cpu().numpy())

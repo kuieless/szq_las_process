@@ -60,6 +60,7 @@ def get_opts_base():
     parser.add_argument('--gradient_error_weight_increase', default=True, type=eval, choices=[True, False])
     parser.add_argument('--cos_iterations', type=int, default=50000, help='training iterations')
     parser.add_argument('--normal_iterations', type=int, default=50000, help='training iterations')
+    parser.add_argument('--sdf_as_gpnerf', default=False, type=eval, choices=[True, False])
     
     
 
@@ -178,7 +179,8 @@ def get_opts_base():
 
     parser.add_argument('--no_center_pixels', dest='center_pixels', default=True, action='store_false', help='do not shift pixels by +0.5 when computing ray directions')
     parser.add_argument('--no_shifted_softplus', dest='shifted_softplus', default=True, action='store_false', help='use ReLU instead of shifted softplus activation')
-    parser.add_argument('--image_pixel_batch_size', type=int, default=16 * 1024, help='number of pixels to evaluate per split when rendering validation images')
+    parser.add_argument('--image_pixel_batch_size', type=int, default=8 * 1024, help='number of pixels to evaluate per split when rendering validation images')
+    # parser.add_argument('--image_pixel_batch_size', type=int, default=16 * 1024, help='number of pixels to evaluate per split when rendering validation images')
     parser.add_argument('--perturb', type=float, default=1.0, help='factor to perturb depth sampling points')
     parser.add_argument('--noise_std', type=float, default=1.0, help='std dev of noise added to regularize sigma')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')

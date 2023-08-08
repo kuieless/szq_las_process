@@ -17,7 +17,7 @@ def visualize_points(points, size=0.04):
         pcd_o3d.paint_uniform_color(get_color(i))
         # np.savetxt('data_points_{}.txt'.format(i), point)
         # if i==0:
-        o3d.io.write_point_cloud('./box_{}.ply'.format(i), pcd_o3d)
+        o3d.io.write_point_cloud('./0808_box_{}.ply'.format(i), pcd_o3d)
         point_visual.append(pcd_o3d)
     # o3d.visualization.draw_geometries(point_visual)
     a = 1 

@@ -88,7 +88,12 @@ def render_rays(nerf: nn.Module,
     # 属于bg的ray，其中fg部分的点采样
     z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=device)
     z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
-    #z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
+    #####随机扰动
+    # z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
+    # xyz_coarse_fg = rays_o + rays_d * z_vals_inbound.unsqueeze(-1)
+
+    # xyz_coarse_fg = contract_to_unisphere(xyz_coarse_fg, hparams)
+
 
     results = _get_results(point_type='fg',
                            nerf=nerf,
@@ -98,6 +103,7 @@ def render_rays(nerf: nn.Module,
                            far=far_ellipsoid,
                            image_indices=image_indices,
                            hparams=hparams,
+                        #    xyz_coarse=xyz_coarse_fg,
                            z_vals=z_vals_inbound,
                            rays_with_bg=rays_with_bg,
                            last_delta=last_delta,
@@ -190,7 +196,8 @@ def _get_results(point_type,
                  far,   # sdf
                  image_indices: Optional[torch.Tensor],
                  hparams: Namespace,
-                 z_vals: torch.Tensor,
+                #  xyz_coarse: torch.Tensor,
+                 z_vals: torch.Tensor,   # z_vals_inbound
                  rays_with_bg,
                  last_delta: torch.Tensor,
                  get_depth: bool,
@@ -202,52 +209,50 @@ def _get_results(point_type,
                  gt_depths=None,
                  depth_scale=None)-> Dict[str, torch.Tensor]:
     results = {}
+
+    last_delta_diff = torch.zeros_like(last_delta)
+    last_delta_diff[last_delta.squeeze() < 1e10, 0] = z_vals[last_delta.squeeze() < 1e10].max(dim=-1)[0]
+    last_delta=last_delta - last_delta_diff
+
     device = rays_o.device
-    # from nsr test_step
-    #cos_anneal_ratio = min(self.epoch / 100, 1.0), normal_epsilon_ratio= min((self.epoch - 50) / 100, 0.99),
-    
-    #2023/02/21
-    # cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.9)
-    # normal_epsilon_ratio = min((train_iterations) / (2*hparams.normal_iterations), 0.95)
+
     #2023/02/22
-    cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.8)
+    cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.8)   #  from 0 -> 0.8
     normal_epsilon_ratio = min((train_iterations - hparams.normal_iterations) / (2*hparams.normal_iterations), 0.95)
     curvature_loss = False  #   和torch-nsr一样，暂时不考虑
 
-    ###### # ---------------gpnerf sampling and contraction-------------------
+    # ###### # ---------------gpnerf sampling and contraction-------------------
+    # perturb z_vals
+    bound = 0
+
+    ####随机扰动
+    perturb = hparams.perturb if nerf.training else 0
+    z_vals = _expand_and_perturb_z_vals(z_vals, hparams.coarse_samples, perturb, rays_o.shape[0])
+    xyz_coarse_fg = rays_o + rays_d * z_vals.unsqueeze(-1)
+    pts = contract_to_unisphere(xyz_coarse_fg, hparams)
+    
+    # ##### ---------------same sampling as instant-nsr-------------------
+    # bound=hparams.aabb_bound
+    # rays_o = rays_o.view(-1, 3)
+    # rays_d = rays_d.view(-1, 3)
+    # # sample steps
+    # near, far = near_far_from_bound(rays_o, rays_d, bound, type='cube')
+    # # near, far = near_far_from_bound(rays_o, rays_d, bound, type='sphere')
+
+    # z_vals = torch.linspace(0.0, 1.0, hparams.coarse_samples, device=device).unsqueeze(0)# [1, T]
+    # z_vals = z_vals.expand((rays_o.shape[0], hparams.coarse_samples)) # [N, T]
+    # z_vals = near + (far - near) * z_vals # [N, T], in [near, far]
+
     # # perturb z_vals
-    # bound = 0
     # sample_dist = (far - near) / hparams.coarse_samples
     # if nerf.training:
     #     z_vals = z_vals + (torch.rand(z_vals.shape, device=device) - 0.5) * sample_dist
-    
+
     # # generate pts
-    # pts = rays_o + rays_d * z_vals.unsqueeze(-1)
-    # pts = contract_to_unisphere(pts, hparams)
+    # pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals.unsqueeze(-1) # [N, 1, 3] * [N, T, 3] -> [N, T, 3]
+    # pts = pts.clamp(-bound, bound) # must be strictly inside the bounds, else lead to nan in hashgrid encoder!
 
-    
-    ##### ---------------same sampling as instant-nsr-------------------
-    bound=hparams.aabb_bound
-    rays_o = rays_o.view(-1, 3)
-    rays_d = rays_d.view(-1, 3)
-    # sample steps
-    near, far = near_far_from_bound(rays_o, rays_d, bound, type='cube')
-    # near, far = near_far_from_bound(rays_o, rays_d, bound, type='sphere')
-
-    z_vals = torch.linspace(0.0, 1.0, hparams.coarse_samples, device=device).unsqueeze(0)# [1, T]
-    z_vals = z_vals.expand((rays_o.shape[0], hparams.coarse_samples)) # [N, T]
-    z_vals = near + (far - near) * z_vals # [N, T], in [near, far]
-
-    # perturb z_vals
-    sample_dist = (far - near) / hparams.coarse_samples
-    if nerf.training:
-        z_vals = z_vals + (torch.rand(z_vals.shape, device=device) - 0.5) * sample_dist
-
-    # generate pts
-    pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals.unsqueeze(-1) # [N, 1, 3] * [N, T, 3] -> [N, T, 3]
-    pts = pts.clamp(-bound, bound) # must be strictly inside the bounds, else lead to nan in hashgrid encoder!
-
-    ######## ---------------end -------------------
+    # ######## ---------------end -------------------
 
 
     rays_o = rays_o.view(-1, 3)
@@ -282,24 +287,24 @@ def _get_results(point_type,
                 new_z_vals = up_sample(rays_o, rays_d, z_vals, sdf, 16, 64 * 2 **i)
                 z_vals, sdf = cat_z_vals(nerf, rays_o, rays_d, z_vals, new_z_vals, sdf, bound, last=(i + 1 == fine_sample // 16))
     
-    # ### render core
+    # ###这里完成z_vals（coarse+fine）
     deltas = z_vals[:, 1:] - z_vals[:, :-1]  # [N, T-1]
-    deltas = torch.cat([deltas, sample_dist * torch.ones_like(deltas[:, :1])], dim=-1)
+    deltas = torch.cat([deltas, last_delta], -1)  # (N_rays, N_samples_)
 
-    # # sample pts on new z_vals
+    # # sample pts on new z_vals, 取中点以及最后一个点
     z_vals_mid = (z_vals[:, :-1] + 0.5 * deltas[:, :-1]) # [N, T-1]
     z_vals_mid = torch.cat([z_vals_mid, z_vals[:,-1:]], dim=-1)
-
     new_pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals_mid.unsqueeze(-1) # [N, 1, 3] * [N, t, 3] -> [N, t, 3]
     
-    # # ----instant-nsr or gpnerf---------
-    new_pts = new_pts.clamp(-bound, bound)
-    # new_pts = contract_to_unisphere(new_pts, hparams)
+    # # ----instant-nsr or gpnerf---------  
+    # NOTE：这里得到的采样点怎么处理
+    # new_pts = new_pts.clamp(-bound, bound)
+    new_pts = contract_to_unisphere(new_pts, hparams)
 
     
     """ Step 3: Compute fine sigma """
     N_rays_ = new_pts.shape[0]
-    N_samples_ = new_pts.shape[1]
+    N_samples_ = new_pts.shape[1]   # 这里点的数量已经是coarse + fine
     xyz_ = new_pts.view(-1, new_pts.shape[-1])
     image_indices_ = image_indices.repeat(1, N_samples_, 1).view(-1, 1)
     B = xyz_.shape[0]
@@ -314,17 +319,20 @@ def _get_results(point_type,
     sdf = sdf_nn_output[:, :1]
     feature_vector = sdf_nn_output[:, 1:]
     
-    gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
-    
-    normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))
+    if nerf.training:
+        gradient = nerf.gradient_neus(xyz_).squeeze()
+    else:
+        with torch.enable_grad():
+            gradient = nerf.gradient_neus(xyz_).squeeze()
+    normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal
 
-    color = nerf.forward_color(xyz_, rays_d_, normal.reshape(-1, 3), feature_vector, image_indices_)
+    color = nerf.forward_color(xyz_, rays_d_, gradient.reshape(-1, 3), feature_vector, image_indices_)
 
     # TODO: zyq - save the inv_s_ori parameter to wandb or tb
     inv_s_ori = nerf.forward_variance()     # Single parameter
     inv_s = inv_s_ori.expand(N_rays_ * N_samples_, 1)
 
-    true_cos = (rays_d_.reshape(-1, 3) * normal).sum(-1, keepdim=True)  #[-1, 0]
+    true_cos = (rays_d_.reshape(-1, 3) * gradient).sum(-1, keepdim=True)  #[-1, 0]
     # "cos_anneal_ratio" grows from 0 to 1 in the beginning training iterations. The anneal strategy below makes
     # the cos value "not dead" at the beginning training iterations, for better convergence.
 
