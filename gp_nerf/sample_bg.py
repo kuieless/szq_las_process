@@ -9,14 +9,15 @@ def  bg_sample_inv(near, far, point_num, device):
 
 
 #@torch.no_grad()
-# NOTE: 因为sdf的方法没有用scaling， 所以这里的aabb bound需要重新调整
+# NOTE: 2023/08/08  不在网络部分使用scaling， 改为在contract时使用
 def contract_to_unisphere(x: torch.Tensor, hparams):
 
-    aabb_bound = hparams.aabb_bound
-    aabb = torch.tensor([-aabb_bound, -aabb_bound, -aabb_bound, aabb_bound, aabb_bound, aabb_bound]).to(x.device)
+    z_range = torch.tensor(hparams.z_range)
+    aabb = torch.tensor([z_range[0], hparams.sphere_center[1] - hparams.sphere_radius[1], hparams.sphere_center[2] - hparams.sphere_radius[2], 
+                         z_range[1], hparams.sphere_center[1] + hparams.sphere_radius[1], hparams.sphere_center[2] + hparams.sphere_radius[2]]).to(x.device)
 
     aabb_min, aabb_max = torch.split(aabb, 3, dim=-1)
-    x = (x - aabb_min) / (aabb_max - aabb_min)
+    x = (x - aabb_min) / (aabb_max - aabb_min)   #[0, 1]
     x = x * 2 - 1  # aabb is at [-1, 1]
     if hparams.contract_norm == 'inf':
         mag = x.abs().amax(dim=-1, keepdim=True)

@@ -24,7 +24,7 @@ class MemoryDataset(Dataset):
         depth_scales = []
         main_print('Loading data')
         if hparams.debug:
-            metadata_items = metadata_items[::5]
+            metadata_items = metadata_items[:40]
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
             image_data = get_rgb_index_mask_depth_dji(metadata_item)
