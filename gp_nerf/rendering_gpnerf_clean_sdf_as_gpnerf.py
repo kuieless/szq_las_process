@@ -319,20 +319,23 @@ def _get_results(point_type,
     sdf = sdf_nn_output[:, :1]
     feature_vector = sdf_nn_output[:, 1:]
     
-    if nerf.training:
-        gradient = nerf.gradient_neus(xyz_).squeeze()
-    else:
-        with torch.enable_grad():
-            gradient = nerf.gradient_neus(xyz_).squeeze()
+    gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
+
+    # if nerf.training:
+    #     gradient = nerf.gradient_neus(xyz_).squeeze()
+    # else:
+    #     with torch.enable_grad():
+    #         gradient = nerf.gradient_neus(xyz_).squeeze()
+
     normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal
 
-    color = nerf.forward_color(xyz_, rays_d_, gradient.reshape(-1, 3), feature_vector, image_indices_)
+    color = nerf.forward_color(xyz_, rays_d_, normal.reshape(-1, 3), feature_vector, image_indices_)
 
     # TODO: zyq - save the inv_s_ori parameter to wandb or tb
     inv_s_ori = nerf.forward_variance()     # Single parameter
     inv_s = inv_s_ori.expand(N_rays_ * N_samples_, 1)
 
-    true_cos = (rays_d_.reshape(-1, 3) * gradient).sum(-1, keepdim=True)  #[-1, 0]
+    true_cos = (rays_d_.reshape(-1, 3) * normal).sum(-1, keepdim=True)  #[-1, 0]
     # "cos_anneal_ratio" grows from 0 to 1 in the beginning training iterations. The anneal strategy below makes
     # the cos value "not dead" at the beginning training iterations, for better convergence.
 

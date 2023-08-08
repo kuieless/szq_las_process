@@ -314,7 +314,14 @@ def _get_results(point_type,
     sdf = sdf_nn_output[:, :1]
     feature_vector = sdf_nn_output[:, 1:]
     
-    gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
+    if hparams.use_neus_gradient:
+        if nerf.training:
+            gradient = nerf.gradient_neus(xyz_).squeeze()
+        else:
+            with torch.enable_grad():
+                gradient = nerf.gradient_neus(xyz_).squeeze()
+    else:
+        gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
     
     normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))
 

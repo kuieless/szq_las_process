@@ -80,40 +80,40 @@ def render_rays(nerf: nn.Module,
     
 
 
-    # ######## ellipsoid
-    fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius)
-    fg_far = torch.maximum(fg_far, near.squeeze())
-    ######## 划分bg ray
-    rays_with_bg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() > fg_far]
-    rays_with_fg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() <= fg_far]
+    # # ######## ellipsoid
+    # fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius)
+    # fg_far = torch.maximum(fg_far, near.squeeze())
+    # ######## 划分bg ray
+    # rays_with_bg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() > fg_far]
+    # rays_with_fg = torch.arange(N_rays, device=rays_o.device)[far.squeeze() <= fg_far]
 
-    assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
-    rays_o_ell = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
-    rays_d_ell = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
-    if rays_with_bg.shape[0] > 0:
-        last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
+    # assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
+    # rays_o_ell = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
+    # rays_d_ell = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
+    # if rays_with_bg.shape[0] > 0:
+    #     last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
 
-    ######## zyq:    初始化
-    far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
-    z_vals_inbound = torch.zeros([rays_o_ell.shape[0], hparams.coarse_samples], device=rays.device)
-    ######## 属于fg的ray采样
-    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
-    z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
-    ######## 属于bg的ray，其中fg部分的点采样
-    z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
-    z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
-    ######## 随机扰动，并生成采样点
-    z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
-    xyz_coarse_fg_ell = rays_o_ell + rays_d_ell * z_vals_inbound.unsqueeze(-1)
+    # ######## zyq:    初始化
+    # far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
+    # z_vals_inbound = torch.zeros([rays_o_ell.shape[0], hparams.coarse_samples], device=rays.device)
+    # ######## 属于fg的ray采样
+    # z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    # z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
+    # ######## 属于bg的ray，其中fg部分的点采样
+    # z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=rays.device)
+    # z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
+    # ######## 随机扰动，并生成采样点
+    # z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
+    # xyz_coarse_fg_ell = rays_o_ell + rays_d_ell * z_vals_inbound.unsqueeze(-1)
 
-    points_before_contract = xyz_coarse_fg_ell
+    # points_before_contract = xyz_coarse_fg_ell
 
-    xyz_coarse_fg_ell = contract_to_unisphere(xyz_coarse_fg_ell, hparams)
+    # xyz_coarse_fg_ell = contract_to_unisphere(xyz_coarse_fg_ell, hparams)
     
-    points_before_contract, xyz_coarse_fg_ell = points_before_contract.view(-1, 3).cpu().numpy(), xyz_coarse_fg_ell.view(-1, 3).cpu().numpy()
+    # points_before_contract, xyz_coarse_fg_ell = points_before_contract.view(-1, 3).cpu().numpy(), xyz_coarse_fg_ell.view(-1, 3).cpu().numpy()
 
-    visualize_points_list = [points_before_contract[::100], xyz_coarse_fg_ell[::100]]
-    visualize_points(visualize_points_list)
+    # visualize_points_list = [points_before_contract[::100], xyz_coarse_fg_ell[::100]]
+    # visualize_points(visualize_points_list)
 
     # scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
     # scaling_factor_altitude_bottom = 0.5 * (hparams.z_range[0]+ hparams.z_range[1])/ hparams.aabb_bound

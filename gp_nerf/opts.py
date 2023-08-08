@@ -61,7 +61,8 @@ def get_opts_base():
     parser.add_argument('--cos_iterations', type=int, default=50000, help='training iterations')
     parser.add_argument('--normal_iterations', type=int, default=50000, help='training iterations')
     parser.add_argument('--sdf_as_gpnerf', default=False, type=eval, choices=[True, False])
-    
+    parser.add_argument('--use_neus_gradient', default=False, type=eval, choices=[True, False])
+
     
 
 

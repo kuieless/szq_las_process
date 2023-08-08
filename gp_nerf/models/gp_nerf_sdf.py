@@ -114,13 +114,10 @@ class NeRF(nn.Module):
     def gradient_neus(self, x):
 
         x.requires_grad_(True)
-
         y = self.forward_sdf(x)
         y = y[:, :1]
-
         if not self.training:
             y.requires_grad_(True)
-        
         d_output = torch.ones_like(y, requires_grad=False, device=y.device)
         gradients = torch.autograd.grad(
         outputs=y,
@@ -129,8 +126,6 @@ class NeRF(nn.Module):
         create_graph=True,
         retain_graph=True,
         only_inputs=True)[0]
-        
-        
         return gradients #.unsqueeze(1)
 
     #instant nsr
@@ -160,7 +155,6 @@ class NeRF(nn.Module):
         neg_z = x + torch.tensor([[0.00, 0.00, -epsilon]], device=x.device)
         dist_dz_neg = self.forward_sdf(neg_z)
         dist_dz_neg = dist_dz_neg[:,:1]
-
 
         return torch.cat([0.5*(dist_dx_pos - dist_dx_neg) / epsilon, 0.5*(dist_dy_pos - dist_dy_neg) / epsilon, 0.5*(dist_dz_pos - dist_dz_neg) / epsilon], dim=-1)
 
