@@ -47,8 +47,6 @@ def extract_geometry(bound_min, bound_max, resolution, threshold, query_func, us
 
 
 def save_mesh(nerf, device, save_path=None, resolution= 256, bound=1, threshold=0.,  use_sdf = False):
-        if save_path is None:
-            save_path = os.path.join("workspace", 'meshes', '1.obj')
 
         print(f"==> Saving mesh to {save_path}")
 
@@ -63,10 +61,10 @@ def save_mesh(nerf, device, save_path=None, resolution= 256, bound=1, threshold=
             return sdfs
 
         # w/ aabb
-        # bounds_min = torch.FloatTensor([-bound] * 3)
-        # bounds_max = torch.FloatTensor([bound] * 3)
-        bounds_min = torch.FloatTensor([0.05, -0.1590, -0.3044])
-        bounds_max = torch.FloatTensor([0.1051, 0.1580, 0.3046])
+        bounds_min = torch.FloatTensor([-bound] * 3)
+        bounds_max = torch.FloatTensor([bound] * 3)
+        # bounds_min = torch.FloatTensor([0.05, -0.1590, -0.3044])
+        # bounds_max = torch.FloatTensor([0.1051, 0.1580, 0.3046])
 
         vertices, triangles = extract_geometry(bounds_min, bounds_max, resolution=resolution, threshold=threshold, query_func = query_func, use_sdf = use_sdf)
         
@@ -84,7 +82,7 @@ def _get_train_opts():
     parser = get_opts_base()
     parser.add_argument('--exp_name', type=str, required=True, help='experiment name')
     parser.add_argument('--dataset_path', type=str, required=True)
-    # parser.add_argument('--threshold', type=int, default=100, required=False)
+    # parser.add_argument('--threshold', type=int, default=50, required=False)
 
     return parser.parse_args()
 
@@ -93,13 +91,13 @@ def main(hparams) -> None:
 
     assert hparams.ckpt_path is not None or hparams.container_path is not None
     from gp_nerf.runner_gpnerf import Runner
-
+    hparams.bg_nerf = False
     runner = Runner(hparams)
     nerf = runner.nerf
     nerf.eval()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    save_mesh(nerf, device, save_path='./output/sci-art.obj', resolution=512, bound = hparams.aabb_bound, threshold=0, use_sdf=True)
+    
+    save_mesh(nerf, device, save_path='./output/sdf.obj', resolution=512, bound = hparams.aabb_bound, threshold=0, use_sdf=True)
 
 
 if __name__ == '__main__':

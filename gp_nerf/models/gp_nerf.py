@@ -130,18 +130,18 @@ class NeRF(nn.Module):
         self.bg_bound = 1+hparams.contract_bg_len
         self.xyz_dim = xyz_dim
         
-        #plane
-        # self.use_scaling = hparams.use_scaling and not hparams.use_fg_box_bound
-        # print(f'use scaling :  {self.use_scaling}')
-        # if self.use_scaling:
-        #     if 'quad' in hparams.dataset_path or 'sci' in hparams.dataset_path:
-        #         self.scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
-        #         self.scaling_factor_altitude_bottom = 0
-        #         self.scaling_factor_altitude_range = (abs(hparams.sphere_center[0]) + abs(hparams.sphere_radius[0])) / hparams.aabb_bound
-        #     else:
-        #         self.scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
-        #         self.scaling_factor_altitude_bottom = 0.5 * (hparams.z_range[0]+ hparams.z_range[1])/ hparams.aabb_bound
-        #         self.scaling_factor_altitude_range = (hparams.z_range[1]-hparams.z_range[0]) / (2 * hparams.aabb_bound)
+        # ##plane
+        self.use_scaling = hparams.use_scaling and not hparams.use_fg_box_bound
+        print(f'use scaling :  {self.use_scaling}')
+        if self.use_scaling:
+            if 'quad' in hparams.dataset_path or 'sci' in hparams.dataset_path:
+                self.scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
+                self.scaling_factor_altitude_bottom = 0
+                self.scaling_factor_altitude_range = (abs(hparams.sphere_center[0]) + abs(hparams.sphere_radius[0])) / hparams.aabb_bound
+            else:
+                self.scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
+                self.scaling_factor_altitude_bottom = 0.5 * (hparams.z_range[0]+ hparams.z_range[1])/ hparams.aabb_bound
+                self.scaling_factor_altitude_range = (hparams.z_range[1]-hparams.z_range[0]) / (2 * hparams.aabb_bound)
 
         self.embedding_a = nn.Embedding(self.appearance_count, self.appearance_dim)
         
@@ -232,10 +232,10 @@ class NeRF(nn.Module):
         position = x[:, :self.xyz_dim]
         h = self.encoder(position, bound=self.fg_bound)
         
-        # if self.use_scaling:
-        #     px = (position[:, 0:1] - self.scaling_factor_altitude_bottom)/self.scaling_factor_altitude_range
-        #     py = position[:, 1:] / self.scaling_factor_ground
-        #     position = torch.cat([px, py], dim=-1)
+        if self.use_scaling:
+            px = (position[:, 0:1] - self.scaling_factor_altitude_bottom)/self.scaling_factor_altitude_range
+            py = position[:, 1:] / self.scaling_factor_ground
+            position = torch.cat([px, py], dim=-1)
 
         plane_feat = self.plane_encoder(position, bound=self.fg_bound)
         h = torch.cat([h, plane_feat], dim=-1)  #####

@@ -33,7 +33,7 @@ python gp_nerf/train.py  --wandb_id  None   --exp_name  $exp_name   --enable_sem
 
 
 
-exp_name='logs_dji/0808_1_sdf_as_neus'
+exp_name='logs_dji/0808_2_sdf_as_neus'
 
 
 dataset_path=/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan
