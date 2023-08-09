@@ -50,7 +50,7 @@ from pytorch3d.renderer import (
 
 # Setup
 if torch.cuda.is_available():
-    device = torch.device("cuda:6")
+    device = torch.device("cuda:7")
     torch.cuda.set_device(device)
 else:
     device = torch.device("cpu")
@@ -133,14 +133,14 @@ def load_mesh(obj_filename, nerf_metadata=None, save_mesh=False):
         IO.save_mesh(mesh, obj_filename[:-4] + 'norm.obj')
     return mesh
 
-def load_nerf_metadata(metadata_dir, filename, verbose=True):
+def load_nerf_metadata(args, metadata_dir, filename, verbose=True):
     """docstring for load_nerf_metadata"""
 
     coordinates = torch.load(os.path.join(metadata_dir, 'coordinates.pt'))
-    rgb = cv2.imread(os.path.join(metadata_dir, 'train/rgbs/%s.jpg' % filename))
-    depth = np.load(os.path.join(metadata_dir, 'train/depth_dji/%s.npy' % filename))
-    img_meta = torch.load(os.path.join(metadata_dir, 'train/image_metadata/%s.pt' % filename))
-    metadata = torch.load(os.path.join(metadata_dir, 'train/metadata/%s.pt' % filename))
+    rgb = cv2.imread(os.path.join(metadata_dir, args.split, 'rgbs/%s.jpg' % filename))
+    depth = np.load(os.path.join(metadata_dir, args.split, 'depth_dji/%s.npy' % filename))
+    img_meta = torch.load(os.path.join(metadata_dir, args.split, 'image_metadata/%s.pt' % filename))
+    metadata = torch.load(os.path.join(metadata_dir, args.split, 'metadata/%s.pt' % filename))
 
     root = ET.parse('data/metadata.xml').getroot()
     translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float)
@@ -273,10 +273,9 @@ def setup_renderer(args, nerf_metadata, verbose=True):
 import glob
 from tqdm import tqdm
 
-def main():
 
+def _get_opts():
 
-    """docstring for main"""
     parser = argparse.ArgumentParser()
     parser.add_argument('--nerf_metadata_dir', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan', help='')
     parser.add_argument('--obj_filename', default='./data/downv3/Block.obj', help='')
@@ -288,33 +287,46 @@ def main():
     parser.add_argument('--camera_type', default='perspective', help='')
     parser.add_argument('--save_mesh', default=False, action='store_true')
     parser.add_argument('--visualize', default=False, action='store_true')
+    parser.add_argument('--split', default='train', help='')
 
+    return parser.parse_known_args()[0]
+
+def main(args):
+
+
+    """docstring for main"""
     
-    args = parser.parse_args(args=[])
+
+
 
     save_dir = args.save_dir
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    if not os.path.exists(save_dir+'/cat_results'):
-        os.makedirs(save_dir+'/cat_results')
-    if not os.path.exists(save_dir+'/depth_mesh'):
-        os.makedirs(save_dir+'/depth_mesh')
+    if not os.path.exists(save_dir+'/cat_results_'+ args.split) and args.visualize:
+        os.makedirs(save_dir+'/cat_results_'+ args.split)
+    if not os.path.exists(save_dir+'/depth_mesh_'+ args.split):
+        os.makedirs(save_dir+'/depth_mesh_'+ args.split)
 
     # Set paths
     args.obj_filename = os.path.join("./data/Block/Block.obj")
 
     nerf_metadata_dir = args.nerf_metadata_dir
-    filename = '000001'
-    nerf_metadata = load_nerf_metadata(nerf_metadata_dir, filename) 
+    if args.split == 'train':
+        filename = '000001'
+    elif args.split == 'val':
+        filename = '000000'
+    
+
+    nerf_metadata = load_nerf_metadata(args, nerf_metadata_dir, filename) 
 
     mesh = load_mesh(args.obj_filename, nerf_metadata, save_mesh=args.save_mesh)
 
     name = ['000001.jpg']
-    names = sorted(glob.glob(os.path.join(nerf_metadata_dir,'train/rgbs/*.jpg')))
-    for name in tqdm(names[:]):
+    names = sorted(glob.glob(os.path.join(nerf_metadata_dir, args.split, 'rgbs/*.jpg')))
+    for name in tqdm(names[1400:]):
         filename = os.path.basename(name)[:-4]
         # print('Processing %s' % filename)
-        nerf_metadata = load_nerf_metadata(nerf_metadata_dir, filename, verbose=False)
+        nerf_metadata = load_nerf_metadata(args, nerf_metadata_dir, filename, verbose=False)
         
         render_setup = setup_renderer(args, nerf_metadata, verbose=False)
 
@@ -328,7 +340,8 @@ def main():
 
         #depth = renderer_depth(mesh)
         depth = fragments.zbuf[0, :, :, 0].cpu().numpy()
-        np.save(os.path.join(save_dir, 'depth_mesh','%s.npy' % filename), depth)
+        depth[(depth==-1)] = 1e6
+        np.save(os.path.join(save_dir, 'depth_mesh_%s' % args.split,'%s.npy' % filename), depth[:,:,None])
         
 
 
@@ -374,7 +387,7 @@ def main():
             #print(cat_results.shape)
             #cv2.imwrite(os.path.join(save_dir, '%s_depth_color.jpg' % (filename)), (depth_color).astype(np.uint8))
             #cv2.imwrite(os.path.join(save_dir, '%s_depth.jpg' % (filename)), (depth_normalized).astype(np.uint8))
-            cv2.imwrite(os.path.join(save_dir, 'cat_results', '%s_cat_results.jpg' % filename), cat_results.astype(np.uint8))
+            cv2.imwrite(os.path.join(save_dir, 'cat_results_%s' % args.split, '%s_cat_results.jpg' % filename), cat_results.astype(np.uint8))
             print('Saved %s' % os.path.join(save_dir, '%s.jpg' % filename))
 
 
@@ -383,4 +396,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(_get_opts())

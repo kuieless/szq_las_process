@@ -31,6 +31,7 @@ def render_rays(nerf: nn.Module,
                 train_iterations=-1,
                 gt_depths=None,
                 depth_scale=None) -> Tuple[Dict[str, torch.Tensor], bool]:
+    
     N_rays = rays.shape[0]
     device = rays.device
     rays_o, rays_d = rays[:, 0:3], rays[:, 3:6]  # both (N_rays, 3)

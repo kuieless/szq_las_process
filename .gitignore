@@ -1,5 +1,6 @@
 
 # Byte-compiled / optimized / DLL files
+data/
 *.ply
 *.obj
 logs_bk/

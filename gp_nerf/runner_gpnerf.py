@@ -1175,8 +1175,8 @@ class Runner:
             else:
                 from tools.unetformer.uavid2rgb import remapping
 
-            # with torch.inference_mode():
-            with torch.no_grad():
+            with torch.inference_mode():
+            # with torch.no_grad():
                 #semantic 
                 self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
                 CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
@@ -1777,7 +1777,11 @@ class Runner:
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                  intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_path=depth_path)
         elif self.hparams.depth_dji_loss:
-            depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
+            if self.hparams.depth_dji_type=='las':
+                depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
+            elif self.hparams.depth_dji_type=='mesh':
+                depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_mesh', '%s.npy' % metadata_path.stem) 
+                
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                  intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_dji_path=depth_dji_path)
 

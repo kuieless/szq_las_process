@@ -71,6 +71,12 @@ def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, wr
     if hparams.depth_dji_loss:
         gt_depths = metadata_item.load_depth_dji()
         valid_depth_mask = ~torch.isinf(gt_depths)
+        # if hparams.depth_dji_type == 'mesh':
+        #     valid_depth_mask[:,:]=False
+        #     valid_depth_mask[::3]=True
+        #     valid_depth_mask[gt_depths==-1] = False 
+
+
         gt_depths_valid = gt_depths[valid_depth_mask]
         
         from mega_nerf.ray_utils import get_ray_directions
@@ -83,9 +89,9 @@ def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, wr
                                         hparams.center_pixels,
                                         torch.device('cpu'))
         depth_scale = torch.abs(directions[:, :, 2])
-        pred_depths = (results[f'depth_{typ}'].view(*gt_depths.shape)) * (depth_scale.unsqueeze(-1))
+        pred_depths = (results[f'depth_{typ}'].view(gt_depths.shape[0],gt_depths.shape[1],1)) * (depth_scale.unsqueeze(-1))
         pred_depths_valid = pred_depths[valid_depth_mask]
-        abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3 = compute_errors(gt_depths_valid.numpy(), pred_depths_valid.numpy())
+        abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3 = compute_errors(gt_depths_valid.view(-1).numpy(), pred_depths_valid.view(-1).numpy())
         rmse_actual = rmse * pose_scale_factor
         
         if wandb is not None:
