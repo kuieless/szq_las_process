@@ -30,7 +30,8 @@ def render_rays(nerf: nn.Module,
                 get_bg_fg_rgb: bool,
                 train_iterations=-1,
                 gt_depths=None,
-                depth_scale=None) -> Tuple[Dict[str, torch.Tensor], bool]:
+                depth_scale=None,
+                pose_scale_factor=None) -> Tuple[Dict[str, torch.Tensor], bool]:
     
     N_rays = rays.shape[0]
     device = rays.device
@@ -154,22 +155,46 @@ def render_rays(nerf: nn.Module,
     #  zyq:    初始化
     far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
     z_vals_inbound = torch.zeros([rays_o.shape[0], hparams.coarse_samples], device=device)
-    # 属于fg的ray采样
-    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
-    z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
-    # 属于bg的ray，其中fg部分的点采样
-    z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=device)
-    z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
+    
+    if hparams.depth_dji_loss and hparams.sample_mesh_surface:
+        valid_depth_mask = ~torch.isinf(gt_depths)
+        z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
+        # mesh中没有深度的部分
+        z_vals_inbound[~valid_depth_mask] = near[~valid_depth_mask] * (1 - z_fg) + far_ellipsoid[~valid_depth_mask] * z_fg
+        # mesh中有深度的， 分为三部分： 相机->表面， 表面附近， 表面-> 椭圆界
+        z_1 = torch.linspace(0, 1, int(hparams.coarse_samples *0.25), device=device)
+        z_2 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.75), device=device)
+        # z_3 = torch.linspace(0, 1, int(hparams.coarse_samples / 4), device=device)
+        surface_point = gt_depths[valid_depth_mask] / (depth_scale[valid_depth_mask])  # 得到表面点的far
+        epsilon =  5 / pose_scale_factor
+        s_near = (surface_point - epsilon).unsqueeze(-1)
+        s_far = (surface_point + epsilon).unsqueeze(-1)
+        assert sum(near>=s_near) == 0 and sum(far <= s_far) == 0
+
+        mesh_sample1 = near[valid_depth_mask] * (1 - z_1) + s_near[valid_depth_mask] * z_1
+        mesh_sample2 = s_near[valid_depth_mask] * (1 - z_2) + s_far[valid_depth_mask] * z_2
+        # mesh_sample3 = s_far[valid_depth_mask] * (1 - z_3) + far_ellipsoid[valid_depth_mask] * z_3
+        z_vals_inbound[valid_depth_mask] = torch.cat([mesh_sample1, mesh_sample2], dim=1)
+
+    else:
+        z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
+        z_vals_inbound = near * (1 - z_fg) + far_ellipsoid * z_fg
+    
     # 随机扰动，并生成采样点
     z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
     xyz_coarse_fg = rays_o + rays_d * z_vals_inbound.unsqueeze(-1)
 
+    # visualize_points_list = [xyz_coarse_fg.view(-1, 3).cpu().numpy(), xyz_coarse_fg.view(-1, 3).cpu().numpy()]
+    # visualize_points(visualize_points_list)
 
     if hparams.use_fg_box_bound:
         xyz_coarse_fg = contract_to_unisphere_box(xyz_coarse_fg, hparams)
         
     else:
         xyz_coarse_fg = contract_to_unisphere(xyz_coarse_fg, hparams)
+
+    
+
 
     results = _get_results(point_type='fg',
                            nerf=nerf,
@@ -186,7 +211,7 @@ def render_rays(nerf: nn.Module,
                            xyz_fine_fn=lambda fine_z_vals: (rays_o + rays_d * fine_z_vals.unsqueeze(-1), None),
                            train_iterations=train_iterations,
                            gt_depths=gt_depths,
-                           depth_scale=gt_depths)
+                           depth_scale=depth_scale)
     
     if rays_with_bg.shape[0] != 0:
         z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4+1, hparams.coarse_samples // 2, device)
@@ -211,7 +236,7 @@ def render_rays(nerf: nn.Module,
                                   xyz_fine_fn=lambda fine_z_vals: (rays_o[rays_with_bg] + rays_d[rays_with_bg] * fine_z_vals.unsqueeze(-1), None),
                                   train_iterations=train_iterations,
                                   gt_depths=gt_depths,
-                                  depth_scale=gt_depths)
+                                  depth_scale=depth_scale)
         
     # merge the result of inner and outer
     types = ['fine' if hparams.fine_samples > 0 else 'coarse']
@@ -299,7 +324,7 @@ def _get_results(point_type,
                depth_real=depth_real,
                train_iterations=train_iterations,
                gt_depths=gt_depths,
-               depth_scale=gt_depths)
+               depth_scale=depth_scale)
 
 
     if hparams.fine_samples > 0:  # sample points for fine model
@@ -310,7 +335,7 @@ def _get_results(point_type,
         elif point_type == 'bg_same_as_fg':
             fine_z_vals = _sample_pdf(z_vals_mid, results['weights_coarse'][:, 1:-1].detach(),hparams.fine_samples // 2, det=(perturb == 0))
         else:
-            fine_z_vals = _sample_pdf(z_vals_mid, results['weights_coarse'][:, 1:-1].detach(),hparams.fine_samples//2, det=(perturb == 0))
+            fine_z_vals = _sample_pdf(z_vals_mid, results['weights_coarse'][:, 1:-1].detach(),hparams.fine_samples // 2, det=(perturb == 0))
 
         if hparams.use_cascade:
             fine_z_vals, _ = torch.sort(torch.cat([z_vals, fine_z_vals], -1), -1)
@@ -341,7 +366,7 @@ def _get_results(point_type,
                    depth_real=depth_real_fine,
                    train_iterations=train_iterations,
                    gt_depths=gt_depths,
-                   depth_scale=gt_depths)
+                   depth_scale=depth_scale)
 
         for key in INTERMEDIATE_KEYS:
             if key in results:

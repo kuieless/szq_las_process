@@ -30,7 +30,7 @@ def get_opts_base():
     # depth_dji_loss
     parser.add_argument('--depth_dji_loss', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--depth_dji_type', default='las', type=str, choices=['mesh', 'las'], help='')
-    parser.add_argument('--sampling_mesh_sur', default=False, type=eval, choices=[True, False], help='')
+    parser.add_argument('--sample_mesh_surface', default=False, type=eval, choices=[True, False], help='')
     
     parser.add_argument('--wgt_depth_mse_loss', default=0, type=float, help='')
     parser.add_argument('--wgt_sigma_loss', default=0, type=float, help='')

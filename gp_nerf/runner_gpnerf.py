@@ -722,7 +722,8 @@ class Runner:
                                                         get_bg_fg_rgb=False,
                                                         train_iterations=train_iterations,
                                                         gt_depths=gt_depths,
-                                                        depth_scale=depth_scale
+                                                        depth_scale=depth_scale,
+                                                        pose_scale_factor = self.pose_scale_factor
                                                         )
         else:
             bg_nerf_rays_present=False
