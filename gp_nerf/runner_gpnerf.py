@@ -787,6 +787,12 @@ class Runner:
             metrics['photo_loss'] = photo_loss
         metrics['loss'] = photo_loss
 
+        if 'air_sigma_loss' in results:
+            air_sigma_loss = results['air_sigma_loss'] * self.hparams.wgt_air_sigma_loss
+            metrics['air_sigma_loss'] = air_sigma_loss
+            metrics['loss'] +=  air_sigma_loss
+
+
         # depth_dji loss
         if self.hparams.depth_dji_loss:
             valid_depth_mask = ~torch.isinf(gt_depths)
@@ -1023,6 +1029,7 @@ class Runner:
                                         get_depth_variance=False,
                                         get_bg_fg_rgb=True,
                                         train_iterations=train_index)
+                                        
 
                         for key, value in result_batch.items():
                             if key not in results:
@@ -1575,6 +1582,7 @@ class Runner:
                                         metadata.intrinsics[3],
                                         self.hparams.center_pixels,
                                         self.device)
+        depth_scale = torch.abs(directions[:, :, 2]).view(-1)
 
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
             rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
@@ -1597,6 +1605,10 @@ class Runner:
                 bg_nerf = self.bg_nerf
 
             for i in range(0, rays.shape[0], self.hparams.image_pixel_batch_size):
+                if self.hparams.depth_dji_type == "mesh" and self.hparams.sample_mesh_surface:
+                    gt_depths = metadata.load_depth_dji().view(-1).to(self.device)
+                else: 
+                    gt_depths = None
                 result_batch, _ = render_rays(nerf=nerf, bg_nerf=bg_nerf,
                                               rays=rays[i:i + self.hparams.image_pixel_batch_size],
                                               image_indices=image_indices[
@@ -1607,8 +1619,11 @@ class Runner:
                                               get_depth=True,
                                               get_depth_variance=False,
                                               get_bg_fg_rgb=True,
-                                              train_iterations=train_index)
-
+                                              train_iterations=train_index,
+                                              gt_depths= gt_depths[i:i + self.hparams.image_pixel_batch_size] if gt_depths is not None else None,
+                                              depth_scale=depth_scale[i:i + self.hparams.image_pixel_batch_size],
+                                              pose_scale_factor = self.pose_scale_factor)
+                del result_batch['air_sigma_loss']
                 for key, value in result_batch.items():
                     if key not in results:
                         results[key] = []

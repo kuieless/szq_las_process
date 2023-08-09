@@ -8,6 +8,7 @@ from torch import nn
 
 from mega_nerf.spherical_harmonics import eval_sh
 from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere
+from scripts.visualize_points import visualize_points
 
 # TO_COMPOSITE = {'rgb', 'depth', 'sem_map'}
 #sdf
@@ -48,7 +49,8 @@ def render_rays(nerf: nn.Module,
                 get_bg_fg_rgb: bool,
                 train_iterations=-1,
                 gt_depths=None,
-                depth_scale=None) -> Tuple[Dict[str, torch.Tensor], bool]:
+                depth_scale=None,
+                pose_scale_factor=None) -> Tuple[Dict[str, torch.Tensor], bool]:
     N_rays = rays.shape[0]
     device = rays.device
     rays_o, rays_d = rays[:, 0:3], rays[:, 3:6]  # both (N_rays, 3)
@@ -245,6 +247,9 @@ def _get_results(point_type,
 
     # generate pts
     pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals.unsqueeze(-1) # [N, 1, 3] * [N, T, 3] -> [N, T, 3]
+    # visualize_points_list = [pts.view(-1, 3).cpu().numpy()]
+    # visualize_points(visualize_points_list)
+
     pts = pts.clamp(-bound, bound) # must be strictly inside the bounds, else lead to nan in hashgrid encoder!
 
     ######## ---------------end -------------------
@@ -296,6 +301,8 @@ def _get_results(point_type,
     new_pts = new_pts.clamp(-bound, bound)
     # new_pts = contract_to_unisphere(new_pts, hparams)
 
+    # visualize_points_list = [new_pts.view(-1, 3).cpu().numpy()]
+    # visualize_points(visualize_points_list)
     
     """ Step 3: Compute fine sigma """
     N_rays_ = new_pts.shape[0]
