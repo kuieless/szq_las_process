@@ -30,8 +30,10 @@ def get_opts_base():
     # depth_dji_loss
     parser.add_argument('--depth_dji_loss', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--depth_dji_type', default='las', type=str, choices=['mesh', 'las'], help='')
-    parser.add_argument('--sample_mesh_surface', default=False, type=eval, choices=[True, False], help='')
+    parser.add_argument('--sampling_mesh_guidance', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--wgt_air_sigma_loss', default=1e-4, type=float, help='')
+    parser.add_argument('--around_mesh_meter', type=int, default=5, help='')
+
     
     parser.add_argument('--wgt_depth_mse_loss', default=0, type=float, help='')
     parser.add_argument('--wgt_sigma_loss', default=0, type=float, help='')
@@ -89,7 +91,7 @@ def get_opts_base():
     parser.add_argument('--ignore_index', type=int, default=-1, help='')
     parser.add_argument('--label_name', type=str, default='m2f_new', choices=['m2f', 'merge', 'm2f_new', 'merge_new'], help='')
 
-    parser.add_argument('--enable_semantic', default=True, type=eval, choices=[True, False], help='')
+    parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
     parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf', '0430_day', '0430_night'], help='')

@@ -1276,9 +1276,9 @@ class Runner:
                             img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
                             Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
 
-                            if self.writer is not None:
+                            if self.writer is not None and (train_index % 50000 == 0):
                                 self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
-                            if self.wandb is not None:
+                            if self.wandb is not None and (train_index % 50000 == 0):
                                 Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
                                 self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
                             
@@ -1605,7 +1605,7 @@ class Runner:
                 bg_nerf = self.bg_nerf
 
             for i in range(0, rays.shape[0], self.hparams.image_pixel_batch_size):
-                if self.hparams.depth_dji_type == "mesh" and self.hparams.sample_mesh_surface:
+                if self.hparams.depth_dji_type == "mesh" and self.hparams.sampling_mesh_guidance:
                     gt_depths = metadata.load_depth_dji().view(-1).to(self.device)
                 else: 
                     gt_depths = None
@@ -1793,7 +1793,7 @@ class Runner:
             depth_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_depth.npy' % metadata_path.stem) 
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                  intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_path=depth_path)
-        elif self.hparams.depth_dji_loss:
+        elif self.hparams.dataset_type=='memory_depth_dji':
             if self.hparams.depth_dji_type=='las':
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
             elif self.hparams.depth_dji_type=='mesh':

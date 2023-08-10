@@ -3,7 +3,7 @@ export OMP_NUM_THREADS=16
 export CUDA_VISIBLE_DEVICES=7
 
 
-exp_name=logs_dji/0809_3_dsnerf_10_sampling_guidance
+exp_name=logs_dji/0809_3_dsnerf_10_sampling_guidance_with_air
 
 dataset_path=/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan
 config_file=dji/cuhksz_ray_xml.yaml

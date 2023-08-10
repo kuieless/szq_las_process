@@ -11,7 +11,7 @@ import trimesh
 
 
 def extract_fields(bound_min, bound_max, resolution, query_func):
-    N = 256
+    N = resolution
     X = torch.linspace(bound_min[0], bound_max[0], resolution).split(N)
     Y = torch.linspace(bound_min[1], bound_max[1], resolution).split(N)
     Z = torch.linspace(bound_min[2], bound_max[2], resolution).split(N)
@@ -61,10 +61,10 @@ def save_mesh(nerf, device, save_path=None, resolution= 256, bound=1, threshold=
             return sdfs
 
         # w/ aabb
-        bounds_min = torch.FloatTensor([-bound] * 3)
-        bounds_max = torch.FloatTensor([bound] * 3)
-        # bounds_min = torch.FloatTensor([0.05, -0.1590, -0.3044])
-        # bounds_max = torch.FloatTensor([0.1051, 0.1580, 0.3046])
+        # bounds_min = torch.FloatTensor([-bound] * 3)
+        # bounds_max = torch.FloatTensor([bound] * 3)
+        bounds_min = torch.FloatTensor([0.05, -0.1590, -0.3044])
+        bounds_max = torch.FloatTensor([0.1751, 0.1580, 0.3046])
 
         vertices, triangles = extract_geometry(bounds_min, bounds_max, resolution=resolution, threshold=threshold, query_func = query_func, use_sdf = use_sdf)
         
@@ -97,7 +97,7 @@ def main(hparams) -> None:
     nerf.eval()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    save_mesh(nerf, device, save_path='./output/sdf.obj', resolution=512, bound = hparams.aabb_bound, threshold=0, use_sdf=True)
+    save_mesh(nerf, device, save_path='./output/sdf.obj', resolution=256, bound = hparams.aabb_bound, threshold=0, use_sdf=True)
 
 
 if __name__ == '__main__':

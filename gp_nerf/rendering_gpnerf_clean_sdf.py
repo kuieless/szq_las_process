@@ -282,10 +282,12 @@ def _get_results(point_type,
                 fine_sample = hparams.fine_samples // 2
             else:
                 fine_sample = hparams.fine_samples // 2
-
+            fine_list = []
             for i in range(fine_sample // 16):
                 new_z_vals = up_sample(rays_o, rays_d, z_vals, sdf, 16, 64 * 2 **i)
                 z_vals, sdf = cat_z_vals(nerf, rays_o, rays_d, z_vals, new_z_vals, sdf, bound, last=(i + 1 == fine_sample // 16))
+                fine_list.append(new_z_vals)
+
     
     # ### render core
     deltas = z_vals[:, 1:] - z_vals[:, :-1]  # [N, T-1]
