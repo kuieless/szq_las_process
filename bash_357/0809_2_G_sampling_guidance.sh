@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=16
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=5
 
 
 exp_name=logs_dji/0809_2_G_sampling_guidance

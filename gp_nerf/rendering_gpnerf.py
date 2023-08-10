@@ -173,23 +173,15 @@ def render_rays(nerf: nn.Module,
         s_near = (surface_point - epsilon).unsqueeze(-1)
         s_far = (surface_point + epsilon).unsqueeze(-1)
 
-        # assert sum(near[valid_depth_mask] >= s_near) == 0
-        smaller_than_s_near = (near[valid_depth_mask] >= s_near).squeeze(-1)
-        s_near = torch.min(near[valid_depth_mask], s_near)
-        
-        # assert sum(far[valid_depth_mask] <= s_far) == 0
-        s_far = torch.max(far[valid_depth_mask], s_far)  # 如果超出范围，则用大的值（避免ray_altitude不合理，被裁掉）
+        larger_than_s_near = (near[valid_depth_mask] >= s_near).squeeze(-1)
 
 
         mesh_sample1 = near[valid_depth_mask] * (1 - z_1) + s_near * z_1
         mesh_sample2 = s_near * (1 - z_2) + s_far * z_2
         # mesh_sample3 = s_far * (1 - z_3) + far_ellipsoid[valid_depth_mask] * z_3
-        z_vals_inbound[valid_depth_mask][~smaller_than_s_near] = torch.cat([mesh_sample1, mesh_sample2], dim=1)[~smaller_than_s_near]
+        z_vals_inbound[valid_depth_mask] = torch.cat([mesh_sample1, mesh_sample2], dim=1)
 
-        z_4 = torch.linspace(0, 1, int(hparams.coarse_samples), device=device)
-        mesh_sample4 = s_near * (1 - z_4) + s_far * z_4
-        z_vals_inbound[valid_depth_mask][smaller_than_s_near] = mesh_sample4[smaller_than_s_near]
-
+        z_vals_inbound, _ = torch.sort(z_vals_inbound, -1)
 
 
     else:
@@ -543,16 +535,16 @@ def _inference(point_type,
     if composite_rgb: # coarse = False, fine = True
         results[f'rgb_{typ}'] = (weights.unsqueeze(-1) * rgbs).sum(dim=1)  # n1 n2 c -> n1 c
         
-        # 根据mesh投影的深度进行采样，需要将空气点的sigma用0监督
-        # if valid_depth_mask is not None and s_near is not None:
-        #     if 'air_sigma_loss' not in results:
-        #         results['air_sigma_loss'] = 0
-        #     air_point = z_vals[valid_depth_mask]<s_near
-        #     # 使用均方误差损失计算损失
-        #     criterion = nn.MSELoss()
-        #     zeros_target = torch.zeros(sigmas[valid_depth_mask][air_point].shape).to(weights.device)
-        #     air_sigma_loss = criterion(sigmas[valid_depth_mask][air_point], zeros_target)
-        #     results['air_sigma_loss'] += air_sigma_loss
+        ### 根据mesh投影的深度进行采样，需要将空气点的sigma用0监督
+        if valid_depth_mask is not None and s_near is not None:
+            if 'air_sigma_loss' not in results:
+                results['air_sigma_loss'] = 0
+            air_point = z_vals[valid_depth_mask]<s_near
+            #### 使用均方误差损失计算损失
+            criterion = nn.MSELoss()
+            zeros_target = torch.zeros(sigmas[valid_depth_mask][air_point].shape).to(weights.device)
+            air_sigma_loss = criterion(sigmas[valid_depth_mask][air_point], zeros_target)
+            results['air_sigma_loss'] += air_sigma_loss
             
         if hparams.depth_dji_loss and hparams.wgt_sigma_loss !=0:
             valid_depth_mask = ~torch.isinf(gt_depths)

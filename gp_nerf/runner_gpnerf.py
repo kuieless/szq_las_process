@@ -1623,7 +1623,8 @@ class Runner:
                                               gt_depths= gt_depths[i:i + self.hparams.image_pixel_batch_size] if gt_depths is not None else None,
                                               depth_scale=depth_scale[i:i + self.hparams.image_pixel_batch_size],
                                               pose_scale_factor = self.pose_scale_factor)
-                del result_batch['air_sigma_loss']
+                if 'air_sigma_loss' in result_batch:
+                    del result_batch['air_sigma_loss']
                 for key, value in result_batch.items():
                     if key not in results:
                         results[key] = []
