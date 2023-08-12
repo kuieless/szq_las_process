@@ -557,16 +557,16 @@ def _inference(point_type,
     if composite_rgb: # coarse = False, fine = True
         results[f'rgb_{typ}'] = (weights.unsqueeze(-1) * rgbs).sum(dim=1)  # n1 n2 c -> n1 c
         
-        # ## 根据mesh投影的深度进行采样，需要将空气点的sigma用0监督
-        # if valid_depth_mask is not None and s_near is not None:
-        #     if 'air_sigma_loss' not in results:
-        #         results['air_sigma_loss'] = 0
-        #     air_point = z_vals[valid_depth_mask]<s_near
-        #     #### 使用均方误差损失计算损失
-        #     criterion = nn.MSELoss()
-        #     zeros_target = torch.zeros(sigmas[valid_depth_mask][air_point].shape).to(weights.device)
-        #     air_sigma_loss = criterion(sigmas[valid_depth_mask][air_point], zeros_target)
-        #     results['air_sigma_loss'] += air_sigma_loss
+        ## 根据mesh投影的深度进行采样，需要将空气点的sigma用0监督
+        if valid_depth_mask is not None and s_near is not None and hparams.wgt_air_sigma_loss != 0:
+            if 'air_sigma_loss' not in results:
+                results['air_sigma_loss'] = 0
+            air_point = z_vals[valid_depth_mask]<s_near
+            #### 使用均方误差损失计算损失
+            criterion = nn.MSELoss()
+            zeros_target = torch.zeros(sigmas[valid_depth_mask][air_point].shape).to(weights.device)
+            air_sigma_loss = criterion(sigmas[valid_depth_mask][air_point], zeros_target)
+            results['air_sigma_loss'] += air_sigma_loss
             
         if hparams.depth_dji_loss and hparams.wgt_sigma_loss !=0:
             valid_depth_mask = ~torch.isinf(gt_depths)

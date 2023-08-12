@@ -653,6 +653,9 @@ class Runner:
                 ssim = val_metrics['val/ssim'] / len(self.val_items)
                 abs_rel = val_metrics['val/abs_rel'] / len(self.val_items)
                 rmse_actual = val_metrics['val/rmse_actual'] / len(self.val_items)
+                if self.writer is not None:
+                    self.writer.add_scalar('2_val_metric_average/abs_rel', abs_rel, train_iterations)
+                    self.writer.add_scalar('2_val_metric_average/rmse_actual', rmse_actual, train_iterations)
 
                 # f.write('arg_psnr, arg_ssim: {arg_psnr:.5f}, {arg_ssim:.5f}\n')  
                 f.write(f'\n psnr, ssim, rmse_actual, abs_rel: {psnr:.5f}, {ssim:.5f}, {rmse_actual:.5f} ,{abs_rel:.5f}\n')  
