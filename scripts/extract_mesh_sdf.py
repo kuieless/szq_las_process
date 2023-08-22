@@ -61,10 +61,15 @@ def save_mesh(nerf, device, save_path=None, resolution= 256, bound=1, threshold=
             return sdfs
 
         # w/ aabb
+        # bound=1
         # bounds_min = torch.FloatTensor([-bound] * 3)
         # bounds_max = torch.FloatTensor([bound] * 3)
-        bounds_min = torch.FloatTensor([0.05, -0.1590, -0.3044])
-        bounds_max = torch.FloatTensor([0.1751, 0.1580, 0.3046])
+        ###### dji xiayuan
+        # bounds_min = torch.FloatTensor([0.05, -0.1590, -0.3044])
+        # bounds_max = torch.FloatTensor([0.1751, 0.1580, 0.3046])
+        #residence subset
+        bounds_min = torch.FloatTensor([0.2, -1, -1])
+        bounds_max = torch.FloatTensor([1, 1, 1])
 
         vertices, triangles = extract_geometry(bounds_min, bounds_max, resolution=resolution, threshold=threshold, query_func = query_func, use_sdf = use_sdf)
         

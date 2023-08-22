@@ -40,7 +40,7 @@ def main(hparams) -> None:
     nerf.load_state_dict(model_dict)
 
 
-    N = 512  # 512
+    N = 256  # 512
 
     # bound = runner.hparams.aabb_bound.cpu().numpy()
     bound = 0.5
@@ -54,10 +54,14 @@ def main(hparams) -> None:
         # t1 = np.linspace(0.0055, 0.1211, int(N/2) + 1)
         # t2 = np.linspace(-0.2990, 0.3280, N + 1)
         # t3 = np.linspace(-0.6344, 0.6546, N + 1)
-
-        t1a, t1b = 0.05, 0.1051
-        t2a, t2b = -0.1590, 0.1580
-        t3a, t3b = -0.3044, 0.3046
+        ####  dji xiayuan的设置
+        # t1a, t1b = 0.05, 0.1051
+        # t2a, t2b = -0.1590, 0.1580
+        # t3a, t3b = -0.3044, 0.3046
+        ##residence subset
+        t1a, t1b = 0.2, 1
+        t2a, t2b = -1, 1
+        t3a, t3b = -1, 1
 
         t1 = np.linspace(t1a, t1b, N + 1)
         t2 = np.linspace(t2a, t2b, N + 1)
