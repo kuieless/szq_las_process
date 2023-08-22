@@ -697,7 +697,7 @@ class Runner:
 
     def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], groups: Optional[torch.Tensor], train_iterations = -1, item=None) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
-        if self.hparams.network_type == 'sdf':
+        if 'sdf' in self.hparams.network_type:
             if self.hparams.sdf_as_gpnerf:
                 from gp_nerf.rendering_gpnerf_clean_sdf_as_gpnerf import render_rays
             else:
@@ -765,7 +765,7 @@ class Runner:
         
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
         if not self.hparams.freeze_geo and not ('sam' in self.hparams.dataset_type):
-            if self.hparams.network_type == 'sdf':
+            if 'sdf' in self.hparams.network_type:
                 with torch.no_grad():
                     psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
                     # depth_variance = results[f'depth_variance_{typ}'].mean()
@@ -966,15 +966,18 @@ class Runner:
                 self.writer.add_scalar('1_train/nloss_decay', nloss_decay, train_iterations)
 
 
-        if self.hparams.network_type == 'sdf':
+        if 'sdf' in self.hparams.network_type:
+
             # sdf 
             metrics['gradient_error'] = results[f'gradient_error_{typ}'].squeeze(-1)
-            metrics['curvature_error'] = results[f'curvature_error_{typ}'].squeeze(-1)
             if self.hparams.gradient_error_weight_increase and train_iterations > self.hparams.train_iterations / 2:
                 gradient_error_weight = 0.1
             else:
                 gradient_error_weight = self.hparams.gradient_error_weight
-            metrics['loss'] += gradient_error_weight * results[f'gradient_error_{typ}'].squeeze(-1) + 0.1 * results[f'curvature_error_{typ}'].squeeze(-1)
+            metrics['loss'] += gradient_error_weight * results[f'gradient_error_{typ}'].squeeze(-1)
+            if f'curvature_error_{typ}' in results:
+                metrics['curvature_error'] = results[f'curvature_error_{typ}'].squeeze(-1)
+                metrics['loss'] += 0.1 * results[f'curvature_error_{typ}'].squeeze(-1)
             if self.wandb is not None:
                 self.wandb.log({"train/inv_s": 1.0 / results['inv_s'], 'epoch': train_iterations})
             if self.writer is not None:
@@ -1186,133 +1189,262 @@ class Runner:
             else:
                 from tools.unetformer.uavid2rgb import remapping
 
-            with torch.inference_mode():
-            # with torch.no_grad():
-                #semantic 
-                self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
-                CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
-                self.nerf.eval()
-                val_metrics = defaultdict(float)
-                base_tmp_path = None
-                
-                val_type = self.hparams.val_type  # train  val
-                print('val_type: ', val_type)
-                try:
-                    if val_type == 'val':
-                        if 'residence'in self.hparams.dataset_path:
-                            self.val_items=self.val_items[:19]
-                        elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
-                            self.val_items=self.val_items[:10]
-                        # self.val_items=self.val_items[:2]
-                        indices_to_eval = np.arange(len(self.val_items))
-                    elif val_type == 'train':
-                        # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
-                        # indices_to_eval = [0] #np.arange(len(self.train_items))  
-                        indices_to_eval = np.arange(800,1200)  
-                        # used_files = []
-                        # import glob
-                        # for ext in ('*.jpg'):
-                        #     used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/project5/sample', ext)))
-                        # used_files.sort()
-                        # used_files = used_files[1:]
-                        # indices_to_eval = [int(Path(x).stem[2:8]) for x in used_files]
+            if self.hparams.use_neus_gradient == False:
+                with torch.inference_mode():
+                # with torch.no_grad():
+                    #semantic 
+                    self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+                    CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
+                    self.nerf.eval()
+                    val_metrics = defaultdict(float)
+                    base_tmp_path = None
                     
-                    experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
-                    Path(str(experiment_path_current)).mkdir()
-                    Path(str(experiment_path_current / 'val_rgbs')).mkdir()
-                    with (experiment_path_current / 'psnr.txt').open('w') as f:
+                    val_type = self.hparams.val_type  # train  val
+                    print('val_type: ', val_type)
+                    try:
+                        if val_type == 'val':
+                            if 'residence'in self.hparams.dataset_path:
+                                self.val_items=self.val_items[:19]
+                            elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                                self.val_items=self.val_items[:10]
+                            # self.val_items=self.val_items[:2]
+                            indices_to_eval = np.arange(len(self.val_items))
+                        elif val_type == 'train':
+                            # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
+                            # indices_to_eval = [0] #np.arange(len(self.train_items))  
+                            indices_to_eval = np.arange(800,1200)  
+                            # used_files = []
+                            # import glob
+                            # for ext in ('*.jpg'):
+                            #     used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/project5/sample', ext)))
+                            # used_files.sort()
+                            # used_files = used_files[1:]
+                            # indices_to_eval = [int(Path(x).stem[2:8]) for x in used_files]
                         
-                        samantic_each_value = {}
-                        for class_name in CLASSES:
-                            samantic_each_value[f'{class_name}_iou'] = []
-                        samantic_each_value['mIoU'] = []
-                        samantic_each_value['FW_IoU'] = []
-                        samantic_each_value['F1'] = []
-                        # samantic_each_value['OA'] = []
+                        experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                        Path(str(experiment_path_current)).mkdir()
+                        Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+                        with (experiment_path_current / 'psnr.txt').open('w') as f:
+                            
+                            samantic_each_value = {}
+                            for class_name in CLASSES:
+                                samantic_each_value[f'{class_name}_iou'] = []
+                            samantic_each_value['mIoU'] = []
+                            samantic_each_value['FW_IoU'] = []
+                            samantic_each_value['F1'] = []
+                            # samantic_each_value['OA'] = []
 
+                            
+                            for i in main_tqdm(indices_to_eval):
+                                self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
+                                # if i != 0:
+                                #     break
+                                if val_type == 'val':
+                                    metadata_item = self.val_items[i]
+                                elif val_type == 'train':
+                                    metadata_item = self.train_items[i]
+                                viz_rgbs = metadata_item.load_image().float() / 255.
+                                
+                                results, _ = self.render_image(metadata_item, train_index)
+                                typ = 'fine' if 'rgb_fine' in results else 'coarse'
+
+                                if self.hparams.save_depth:
+                                    save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
+                                    if not os.path.exists(save_depth_dir):
+                                        os.makedirs(save_depth_dir)
+                                    depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy().astype(np.float16)
+                                    np.save(os.path.join(save_depth_dir, metadata_item.image_path.stem + '.npy'), depth_map)
+                                    continue
+                                
+                                # get rendering rgbs and depth
+                                viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
+                                viz_result_rgbs = viz_result_rgbs.clamp(0,1)
+                                if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
+                                    val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
+                                    
+                                viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                                
+                                # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                                img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+
+                                
+                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
+                                                    self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
+                                    
+                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
+                                
+
+                                # NOTE: 对需要可视化的list进行处理
+                                # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                                # 将None元素转换为zeros矩阵
+                                img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                                img_list = torch.stack(img_list).permute(0,3,1,2)
+                                img = make_grid(img_list, nrow=3)
+                                img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                                Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+
+                                if self.writer is not None and (train_index % 50000 == 0):
+                                    self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
+                                if self.wandb is not None and (train_index % 50000 == 0):
+                                    Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
+                                    self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
+                                
+
+                                if val_type == 'val':
+                                    #save  [pred_label, pred_rgb, fg_bg] to the folder 
+                                    Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                        str(experiment_path_current / 'val_rgbs' / ("%06d_pred_rgb.jpg" % i)))
+                                    
+
+                                    if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
+                                        img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
+                                                                        results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
+                                        img.save(str(experiment_path_current / 'val_rgbs' / ("%06d_fg_bg.jpg" % i)))
+                                    
+                                    # logger
+                                    samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
+                                    self.metrics_val_each.reset()
+                                del results
+                        # logger
+                        write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index)
+                        self.metrics_val.reset()
                         
-                        for i in main_tqdm(indices_to_eval):
-                            self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
-                            # if i != 0:
-                            #     break
-                            if val_type == 'val':
-                                metadata_item = self.val_items[i]
-                            elif val_type == 'train':
-                                metadata_item = self.train_items[i]
-                            viz_rgbs = metadata_item.load_image().float() / 255.
-                            
-                            results, _ = self.render_image(metadata_item, train_index)
-                            typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                        self.writer.flush()
+                        self.writer.close()
+                        self.nerf.train()
+                    finally:
+                        if self.is_master and base_tmp_path is not None:
+                            shutil.rmtree(base_tmp_path)
 
-                            if self.hparams.save_depth:
-                                save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
-                                if not os.path.exists(save_depth_dir):
-                                    os.makedirs(save_depth_dir)
-                                depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy().astype(np.float16)
-                                np.save(os.path.join(save_depth_dir, metadata_item.image_path.stem + '.npy'), depth_map)
-                                continue
-                            
-                            # get rendering rgbs and depth
-                            viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
-                            viz_result_rgbs = viz_result_rgbs.clamp(0,1)
-                            if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
-                                val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
-                                
-                            viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
-                            
-                            # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
-                            img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
-
-                            
-                            get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
-                                                self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
-                                
-                            prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
-                            
-
-                            # NOTE: 对需要可视化的list进行处理
-                            # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
-                            # 将None元素转换为zeros矩阵
-                            img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
-                            img_list = torch.stack(img_list).permute(0,3,1,2)
-                            img = make_grid(img_list, nrow=3)
-                            img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                            Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
-
-                            if self.writer is not None and (train_index % 50000 == 0):
-                                self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
-                            if self.wandb is not None and (train_index % 50000 == 0):
-                                Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
-                                self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
-                            
-
-                            if val_type == 'val':
-                                #save  [pred_label, pred_rgb, fg_bg] to the folder 
-                                Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                                    str(experiment_path_current / 'val_rgbs' / ("%06d_pred_rgb.jpg" % i)))
-                                
-
-                                if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
-                                    img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
-                                                                    results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
-                                    img.save(str(experiment_path_current / 'val_rgbs' / ("%06d_fg_bg.jpg" % i)))
-                                
-                                # logger
-                                samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
-                                self.metrics_val_each.reset()
-                            del results
-                    # logger
-                    write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index)
-                    self.metrics_val.reset()
+                    return val_metrics
+            else:
+                # with torch.inference_mode():
+                with torch.no_grad():
+                    #semantic 
+                    self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+                    CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
+                    self.nerf.eval()
+                    val_metrics = defaultdict(float)
+                    base_tmp_path = None
                     
-                    self.writer.flush()
-                    self.writer.close()
-                    self.nerf.train()
-                finally:
-                    if self.is_master and base_tmp_path is not None:
-                        shutil.rmtree(base_tmp_path)
+                    val_type = self.hparams.val_type  # train  val
+                    print('val_type: ', val_type)
+                    try:
+                        if val_type == 'val':
+                            if 'residence'in self.hparams.dataset_path:
+                                self.val_items=self.val_items[:19]
+                            elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                                self.val_items=self.val_items[:10]
+                            # self.val_items=self.val_items[:2]
+                            indices_to_eval = np.arange(len(self.val_items))
+                        elif val_type == 'train':
+                            # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
+                            # indices_to_eval = [0] #np.arange(len(self.train_items))  
+                            indices_to_eval = np.arange(800,1200)  
+                            # used_files = []
+                            # import glob
+                            # for ext in ('*.jpg'):
+                            #     used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/project5/sample', ext)))
+                            # used_files.sort()
+                            # used_files = used_files[1:]
+                            # indices_to_eval = [int(Path(x).stem[2:8]) for x in used_files]
+                        
+                        experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                        Path(str(experiment_path_current)).mkdir()
+                        Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+                        with (experiment_path_current / 'psnr.txt').open('w') as f:
+                            
+                            samantic_each_value = {}
+                            for class_name in CLASSES:
+                                samantic_each_value[f'{class_name}_iou'] = []
+                            samantic_each_value['mIoU'] = []
+                            samantic_each_value['FW_IoU'] = []
+                            samantic_each_value['F1'] = []
+                            # samantic_each_value['OA'] = []
 
-                return val_metrics
+                            
+                            for i in main_tqdm(indices_to_eval):
+                                self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
+                                # if i != 0:
+                                #     break
+                                if val_type == 'val':
+                                    metadata_item = self.val_items[i]
+                                elif val_type == 'train':
+                                    metadata_item = self.train_items[i]
+                                viz_rgbs = metadata_item.load_image().float() / 255.
+                                
+                                results, _ = self.render_image(metadata_item, train_index)
+                                typ = 'fine' if 'rgb_fine' in results else 'coarse'
+
+                                if self.hparams.save_depth:
+                                    save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
+                                    if not os.path.exists(save_depth_dir):
+                                        os.makedirs(save_depth_dir)
+                                    depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy().astype(np.float16)
+                                    np.save(os.path.join(save_depth_dir, metadata_item.image_path.stem + '.npy'), depth_map)
+                                    continue
+                                
+                                # get rendering rgbs and depth
+                                viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
+                                viz_result_rgbs = viz_result_rgbs.clamp(0,1)
+                                if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
+                                    val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
+                                    
+                                viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                                
+                                # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                                img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+
+                                
+                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
+                                                    self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
+                                    
+                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
+                                
+
+                                # NOTE: 对需要可视化的list进行处理
+                                # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                                # 将None元素转换为zeros矩阵
+                                img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                                img_list = torch.stack(img_list).permute(0,3,1,2)
+                                img = make_grid(img_list, nrow=3)
+                                img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                                Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+
+                                if self.writer is not None and (train_index % 50000 == 0):
+                                    self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
+                                if self.wandb is not None and (train_index % 50000 == 0):
+                                    Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
+                                    self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
+                                
+
+                                if val_type == 'val':
+                                    #save  [pred_label, pred_rgb, fg_bg] to the folder 
+                                    Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                        str(experiment_path_current / 'val_rgbs' / ("%06d_pred_rgb.jpg" % i)))
+                                    
+
+                                    if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
+                                        img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
+                                                                        results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
+                                        img.save(str(experiment_path_current / 'val_rgbs' / ("%06d_fg_bg.jpg" % i)))
+                                    
+                                    # logger
+                                    samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
+                                    self.metrics_val_each.reset()
+                                del results
+                        # logger
+                        write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index)
+                        self.metrics_val.reset()
+                        
+                        self.writer.flush()
+                        self.writer.close()
+                        self.nerf.train()
+                    finally:
+                        if self.is_master and base_tmp_path is not None:
+                            shutil.rmtree(base_tmp_path)
+
+                    return val_metrics
 
     def _run_validation_project_val_points(self, train_index=-1) -> Dict[str, float]:
         self._setup_experiment_dir()
@@ -1570,7 +1702,7 @@ class Runner:
         torch.save(dict, self.model_path / '{}.pt'.format(train_index))
 
     def render_image(self, metadata: ImageMetadata, train_index=-1) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
-        if self.hparams.network_type == 'sdf':
+        if 'sdf' in self.hparams.network_type:
             if self.hparams.sdf_as_gpnerf:
                 from gp_nerf.rendering_gpnerf_clean_sdf_as_gpnerf import render_rays
             else:

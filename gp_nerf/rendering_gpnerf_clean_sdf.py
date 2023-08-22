@@ -414,8 +414,7 @@ def _get_results(point_type,
 
         curvature_error = (torch.sum(normal * perturbed_normal, dim = -1) - 1.0) ** 2
         curvature_error = (relax_inside_sphere * curvature_error.reshape(N_rays_, N_samples_)).sum() / (relax_inside_sphere.sum() + 1e-5)
-    else:
-        curvature_error = torch.tensor(0.0).cuda()
+        results[f'curvature_error_{typ}'] = curvature_error.unsqueeze(0)
 
     # # mix background color
     # if bg_color is None:
@@ -432,7 +431,6 @@ def _get_results(point_type,
     results[f'depth_{typ}'] = depth
     results[f'normal_map_{typ}'] = normal_map
     results[f'gradient_error_{typ}'] = gradient_error.unsqueeze(0)
-    results[f'curvature_error_{typ}'] = curvature_error.unsqueeze(0)
     results['sdf'] = sdf.detach()
 
     return results #depth, image, normal_map, gradient_error, curvature_error

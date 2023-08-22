@@ -27,6 +27,11 @@ def main(hparams: Namespace) -> None:
     if hparams.network_type == 'sdf':
         hparams.cos_iterations = int(hparams.train_iterations / 2)
         hparams.normal_iterations = int(hparams.train_iterations / 2)
+    elif hparams.network_type == 'sdf_mlp':
+        hparams.use_neus_gradient=True
+        hparams.layer_dim =256
+
+    
 
     from gp_nerf.runner_gpnerf import Runner
     print(f"stop_semantic_grad:{hparams.stop_semantic_grad}")

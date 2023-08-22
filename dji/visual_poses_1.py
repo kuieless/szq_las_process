@@ -1,12 +1,18 @@
+import datetime
+import os
+import random
+import traceback
+from argparse import Namespace
 from pathlib import Path
+import math
 import numpy as np
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
+import configargparse
 import trimesh
+import json
 from scripts.colmap_to_mega_nerf import * #read_model, qvec2rotmat, RDF_TO_DRB
 
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 def visualize_poses(poses1, poses2=None, size=0.01, flipz=True):
     # poses: [B, 4, 4]
@@ -178,7 +184,24 @@ def load_poses(dataset_path):
              metadata['intrinsics'][3]])
         intrinsics.append(intrinsic)
         poses_mega.append(pose)
-    return poses_mega
+    a=np.array(poses_mega)
+    
+    camera_positions = a[:,1:3,3]
+    min_position = np.min(camera_positions,axis=0)
+    max_position = np.max(camera_positions,axis=0)
+    bianchang = (max_position- min_position) /8
+    min_bound=min_position/8 - bianchang
+    max_bound=max_position/8 - bianchang
+
+    center_camera =np.where(
+        (camera_positions[:, 0] >= min_bound[0]) & (camera_positions[:, 0] <= max_bound[0]) &
+        (camera_positions[:, 1] >= min_bound[1]) & (camera_positions[:, 1] <= max_bound[1])
+    )
+    center_camera=list(center_camera)
+
+    selected_poses = [poses_mega[int(index)] for index in center_camera[0]]
+    # return poses_mega
+    return selected_poses, center_camera
 
 @record
 @torch.inference_mode()
@@ -189,62 +212,10 @@ def load_poses(dataset_path):
 def main() -> None:
     if True:
         # pose_dji = load_poses(dataset_path='/disk1/Datasets/dji/DJI-mega')
-        pose_dji_xml = load_poses(dataset_path='/disk1/Datasets/dji/DJI-XML-colmap')
-        visualize_poses(pose_dji_xml) #,pose_dji_xml)
-        # pose_rubble = load_poses(dataset_path='/disk1/Datasets/MegaNeRF/Mill19/rubble/rubble-pixsfm')
-        # visualize_poses(pose_rubble)
+        selected_poses, center_camera = load_poses(dataset_path='/data/yuqi/Datasets/MegaNeRF/UrbanScene3D/residence/residence-pixsfm')
+        # visualize_poses(pose_dji_xml) #,pose_dji_xml)
+        
 
-    else:
-        cameras, images, _ = read_model('/disk1/yuqi/code/nerfstudio/output_dji/colmap/sparse/0')
-        c2ws = {}
-        for image in images.values():
-            w2c = torch.eye(4)
-            w2c[:3, :3] = torch.FloatTensor(qvec2rotmat(image.qvec))
-            w2c[:3, 3] = torch.FloatTensor(image.tvec)
-            c2w = torch.inverse(w2c)
-
-            c2w = torch.hstack((
-                RDF_TO_DRB @ c2w[:3, :3] @ torch.inverse(RDF_TO_DRB),
-                RDF_TO_DRB @ c2w[:3, 3:]
-            ))
-            ZYQ = torch.FloatTensor([[0, 0, -1],
-                                     [0, 1,0],
-                                     [1, 0, 0]])
-            c2w = torch.hstack((
-                ZYQ @ c2w[:3, :3], #@ torch.inverse(ZYQ),
-                ZYQ @ c2w[:3, 3:]
-            ))
-
-            c2ws[image.id] = c2w
-
-        positions = torch.cat([c2w[:3, 3].unsqueeze(0) for c2w in c2ws.values()])
-        print('{} images'.format(positions.shape[0]))
-        max_values = positions.max(0)[0]
-        min_values = positions.min(0)[0]
-        origin = ((max_values + min_values) * 0.5)
-        dist = (positions - origin).norm(dim=-1)
-        diagonal = dist.max()
-        scale = diagonal
-        print(origin, diagonal, max_values, min_values)
-
-        poses_process = []
-        for i, image in enumerate(tqdm(sorted(images.values(), key=lambda x: x.name))):
-            camera_in_drb = c2ws[image.id]
-            camera_in_drb[:, 3] = (camera_in_drb[:, 3] - origin) / scale
-
-            assert np.logical_and(camera_in_drb >= -1, camera_in_drb <= 1).all()
-            pose_process = torch.cat([camera_in_drb[:, 1:2], -camera_in_drb[:, :1], camera_in_drb[:, 2:4]],-1)
-            # pose_process = camera_in_drb
-
-            # ZYQ = torch.FloatTensor([[0, 0, -1],
-            #                          [0, 1,0],
-            #                          [1, 0, 0]])
-            # pose_process = torch.hstack((
-            #     ZYQ @ pose_process[:3, :3], #@ torch.inverse(ZYQ),
-            #     ZYQ @ pose_process[:3, 3:]
-            # ))
-            poses_process.append(pose_process.numpy())
-        visualize_poses(poses_process)
 
 if __name__ == '__main__':
     main()

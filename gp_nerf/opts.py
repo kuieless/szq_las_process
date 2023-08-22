@@ -5,7 +5,7 @@ def get_opts_base():
 
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
         
-    parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
+    parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf') 
 
     parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
     parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train'], help='')
@@ -94,7 +94,7 @@ def get_opts_base():
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
-    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf', '0430_day', '0430_night'], help='')
+    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf', 'sdf_mlp'], help='')
     # parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')
     
     parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')
@@ -110,6 +110,9 @@ def get_opts_base():
     parser.add_argument('--base_resolution', type=int, default=16, help='')
     parser.add_argument('--desired_resolution', type=int, default=2048, help='')
     parser.add_argument('--log2_hashmap_size', type=int, default=19, help='')
+    parser.add_argument('--hash_feat_dim', type=int, default=2, help='')
+
+    
 
     # logger
     parser.add_argument('--writer_log', default=True, type=eval, choices=[True, False], help='')

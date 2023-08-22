@@ -151,8 +151,8 @@ class NeRF(nn.Module):
         print("use two mlp")
         self.encoder, self.in_dim = get_encoder(encoding, base_resolution=base_resolution,
                                                 desired_resolution=desired_resolution_fg,
-                                                log2_hashmap_size=log2_hashmap_size, num_levels=num_levels)
-        self.encoder_bg, _ = get_encoder(encoding, base_resolution=base_resolution,
+                                                log2_hashmap_size=log2_hashmap_size, num_levels=num_levels, level_dim=hparams.hash_feat_dim)
+        self.encoder_bg, self.bg_in_dim = get_encoder(encoding, base_resolution=base_resolution,
                                             desired_resolution=desired_resolution,
                                             log2_hashmap_size=19, num_levels=num_levels)
 
@@ -168,10 +168,12 @@ class NeRF(nn.Module):
         sigma_nets = []
         for l in range(self.num_layers):
             if l == 0:
-                in_dim = self.in_dim
                 print("Hash and Plane")
                 if nerf_type == 'fg':
+                    in_dim = self.in_dim
                     in_dim = in_dim + self.plane_dim
+                else:
+                    in_dim = self.bg_in_dim
                 
             else:
                 in_dim = self.layer_dim  # 64

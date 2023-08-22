@@ -48,7 +48,8 @@ def render_rays(nerf: nn.Module,
                 get_bg_fg_rgb: bool,
                 train_iterations=-1,
                 gt_depths=None,
-                depth_scale=None) -> Tuple[Dict[str, torch.Tensor], bool]:
+                depth_scale=None,
+                pose_scale_factor=None) -> Tuple[Dict[str, torch.Tensor], bool]:
     N_rays = rays.shape[0]
     device = rays.device
     rays_o, rays_d = rays[:, 0:3], rays[:, 3:6]  # both (N_rays, 3)
@@ -319,13 +320,14 @@ def _get_results(point_type,
     sdf = sdf_nn_output[:, :1]
     feature_vector = sdf_nn_output[:, 1:]
     
-    gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
-
-    # if nerf.training:
-    #     gradient = nerf.gradient_neus(xyz_).squeeze()
-    # else:
-    #     with torch.enable_grad():
-    #         gradient = nerf.gradient_neus(xyz_).squeeze()
+    if hparams.use_neus_gradient:
+        if nerf.training:
+            gradient = nerf.gradient_neus(xyz_).squeeze()
+        else:
+            with torch.enable_grad():
+                gradient = nerf.gradient_neus(xyz_).squeeze()
+    else:
+        gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
 
     normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal
 
@@ -409,8 +411,7 @@ def _get_results(point_type,
 
         curvature_error = (torch.sum(normal * perturbed_normal, dim = -1) - 1.0) ** 2
         curvature_error = (relax_inside_sphere * curvature_error.reshape(N_rays_, N_samples_)).sum() / (relax_inside_sphere.sum() + 1e-5)
-    else:
-        curvature_error = torch.tensor(0.0).cuda()
+        results[f'curvature_error_{typ}'] = curvature_error.unsqueeze(0)
 
     # # mix background color
     # if bg_color is None:
@@ -427,7 +428,6 @@ def _get_results(point_type,
     results[f'depth_{typ}'] = depth
     results[f'normal_map_{typ}'] = normal_map
     results[f'gradient_error_{typ}'] = gradient_error.unsqueeze(0)
-    results[f'curvature_error_{typ}'] = curvature_error.unsqueeze(0)
     results['sdf'] = sdf.detach()
 
     return results #depth, image, normal_map, gradient_error, curvature_error
