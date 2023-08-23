@@ -54,7 +54,11 @@ def main() -> None:
             val_indices.append(index_int)
     
     for index in sorted_indices:
-        split = 'train'
+        if index in train_indices:
+            split = 'train'
+        else:
+            split = 'val'
+
 
         for source_folder in ['rgbs', 'metadata']:
             if source_folder == 'rgbs':
@@ -66,7 +70,7 @@ def main() -> None:
 
             # 判断文件是否存在，存在则复制到输出目录
             if os.path.exists(source_file):
-                output_ext_folder = os.path.join(output_folder, split, source_folder)
+                output_ext_folder = os.path.join(output_folder, 'train', source_folder)
 
                 # 确保输出文件夹存在
                 Path(output_ext_folder).mkdir(parents=True, exist_ok=True)
@@ -136,6 +140,11 @@ def main() -> None:
 
     print("Folder cleared.")
 
+    ## 对depth进行调整
+    # Set paths
+    obj_filename = os.path.join("./data/Block/Block.obj")
+
+
     sorted_indices = [sorted_indices[int(index)] for index in center_camera[0]]
     for i, index in enumerate(sorted_indices):
         if index in train_indices:
@@ -143,7 +152,7 @@ def main() -> None:
         else:
             split = 'val'
 
-        for source_folder in ['rgbs', 'metadata', 'depth_mesh']:
+        for source_folder in ['rgbs', 'metadata']: #, 'depth_mesh']:
             if source_folder == 'rgbs':
                 extend_name = '.jpg'
             
@@ -171,18 +180,18 @@ def main() -> None:
                     # 确保输出文件夹存在
                     Path(output_ext_folder).mkdir(parents=True, exist_ok=True)
                     torch.save(metadata_old, os.path.join(output_ext_folder, f"{index:06d}{extend_name}"))
-            elif source_folder == 'depth_mesh':
-                extend_name = '.npy'
+            # elif source_folder == 'depth_mesh':
+            #     extend_name = '.npy'
             
-                source_file = os.path.join(dataset_path, split, source_folder, f"{index:06d}{extend_name}")
+            #     source_file = os.path.join(dataset_path, split, source_folder, f"{index:06d}{extend_name}")
 
-                # 判断文件是否存在，存在则复制到输出目录
-                if os.path.exists(source_file):
-                    output_ext_folder = os.path.join(output_folder, split, source_folder)
-                    # 确保输出文件夹存在
-                    Path(output_ext_folder).mkdir(parents=True, exist_ok=True)
-                    # 复制文件到输出目录
-                    shutil.copy(source_file, os.path.join(output_ext_folder, f"{index:06d}{extend_name}"))
+            #     # 判断文件是否存在，存在则复制到输出目录
+            #     if os.path.exists(source_file):
+            #         output_ext_folder = os.path.join(output_folder, split, source_folder)
+            #         # 确保输出文件夹存在
+            #         Path(output_ext_folder).mkdir(parents=True, exist_ok=True)
+            #         # 复制文件到输出目录
+            #         shutil.copy(source_file, os.path.join(output_ext_folder, f"{index:06d}{extend_name}"))
 
     print("Files copied and saved.")
 

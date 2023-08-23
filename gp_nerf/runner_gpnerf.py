@@ -985,6 +985,84 @@ class Runner:
             
         return metrics, bg_nerf_rays_present
 
+    def render_zyq(self):
+        if self.hparams.ckpt_path is not None:
+            checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
+            train_iterations = checkpoint['iteration']
+        self._setup_experiment_dir()
+        val_metrics = self._run_validation_render_zyq(train_iterations)
+        self._write_final_metrics(val_metrics, train_iterations=train_iterations)
+    
+    def _run_validation_render_zyq(self, train_index=-1) -> Dict[str, float]:
+
+        with torch.inference_mode():
+            #semantic 
+            self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+            CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
+            self.nerf.eval()
+            val_metrics = defaultdict(float)
+            base_tmp_path = None
+            
+            dataset_path = Path(self.hparams.dataset_path)
+
+            val_paths = sorted(list((dataset_path / 'render' / 'metadata').iterdir()))
+            train_paths = val_paths
+            train_paths.sort(key=lambda x: x.name)
+            val_paths_set = set(val_paths)
+            image_indices = {}
+            for i, train_path in enumerate(train_paths):
+                image_indices[train_path.name] = i
+            render_items = [
+                self._get_metadata_item(x, image_indices[x.name], self.hparams.train_scale_factor, x in val_paths_set) for x
+                in train_paths]
+
+            H = render_items[0].H
+            W = render_items[0].W
+
+            indices_to_eval = np.arange(len(render_items))
+            
+            experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+            Path(str(experiment_path_current)).mkdir()
+            Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+            with (experiment_path_current / 'psnr.txt').open('w') as f:
+                
+                samantic_each_value = {}
+                for class_name in CLASSES:
+                    samantic_each_value[f'{class_name}_iou'] = []
+                samantic_each_value['mIoU'] = []
+                samantic_each_value['FW_IoU'] = []
+                samantic_each_value['F1'] = []
+
+                for i in main_tqdm(indices_to_eval):
+                    self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
+                    metadata_item = render_items[i]
+
+                    self.hparams.sampling_mesh_guidance = False
+                    results, _ = self.render_image(metadata_item, train_index)
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    
+                    # get rendering rgbs and depth
+                    viz_result_rgbs = results[f'rgb_{typ}'].view(H, W, 3).cpu()
+                    viz_result_rgbs = viz_result_rgbs.clamp(0,1)
+                    
+                    # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                    img_list = [viz_result_rgbs * 255]
+                    prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
+                    
+                    # NOTE: 对需要可视化的list进行处理
+                    # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                    # 将None元素转换为zeros矩阵
+                    img_list = [torch.zeros_like(viz_result_rgbs) if element is None else element for element in img_list]
+                    img_list = torch.stack(img_list).permute(0,3,1,2)
+                    img = make_grid(img_list, nrow=3)
+                    img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+
+                    del results
+            
+            return val_metrics
+            
+    
     def _run_validation(self, train_index=-1) -> Dict[str, float]:
         if 'llff' in self.hparams.dataset_type:
             from gp_nerf.rendering_gpnerf import render_rays
@@ -1191,7 +1269,6 @@ class Runner:
 
             if self.hparams.use_neus_gradient == False:
                 with torch.inference_mode():
-                # with torch.no_grad():
                     #semantic 
                     self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
                     CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
@@ -1213,13 +1290,7 @@ class Runner:
                             # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
                             # indices_to_eval = [0] #np.arange(len(self.train_items))  
                             indices_to_eval = np.arange(800,1200)  
-                            # used_files = []
-                            # import glob
-                            # for ext in ('*.jpg'):
-                            #     used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/project5/sample', ext)))
-                            # used_files.sort()
-                            # used_files = used_files[1:]
-                            # indices_to_eval = [int(Path(x).stem[2:8]) for x in used_files]
+                            
                         
                         experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                         Path(str(experiment_path_current)).mkdir()
@@ -1243,11 +1314,11 @@ class Runner:
                                     metadata_item = self.val_items[i]
                                 elif val_type == 'train':
                                     metadata_item = self.train_items[i]
-                                viz_rgbs = metadata_item.load_image().float() / 255.
                                 
                                 results, _ = self.render_image(metadata_item, train_index)
                                 typ = 'fine' if 'rgb_fine' in results else 'coarse'
-
+                                
+                                viz_rgbs = metadata_item.load_image().float() / 255.
                                 if self.hparams.save_depth:
                                     save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
                                     if not os.path.exists(save_depth_dir):
@@ -1723,8 +1794,11 @@ class Runner:
             rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
 
             rays = rays.view(-1, 8).to(self.device, non_blocking=True).cuda()  # (H*W, 8)
-            image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device) \
-                if self.hparams.appearance_dim > 0 else None
+            if self.hparams.render_zyq:
+                image_indices = 0 * torch.ones(rays.shape[0], device=rays.device)
+            else:
+                image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device) \
+                    if self.hparams.appearance_dim > 0 else None
             results = {}
 
 
@@ -1874,7 +1948,7 @@ class Runner:
                 image_path = candidate
                 break
 
-        assert image_path.exists()
+        # assert image_path.exists()
 
         metadata = torch.load(metadata_path, map_location='cpu')
         intrinsics = metadata['intrinsics'] / scale_factor

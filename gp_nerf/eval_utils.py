@@ -297,8 +297,33 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
             normal_map = normal_map * -1
         normal_map = normal_map.view(H, W, 3).cpu()
         
-        normal_viz = (normal_map + 1)*0.5*255
-        img_list.append(normal_viz)
+        normal_viz = (normal_map + 1)*0.5
+        img_list.append(normal_viz*255)
+
+        
+
+        # camera_world = origin_to_world(metadata_item)
+        # light_source = camera_world[0,0] 
+
+        light_source = torch.Tensor([0.05, -0.05, 0.05]).float()
+        
+        # camera_world = torch.concat((metadata_item.c2w, torch.tensor([[0,0,0,1]])), 0)
+        # light_source = torch.inverse(camera_world)[:3,3].float()
+
+        # light_source = metadata_item.c2w[:3,3]
+        # light_source = torch.Tensor([0.05, light_source[1], light_source[2]]).float()
+
+        light = (light_source / light_source.norm(2)).unsqueeze(1)
+
+        diffuse_per = torch.Tensor([0.7,0.7,0.7]).float()
+        ambiant = torch.Tensor([0.3,0.3,0.3]).float()
+        
+        diffuse = torch.mm(normal_viz.view(-1,3), light).clamp_min(0).repeat(1, 3) * diffuse_per.unsqueeze(0)
+
+        geo_viz = (ambiant.unsqueeze(0) + diffuse).clamp_max(1.0)
+        geo_viz = geo_viz.view(H, W, 3).cpu()
+        img_list.append(geo_viz*255)
+
 
 
     if hparams.normal_loss:
@@ -313,6 +338,44 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         img_list.append(fg_mask)
     return
 
+
+def origin_to_world(metadata_item, pose_scale_factor, invert=True):
+    ''' Transforms origin (camera location) to world coordinates.
+
+    Args:
+        n_points (int): how often the transformed origin is repeated in the
+            form (batch_size, n_points, 3)
+        camera_mat (tensor): camera matrix
+        world_mat (tensor): world matrix
+        scale_mat (tensor): scale matrix
+        invert (bool): whether to invert the matrices (default: true)
+    '''
+
+    # Create origin in homogen coordinates
+    p = torch.zeros(1, 4, 1)
+    p[:, -1] = 1.
+
+    K1 = metadata_item.intrinsics
+    K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
+
+    E1 = np.array(metadata_item.c2w)
+    E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+
+    camera_mat = np.concatenate((E1, [[0,0,0,1]]), 0)
+
+    world_mat = K1
+
+    # # Invert matrices
+    # if invert:
+    #     camera_mat = torch.inverse(torch.from_numpy(camera_mat)).float()
+    #     world_mat = torch.inverse(torch.from_numpy(world_mat)).float()
+
+    # Apply transformation
+    p_world = world_mat @ camera_mat @ p[:,:3,:]
+
+    # Transform points back to 3D coordinates
+    p_world = p_world[:, :3].permute(0, 2, 1)
+    return p_world
 
 def get_depth_vis(results, typ):
     if f'depth_{typ}' in results:
