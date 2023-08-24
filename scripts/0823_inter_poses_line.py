@@ -1,4 +1,4 @@
-####在数据集的train中选择几个关键帧，生成 render 时用的 pose 新视角
+####选择一个图像，往相机视角方向飞
 
 
 import click
@@ -45,12 +45,13 @@ def inter_poses(key_poses, n_out_poses, sigma=1.):
 
 from dji.visual_poses import load_poses
 from pathlib import Path
+from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 
 @click.command()
 @click.option('--data_dir', type=str, default='/data/yuqi/Datasets/MegaNeRF/residence_subset')
-@click.option('--key_poses', type=str, default='0,50,100,150')
-@click.option('--n_out_poses', type=int, default=60)
+@click.option('--key_poses', type=str, default='96')
+@click.option('--n_out_poses', type=int, default=20)
 
 def hello(data_dir, n_out_poses, key_poses):
 
@@ -64,18 +65,37 @@ def hello(data_dir, n_out_poses, key_poses):
     key_poses = np.array([int(_) for _ in key_poses.split(',')])
     key_poses_1 = poses[key_poses]
 
-    ###这里对所有图像使用相同的插值
-    key_poses_2 = []
-    for i in key_poses:
-        x_path = str(metadata_paths[i])
-        x_path = x_path.replace('residence_subset', 'UrbanScene3D/residence/residence-labels')
-        metadata = torch.load(x_path, map_location='cpu')
-        pose = np.array(metadata['c2w'])
-        key_poses_2.append(pose)
+
+    coordinate_info = torch.load(Path(data_dir) / 'coordinates.pt', map_location='cpu')
+    pose_scale_factor = coordinate_info['pose_scale_factor']
+
+    metadata_item = torch.load(metadata_paths[key_poses[0]])
+    select_pose = metadata_item['c2w']
+    
+    directions = get_ray_directions(metadata_item['W'],
+                                    metadata_item['H'],
+                                    metadata_item['intrinsics'][0],
+                                    metadata_item['intrinsics'][1],
+                                    metadata_item['intrinsics'][2],
+                                    metadata_item['intrinsics'][3],
+                                    True,
+                                    torch.device('cpu'))
+    image_rays = get_rays(directions, metadata_item['c2w'], 0, 1e5, [30, 118])
+    ray_d = image_rays[int(metadata_item['H']/2), int(metadata_item['W']/2), 3:6]
+    ray_o = image_rays[int(metadata_item['H']/2), int(metadata_item['W']/2), :3]
+    near = image_rays[int(metadata_item['H']/2), int(metadata_item['W']/2), 6] /pose_scale_factor
+    far = image_rays[int(metadata_item['H']/2), int(metadata_item['W']/2), 7] /pose_scale_factor
 
     
+    z_vals_inbound = near * 0 + far * 1
+    
+    new_o = ray_o + ray_d * z_vals_inbound
 
-    out_poses = inter_poses(key_poses_2, n_out_poses)
+    new_pose = poses[key_poses]
+    new_pose[:,:,3]= new_o.numpy()
+    key_poses_1 = np.concatenate([poses[key_poses], new_pose], 0)
+
+    out_poses = inter_poses(key_poses_1, n_out_poses)
     out_poses = np.ascontiguousarray(out_poses.astype(np.float64))
 
 

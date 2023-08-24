@@ -496,7 +496,7 @@ def _inference(point_type,
 
     gradient, normals = None, None
     if point_type == 'fg' and (hparams.visual_normal or hparams.normal_loss): # for surface normal extraction
-        gradient, normals = extract_gradients(nerf, xyz_, train_iterations, hparams)
+        gradient, normals = extract_gradients(nerf, xyz_, train_iterations, hparams, N_rays_, N_samples_)
 
     if hparams.enable_semantic:
         out_semantic = torch.cat(out_semantic_chunk, 0)
@@ -739,7 +739,7 @@ def _sample_cdf(bins: torch.Tensor, cdf: torch.Tensor, fine_samples: int, det: b
     samples = bins_g[..., 0] + (u - cdf_g[..., 0]) / denom * (bins_g[..., 1] - bins_g[..., 0])
     return samples
 
-def extract_gradients(nerf, xyz_, train_iterations, hparams):
+def extract_gradients(nerf, xyz_, train_iterations, hparams, N_rays_, N_samples_):
     normal_epsilon_ratio = min((train_iterations) / hparams.train_iterations, 0.50)
     if hparams.normal_loss:
         if hparams.auto_grad:

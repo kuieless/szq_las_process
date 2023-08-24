@@ -34,7 +34,7 @@ class ImageMetadata:
         if size[0] != self.W or size[1] != self.H:
             # rgbs = rgbs.resize((self.W, self.H), Image.LANCZOS) 
             # rgbs = rgbs.resize((self.W, self.H), Image.NEAREST) 
-            rgbs = rgbs.resize((self.W, self.H), Image.LINEAR)
+            rgbs = rgbs.resize((self.W, self.H), Image.BILINEAR)
 
 
 

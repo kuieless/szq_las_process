@@ -16,7 +16,6 @@ def _get_eval_opts() -> Namespace:
     parser.add_argument('--exp_name', type=str, required=True, help='experiment name')
     parser.add_argument('--dataset_path', type=str, required=True)
     parser.add_argument('--centroid_path', type=str)
-    parser.add_argument('--render_zyq', default=False, action='store_true')
 
     return parser.parse_args()
 
@@ -35,24 +34,14 @@ def main(hparams: Namespace) -> None:
     print(f"use_pano_lift:{hparams.use_pano_lift}")
 
     hparams.bg_nerf = False
+    
+    
 
-    if hparams.render_zyq:
-        hparams.val_scale_factor = 8
-        hparams.train_scale_factor = 8
-        hparams.depth_dji_type = 'mesh'
-        hparams.visual_normal=True
-
-        if hparams.detect_anomalies:
-            with torch.autograd.detect_anomaly():
-                Runner(hparams).render_zyq()
-        else:
+    if hparams.detect_anomalies:
+        with torch.autograd.detect_anomaly():
             Runner(hparams).render_zyq()
     else:
-        if hparams.detect_anomalies:
-            with torch.autograd.detect_anomaly():
-                Runner(hparams).eval()
-        else:
-            Runner(hparams).eval()
+        Runner(hparams).render_zyq()
 
 
 if __name__ == '__main__':

@@ -196,7 +196,7 @@ def get_opts_base():
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate')
     parser.add_argument('--lr_decay_factor', type=float, default=1, help='learning rate decay factor')
     parser.add_argument('--no_bg_nerf', dest='bg_nerf', default=True, action='store_false',help='do not use background MLP')
-    parser.add_argument('--ellipse_scale_factor', type=float, default=1.05, help='Factor to scale foreground bounds')
+    parser.add_argument('--ellipse_scale_factor', type=float, default=1.1, help='Factor to scale foreground bounds')
     parser.add_argument('--no_ellipse_bounds', dest='ellipse_bounds', default=True, action='store_false', help='use spherical foreground bounds instead of ellipse')
     parser.add_argument('--no_resume_ckpt_state', dest='resume_ckpt_state', default=True, action='store_false')
     parser.add_argument('--no_amp', dest='amp', default=True, action='store_false')

@@ -1006,6 +1006,8 @@ class Runner:
             dataset_path = Path(self.hparams.dataset_path)
 
             val_paths = sorted(list((dataset_path / 'render' / 'metadata').iterdir()))
+            # val_paths = sorted(list((dataset_path / 'render_line' / 'metadata').iterdir()))
+
             train_paths = val_paths
             train_paths.sort(key=lambda x: x.name)
             val_paths_set = set(val_paths)
@@ -1130,6 +1132,11 @@ class Runner:
                     if 'rgbs' in item:
                         viz_rgbs = item['rgbs'].view(*viz_result_rgbs.shape)
                         img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+
+                        image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
+                        image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
+                        image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
+                        img_list.append(torch.from_numpy(image_diff_color))
                     else:
                         img_list = [viz_result_rgbs * 255]
 
@@ -1338,6 +1345,10 @@ class Runner:
                                 # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                                 img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
 
+                                image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
+                                image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
+                                image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
+                                img_list.append(torch.from_numpy(image_diff_color))
                                 
                                 get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
                                                     self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
@@ -1465,7 +1476,11 @@ class Runner:
                                 
                                 # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                                 img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
-
+                                
+                                image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
+                                image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
+                                image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
+                                img_list.append(torch.from_numpy(image_diff_color))
                                 
                                 get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
                                                     self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
