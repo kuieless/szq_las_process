@@ -84,13 +84,8 @@ def render_rays(nerf: nn.Module,
     #  zyq:    初始化
     far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
     z_vals_inbound = torch.zeros([rays_o.shape[0], hparams.coarse_samples], device=device)
-    # 属于fg的ray采样
     z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
-    z_vals_inbound[rays_with_fg] = near[rays_with_fg] * (1 - z_fg) + far_ellipsoid[rays_with_fg] * z_fg
-    # 属于bg的ray，其中fg部分的点采样
-    z_bg_inner = torch.linspace(0, 1, hparams.coarse_samples, device=device)
-    z_vals_inbound[rays_with_bg] = near[rays_with_bg] * (1 - z_bg_inner) + far_ellipsoid[rays_with_bg] * z_bg_inner
-    #z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
+    z_vals_inbound = near * (1 - z_fg) + far_ellipsoid * z_fg
 
     results = _get_results(point_type='fg',
                            nerf=nerf,
@@ -285,9 +280,18 @@ def _get_results(point_type,
             fine_list = []
             for i in range(fine_sample // 16):
                 new_z_vals = up_sample(rays_o, rays_d, z_vals, sdf, 16, 64 * 2 **i)
+                if i == 0:
+                    new_z_vals_list = new_z_vals
+                else:
+                    new_z_vals_list = torch.cat([new_z_vals_list, new_z_vals], dim=-1)
+                    new_z_vals_list, index = torch.sort(new_z_vals_list, dim=-1)
                 z_vals, sdf = cat_z_vals(nerf, rays_o, rays_d, z_vals, new_z_vals, sdf, bound, last=(i + 1 == fine_sample // 16))
                 fine_list.append(new_z_vals)
-
+    if False:
+        deltas_fine = new_z_vals_list[:, 1:] - new_z_vals_list[:, :-1] 
+        deltas_fine = torch.cat([deltas_fine, torch.Tensor([1/hparams.fine_samples]).to(device).expand(deltas_fine[..., :1].shape)], -1)  # (N_rays, N_samples_)
+        z_vals_mid_fine = new_z_vals_list + 0.5 * deltas_fine
+        pts_fine = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals_mid_fine.unsqueeze(-1) # [N, 1, 3] * [N, t, 3] -> [N, t, 3]
     
     # ### render core
     deltas = z_vals[:, 1:] - z_vals[:, :-1]  # [N, T-1]
@@ -353,7 +357,8 @@ def _get_results(point_type,
                 activation(-true_cos) * cos_anneal_ratio)  # always non-positive
 
     # add by zyq : change the last_delta to 1e10 for the fg points 2023/02/20/
-    deltas[rays_with_bg] = torch.cat([deltas[rays_with_bg, :-1],  1e10 * torch.ones_like(deltas[rays_with_bg, :1])], dim=-1)
+    # 在0830注释掉，看看效果
+    # deltas[rays_with_bg] = torch.cat([deltas[rays_with_bg, :-1],  1e10 * torch.ones_like(deltas[rays_with_bg, :1])], dim=-1)
     
 
     # Estimate signed distances at section points

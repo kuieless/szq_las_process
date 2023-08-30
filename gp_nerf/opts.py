@@ -63,7 +63,7 @@ def get_opts_base():
 
     #sdf 
     parser.add_argument('--gradient_error_weight', default=0.005, type=float, help='')
-    parser.add_argument('--gradient_error_weight_increase', default=True, type=eval, choices=[True, False])
+    parser.add_argument('--gradient_error_weight_increase', default=False, type=eval, choices=[True, False])
     parser.add_argument('--cos_iterations', type=int, default=50000, help='training iterations')
     parser.add_argument('--normal_iterations', type=int, default=50000, help='training iterations')
     parser.add_argument('--sdf_as_gpnerf', default=False, type=eval, choices=[True, False])
@@ -75,7 +75,7 @@ def get_opts_base():
 
     # normal and depth
     parser.add_argument('--sample_ray_num', default=1024, type=int, help='')
-    parser.add_argument('--visual_normal', default=False, type=eval, choices=[True, False], help='supervise normal')
+    parser.add_argument('--visual_normal', default=True, type=eval, choices=[True, False], help='supervise normal')
     parser.add_argument('--normal_loss', default=False, type=eval, choices=[True, False], help='supervise normal')
     parser.add_argument('--wgt_nl1_loss', default=1e-4, type=float, help='')
     parser.add_argument('--wgt_ncos_loss', default=1e-4, type=float, help='')
@@ -202,5 +202,7 @@ def get_opts_base():
     parser.add_argument('--no_amp', dest='amp', default=True, action='store_false')
     parser.add_argument('--detect_anomalies', default=False, action='store_true')
     parser.add_argument('--random_seed', type=int, default=42)
+    parser.add_argument('--render_zyq', default=False, action='store_true')
+
 
     return parser

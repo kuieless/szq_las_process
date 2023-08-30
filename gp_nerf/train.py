@@ -25,8 +25,9 @@ def main(hparams: Namespace) -> None:
         assert hparams.ckpt_path is not None
         
     if hparams.network_type == 'sdf':
-        hparams.cos_iterations = int(hparams.train_iterations / 2)
-        hparams.normal_iterations = int(hparams.train_iterations / 2)
+        pass
+        # hparams.cos_iterations = int(hparams.train_iterations / 2)
+        # hparams.normal_iterations = int(hparams.train_iterations / 2)
     elif hparams.network_type == 'sdf_mlp':
         hparams.use_neus_gradient=True
         hparams.layer_dim =256

@@ -16,7 +16,6 @@ def _get_eval_opts() -> Namespace:
     parser.add_argument('--exp_name', type=str, required=True, help='experiment name')
     parser.add_argument('--dataset_path', type=str, required=True)
     parser.add_argument('--centroid_path', type=str)
-    parser.add_argument('--render_zyq', default=False, action='store_true')
 
     return parser.parse_args()
 
@@ -24,8 +23,9 @@ def _get_eval_opts() -> Namespace:
 def main(hparams: Namespace) -> None:
     assert hparams.ckpt_path is not None or hparams.container_path is not None
     if hparams.network_type == 'sdf':
-        hparams.cos_iterations = int(hparams.train_iterations / 2)
-        hparams.normal_iterations = int(hparams.train_iterations / 2)
+        # hparams.cos_iterations = int(hparams.train_iterations / 2)
+        # hparams.normal_iterations = int(hparams.train_iterations / 2)
+        pass
     elif hparams.network_type == 'sdf_mlp':
         hparams.use_neus_gradient=True
         hparams.layer_dim =256

@@ -8,7 +8,6 @@ from torch import nn
 
 from mega_nerf.spherical_harmonics import eval_sh
 from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere
-from scripts.visualize_points import visualize_points
 
 # TO_COMPOSITE = {'rgb', 'depth', 'sem_map'}
 #sdf
@@ -210,15 +209,9 @@ def _get_results(point_type,
 
     device = rays_o.device
 
-    # #2023/02/22
-    # cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.8)   #  from 0 -> 0.8
-    # # normal_epsilon_ratio = min((train_iterations - hparams.normal_iterations) / (2*hparams.normal_iterations), 0.95)   # [-0.5, 0.5]
-    # normal_epsilon_ratio = min(train_iterations / (2*hparams.normal_iterations), 0.95)  #[0, 0.95]
-
-    #2023/08/30
-    cos_anneal_ratio = min(train_iterations / (hparams.cos_iterations), 1)   #  from 0 -> 0.8
-    normal_epsilon_ratio = min(train_iterations / (2*hparams.normal_iterations), 0.95)  #[0, 0.95]
-
+    #2023/02/22
+    cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 0.8)   #  from 0 -> 0.8
+    normal_epsilon_ratio = min((train_iterations - hparams.normal_iterations) / (2*hparams.normal_iterations), 0.95)
     curvature_loss = False  #   和torch-nsr一样，暂时不考虑
 
     # ###### # ---------------gpnerf sampling and contraction-------------------
@@ -231,10 +224,6 @@ def _get_results(point_type,
     xyz_coarse_fg = rays_o + rays_d * z_vals.unsqueeze(-1)
     pts = contract_to_unisphere(xyz_coarse_fg, hparams)
     
-    # visualize_points_list = [pts.view(-1, 3).cpu().numpy()]
-    # visualize_points(visualize_points_list)
-
-
     # ##### ---------------same sampling as instant-nsr-------------------
     # bound=hparams.aabb_bound
     # rays_o = rays_o.view(-1, 3)
@@ -284,25 +273,15 @@ def _get_results(point_type,
                 fine_sample = hparams.fine_samples
             for i in range(fine_sample // 16):
                 new_z_vals = up_sample(rays_o, rays_d, z_vals, sdf, 16, 64 * 2 **i)
-                if i == 0:
-                    new_z_vals_list = new_z_vals
-                else:
-                    new_z_vals_list = torch.cat([new_z_vals_list, new_z_vals], dim=-1)
-                    new_z_vals_list, index = torch.sort(new_z_vals_list, dim=-1)
                 z_vals, sdf = cat_z_vals(nerf, rays_o, rays_d, z_vals, new_z_vals, sdf, bound, last=(i + 1 == fine_sample // 16))
-    if False:
-        deltas_fine = new_z_vals_list[:, 1:] - new_z_vals_list[:, :-1] 
-        deltas_fine = torch.cat([deltas_fine, torch.Tensor([1/hparams.fine_samples]).to(device).expand(deltas_fine[..., :1].shape)], -1)  # (N_rays, N_samples_)
-        z_vals_mid_fine = new_z_vals_list + 0.5 * deltas_fine
-        pts_fine = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals_mid_fine.unsqueeze(-1) # [N, 1, 3] * [N, t, 3] -> [N, t, 3]
-
-
-    # ###这里完成z_vals（coarse+fine）, 这里去掉last_delta=1e10的考虑
+    
+    # ###这里完成z_vals（coarse+fine）
     deltas = z_vals[:, 1:] - z_vals[:, :-1]  # [N, T-1]
-    deltas = torch.cat([deltas, torch.Tensor([1/hparams.fine_samples]).to(device).expand(deltas[..., :1].shape)], -1)  # (N_rays, N_samples_)
+    deltas = torch.cat([deltas, last_delta], -1)  # (N_rays, N_samples_)
 
     # # sample pts on new z_vals, 取中点以及最后一个点
-    z_vals_mid = z_vals + 0.5 * deltas
+    z_vals_mid = (z_vals[:, :-1] + 0.5 * deltas[:, :-1]) # [N, T-1]
+    z_vals_mid = torch.cat([z_vals_mid, z_vals[:,-1:]], dim=-1)
     new_pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals_mid.unsqueeze(-1) # [N, 1, 3] * [N, t, 3] -> [N, t, 3]
     
     # # ----instant-nsr or gpnerf---------  
@@ -310,9 +289,7 @@ def _get_results(point_type,
     # new_pts = new_pts.clamp(-bound, bound)
     new_pts = contract_to_unisphere(new_pts, hparams)
 
-    # visualize_points_list = [new_pts.view(-1, 3).cpu().numpy()]
-    # visualize_points(visualize_points_list)
-
+    
     """ Step 3: Compute fine sigma """
     N_rays_ = new_pts.shape[0]
     N_samples_ = new_pts.shape[1]   # 这里点的数量已经是coarse + fine
@@ -339,7 +316,7 @@ def _get_results(point_type,
     else:
         gradient = nerf.gradient(xyz_, 0.005 * (1.0 - normal_epsilon_ratio)).squeeze()
 
-    normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal，做了一个归一化
+    normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal
 
     color = nerf.forward_color(xyz_, rays_d_, normal.reshape(-1, 3), feature_vector, image_indices_)
 
@@ -357,10 +334,10 @@ def _get_results(point_type,
     # 第一项softplus([0, 1]) * (1 - anneal)
     # 第二项softplus([-1,0]) * anneal
     iter_cos = -(activation(-true_cos * 0.5 + 0.5) * (1.0 - cos_anneal_ratio) +  
-                 activation(-true_cos) * cos_anneal_ratio)  # always non-positive
+                activation(-true_cos) * cos_anneal_ratio)  # always non-positive
 
     # add by zyq : change the last_delta to 1e10 for the fg points 2023/02/20/
-    # deltas[rays_with_bg] = torch.cat([deltas[rays_with_bg, :-1],  1e10 * torch.ones_like(deltas[rays_with_bg, :1])], dim=-1)
+    deltas[rays_with_bg] = torch.cat([deltas[rays_with_bg, :-1],  1e10 * torch.ones_like(deltas[rays_with_bg, :1])], dim=-1)
     
 
     # Estimate signed distances at section points
@@ -370,20 +347,16 @@ def _get_results(point_type,
     prev_cdf = torch.sigmoid(estimated_prev_sdf * inv_s)
     next_cdf = torch.sigmoid(estimated_next_sdf * inv_s)
 
-    p = prev_cdf - next_cdf
-    c = prev_cdf
     # Equation 13 in NeuS
-    alpha = ((p + 1e-5) / (c + 1e-5)).reshape(N_rays_, N_samples_).clip(0.0, 1.0)
+    alpha = ((prev_cdf - next_cdf + 1e-5) / (prev_cdf + 1e-5)).reshape(N_rays_, N_samples_).clip(0.0, 1.0)
 
     weights = alpha * torch.cumprod(torch.cat([torch.ones([N_rays_, 1],device=alpha.device), 1. - alpha + 1e-7], -1), -1)[:, :-1]  #cumprod 连乘
 
     # zyq : add bg_lambda (used in get_results_bg or merge fg bg results)
-    if point_type == 'fg':  # 0829 这里改用neus的权重
-        # results[f'bg_lambda_{typ}'] = weights[..., -1]
-        weights_sum = weights.sum(dim=-1, keepdim=True)
-        results[f'bg_lambda_{typ}'] = 1 - weights_sum.squeeze(-1)
+    if point_type == 'fg':  # get_bg_lambda:  # only when foreground fine =True
+        results[f'bg_lambda_{typ}'] = weights[..., -1]
 
-    
+    weights_sum = weights.sum(dim=-1, keepdim=True)
     # calculate color 
     color = color.reshape(N_rays_, N_samples_, 3) # [N, T, 3]
     image = (color * weights[:, :, None]).sum(dim=1)
@@ -524,7 +497,7 @@ def _get_results_bg(point_type,
     alphas_coarse = 1 - torch.exp(-deltas_coarse * sigmas_coarse)  # (N_rays, N_samples_)
     T_coarse = torch.cumprod(1 - alphas_coarse + 1e-8, -1)
     T_coarse = torch.cat((torch.ones_like(T_coarse[..., 0:1]), T_coarse[..., :-1]), dim=-1)  # [..., N_samples]
-    
+
     weights_coarse = alphas_coarse * T_coarse  # (N_rays, N_samples_)
     results[f'zvals_{typ}'] = z_vals
 
