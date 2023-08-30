@@ -85,8 +85,35 @@ def render_rays(nerf: nn.Module,
     far_ellipsoid = torch.minimum(far.squeeze(), fg_far).unsqueeze(-1)
     z_vals_inbound = torch.zeros([rays_o.shape[0], hparams.coarse_samples], device=device)
     
-    z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
-    z_vals_inbound = near * (1 - z_fg) + far_ellipsoid * z_fg
+
+    valid_depth_mask=None
+    s_near = None
+    if hparams.depth_dji_type == "mesh" and hparams.sampling_mesh_guidance:
+        valid_depth_mask = ~torch.isinf(gt_depths)
+        z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
+        # mesh中没有深度的部分
+        z_vals_inbound[~valid_depth_mask] = near[~valid_depth_mask] * (1 - z_fg) + far_ellipsoid[~valid_depth_mask] * z_fg
+        # mesh中有深度的， 分为三部分： 相机->表面， 表面附近， 表面-> 椭圆界
+        z_1 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.25), device=device)
+        z_2 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.625), device=device)
+        z_3 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.125), device=device)
+        surface_point = gt_depths[valid_depth_mask] / (depth_scale[valid_depth_mask])  # 得到表面点的far
+        epsilon =  hparams.around_mesh_meter / pose_scale_factor
+        s_near = (surface_point - epsilon).unsqueeze(-1)
+        s_far = (surface_point + epsilon).unsqueeze(-1)
+
+        larger_than_s_near = (near[valid_depth_mask] >= s_near).squeeze(-1)
+
+        mesh_sample1 = near[valid_depth_mask] * (1 - z_1) + s_near * z_1
+        mesh_sample2 = s_near * (1 - z_2) + s_far * z_2
+        mesh_sample3 = s_far * (1 - z_3) + far_ellipsoid[valid_depth_mask] * z_3
+        z_vals_inbound[valid_depth_mask] = torch.cat([mesh_sample1, mesh_sample2, mesh_sample3], dim=1)
+        z_vals_inbound, _ = torch.sort(z_vals_inbound, -1)
+
+
+    else:
+        z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
+        z_vals_inbound = near * (1 - z_fg) + far_ellipsoid * z_fg
 
 
     results = _get_results(point_type='fg',

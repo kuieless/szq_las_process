@@ -158,7 +158,6 @@ def render_rays(nerf: nn.Module,
     
     valid_depth_mask=None
     s_near = None
-
     if hparams.depth_dji_type == "mesh" and hparams.sampling_mesh_guidance:
         # ####### 2023/08/08晚上写的， 不加表面点到far部分
         # valid_depth_mask = ~torch.isinf(gt_depths)
