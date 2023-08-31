@@ -115,7 +115,6 @@ def render_rays(nerf: nn.Module,
         z_fg = torch.linspace(0, 1, hparams.coarse_samples, device=device)
         z_vals_inbound = near * (1 - z_fg) + far_ellipsoid * z_fg
 
-
     results = _get_results(point_type='fg',
                            nerf=nerf,
                            rays_o=rays_o,

@@ -4,7 +4,7 @@
 export OMP_NUM_THREADS=16
 export CUDA_VISIBLE_DEVICES=4
 
-exp_name=logs_dji/0829_train_residence_subset_sdf_as_gpnerf_cos
+exp_name=logs_dji/0830_train_residence_subset_sdf_as_gpnerf_cos
 
 dataset_path=/data/yuqi/Datasets/MegaNeRF/residence_subset
 config_file=configs/residence.yaml

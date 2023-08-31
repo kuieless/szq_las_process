@@ -323,7 +323,7 @@ class Runner:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             # # add by zyq : load the pretrain-gpnerf to train the semantic
             # if self.hparams.resume_ckpt_state:
-            if False:
+            if True:
                 train_iterations = checkpoint['iteration']
                 for key, optimizer in optimizers.items():
                     optimizer_dict = optimizer.state_dict()
@@ -331,7 +331,8 @@ class Runner:
                     optimizer.load_state_dict(optimizer_dict)
             else:
                 print(f'load weights from {self.hparams.ckpt_path}, strat training from 0')
-                train_iterations = 0
+                train_iterations = checkpoint['iteration']
+
 
             scaler_dict = scaler.state_dict()
             scaler_dict.update(checkpoint['scaler'])
@@ -466,8 +467,11 @@ class Runner:
                 else:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=16,
                                                 pin_memory=False)
-                
             for dataset_index, item in enumerate(data_loader): #, start=10462):
+                # if dataset_index < 48000:
+                #     train_iterations += 1
+                #     pbar.update(1)
+                #     continue
                 # torch.cuda.empty_cache()
                 
                 if item == None:
@@ -589,7 +593,7 @@ class Runner:
                 train_iterations += 1
                 if self.is_master:
                     pbar.update(1)
-                    if train_iterations % self.hparams.logger_interval ==0:
+                    if train_iterations % self.hparams.logger_interval == 0:
                         for key, value in metrics.items():
                             if self.writer is not None:
                                 self.writer.add_scalar('1_train/{}'.format(key), value, train_iterations)

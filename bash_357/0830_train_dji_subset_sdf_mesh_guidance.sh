@@ -4,7 +4,7 @@
 export OMP_NUM_THREADS=16
 export CUDA_VISIBLE_DEVICES=6
 
-exp_name=logs_dji/0830_train_dji_sdf_mesh_guidance
+exp_name=logs_dji/0830_train_dji_subset_sdf_mesh_guidance
 
 dataset_path=/data/yuqi/Datasets/DJI/subset
 config_file=dji/cuhksz_ray_xml.yaml
