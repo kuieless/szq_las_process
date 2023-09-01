@@ -15,6 +15,16 @@ from gp_nerf.models.Plane_module import get_Plane_encoder
 
 import numpy as np
 
+# from streetsurf
+from nr3d_lib.models.grids.lotd.lotd import LoTD, LoDType
+from nr3d_lib.models.grids.lotd.lotd_helpers import LoTDAnnealer, \
+    auto_compute_lotd_cfg_deprecated, auto_compute_ngp_cfg, auto_compute_ngp4d_cfg, \
+    gen_ngp_cfg, param_interpolate, param_vertices, level_param_index_shape
+
+from nr3d_lib.models.grids.lotd import LoTDEncoding, get_lotd_decoder
+
+
+
 timer = 0
 
 def fc_block(in_f, out_f):
@@ -76,7 +86,7 @@ class NeRF(nn.Module):
         self.xyz_dim = xyz_dim
 
         # # plane
-        self.use_scaling = hparams.use_scaling
+        self.use_scaling = False # hparams.use_scaling
         if self.use_scaling:
             if 'quad' in hparams.dataset_path or 'sci' in hparams.dataset_path:
                 self.scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
@@ -94,16 +104,80 @@ class NeRF(nn.Module):
         encoding = "hashgrid"
 
         print("use two mlp")
-        self.encoder, self.in_dim = get_encoder(encoding, base_resolution=base_resolution,
-                                                desired_resolution=desired_resolution_fg,
-                                                log2_hashmap_size=log2_hashmap_size, num_levels=num_levels)
-        self.encoder_bg, _ = get_encoder(encoding, base_resolution=base_resolution,
+        # self.encoder, self.in_dim = get_encoder(encoding, base_resolution=base_resolution,
+        #                                         desired_resolution=desired_resolution_fg,
+        #                                         log2_hashmap_size=log2_hashmap_size, num_levels=num_levels)
+        
+        # # from street-surf: define a cuboid hash-grid
+        
+        self.dtype = torch.float
+        self.device = torch.device("cuda")
+        self.n_rgb_used_output = self.geo_feat_dim
+
+        lotd_auto_compute_cfg = {}
+        lotd_auto_compute_cfg['type'] = 'ngp'
+        lotd_auto_compute_cfg['target_num_params'] = 32 * (2**log2_hashmap_size)
+        lotd_auto_compute_cfg['min_res'] = base_resolution
+        lotd_auto_compute_cfg['n_feats'] = 2
+        lotd_auto_compute_cfg['log2_hashmap_size'] = log2_hashmap_size
+        lotd_auto_compute_cfg['max_num_levels'] = None
+        param_init_cfg = {}
+        param_init_cfg['method'] = 'uniform_to_type'
+        param_init_cfg['bound'] = 0.0001
+        anneal_cfg = {}
+        anneal_cfg['type'] = 'hardmask'
+        anneal_cfg['start_it'] = 0
+        anneal_cfg['start_level'] = 2
+        anneal_cfg['stop_it'] = 4000
+
+        encoding_cfg = {}
+        encoding_cfg['lotd_use_cuboid'] = True
+        encoding_cfg['lotd_auto_compute_cfg'] = lotd_auto_compute_cfg
+        encoding_cfg['param_init_cfg'] = param_init_cfg
+        encoding_cfg['anneal_cfg'] = anneal_cfg
+        encoding_cfg['aabb'] = hparams.stretch  # 只需要知道长宽高，随后用来分配长方体hash不同轴的分辨率
+        encoding_cfg['bounding_size'] = 1.0   # aabb生效时，这个参数不起作用
+        # 这里的encoding只包括了dense+hash的特征，不包括原始输入坐标
+        self.encoding = LoTDEncoding(3, **encoding_cfg, dtype=self.dtype, device=self.device)
+        self.n_rgb_used_extrafeat = self.encoding.out_features
+        decoder_cfg = {}
+        decoder_cfg['type'] = 'mlp'
+        decoder_cfg['D'] = 1
+        decoder_cfg['W'] = layer_dim
+        decoder_cfg['use_tcnn_backend'] = False
+        decoder_activation = {}
+        decoder_activation['type'] = 'softplus'
+        decoder_activation['beta'] = 100.0
+        decoder_cfg['activation'] = decoder_activation
+
+        # plane feature
+        self.plane_encoder, self.plane_dim = get_Plane_encoder(hparams)
+
+        if self.include_input:
+            n_extra_embed_ch = 3 + self.plane_dim
+        else:
+            n_extra_embed_ch = self.plane_dim
+        self.decoder, self.decoder_type = get_lotd_decoder(self.encoding.lod_meta, (1+self.n_rgb_used_output), 
+                                                           n_extra_embed_ch=n_extra_embed_ch ,**decoder_cfg, 
+                                                           dtype=self.dtype, device=self.device)
+        
+        # NOTE: For lotd-annealing, set zero to non-active part of decoder input at start
+        if self.encoding.annealer is not None:
+            start_level = self.encoding.annealer.start_level
+            start_n_feats = sum(self.encoding.lotd.level_n_feats[:start_level+1])
+        with torch.no_grad():
+            nn.init.zeros_(self.decoder.layers[0].weight[:, start_n_feats:])
+        
+        
+
+        self.encoder_bg, self.in_dim = get_encoder(encoding, base_resolution=base_resolution,
                                             desired_resolution=desired_resolution,
                                             log2_hashmap_size=19, num_levels=num_levels)
 
-        self.plane_encoder, self.plane_dim = get_Plane_encoder(hparams)
-        self.sdf_net, self.color_net, self.encoder_dir = self.get_nerf_mlp()
         self.sigma_net_bg, self.color_net_bg, self.encoder_dir_bg = self.get_nerf_mlp_bg()
+
+        _, self.color_net, self.encoder_dir = self.get_nerf_mlp()
+
 
         
     # sdf
@@ -164,28 +238,15 @@ class NeRF(nn.Module):
         # x.requires_grad_(True)
         
         position = x[:, :self.xyz_dim]
-
-        h = self.encoder(position, bound=self.fg_bound)
-
-        if self.use_scaling:
-            px = (position[:, 0:1] - self.scaling_factor_altitude_bottom)/self.scaling_factor_altitude_range
-            py = position[:, 1:] / self.scaling_factor_ground
-            position = torch.cat([px, py], dim=-1)
-            # visualize_points(position.detach().cpu().numpy())
-        plane_feat = self.plane_encoder(position, bound=self.fg_bound)
+        # position in [-bound, bound], bound = 1
+        h = self.encoding(position, max_level=None)
+        plane_feat = self.plane_encoder(position, bound=1)
         h = torch.cat([h, plane_feat], dim=-1)
 
         if self.include_input:
             h = torch.cat([position, h], dim=-1)
-
-        for l in range(self.num_layers):
-            h = self.sdf_net[l](h)
-            if l != self.num_layers - 1:
-                h = self.activation(h)
-                #h = F.relu(h, inplace=True)
+        sdf_output = self.decoder(h)   # sdf + rgb_use_feature
         
-        sdf_output = h
-
         return sdf_output
 
     # semantic 

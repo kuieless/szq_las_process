@@ -244,6 +244,12 @@ class Runner:
                 # hparams.fg_box_bound[0,:] = hparams.fg_box_bound[0,:] - abs(hparams.fg_box_bound[0,:]*0.1)
                 # hparams.fg_box_bound[1,:] = hparams.fg_box_bound[1,:] + abs(hparams.fg_box_bound[1,:]*0.1)
 
+                #aabb for nr3d 
+                z_range = torch.tensor(hparams.z_range, dtype=torch.float32)
+                hparams.stretch = torch.tensor([[z_range[0], hparams.sphere_center[1] - hparams.sphere_radius[1], hparams.sphere_center[2] - hparams.sphere_radius[2]], 
+                                               [z_range[1], hparams.sphere_center[1] + hparams.sphere_radius[1], hparams.sphere_center[2] + hparams.sphere_radius[2]]]).to(self.device)
+
+
             else:
                 self.sphere_center = None
                 self.sphere_radius = None

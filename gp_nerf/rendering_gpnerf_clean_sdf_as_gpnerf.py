@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from mega_nerf.spherical_harmonics import eval_sh
-from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere
+from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere, contract_to_unisphere_new
 from scripts.visualize_points import visualize_points
 
 # TO_COMPOSITE = {'rgb', 'depth', 'sem_map'}
@@ -141,7 +141,10 @@ def render_rays(nerf: nn.Module,
         z_vals_outer = _expand_and_perturb_z_vals(z_vals_outer, hparams.coarse_samples // 2, perturb, rays_with_bg.shape[0])
 
         xyz_coarse_bg = rays_o[rays_with_bg] + rays_d[rays_with_bg] * z_vals_outer.unsqueeze(-1)
-        xyz_coarse_bg = contract_to_unisphere(xyz_coarse_bg, hparams)
+        if hparams.contract_new:
+            xyz_coarse_bg = contract_to_unisphere_new(xyz_coarse_bg, hparams)
+        else:
+            xyz_coarse_bg = contract_to_unisphere(xyz_coarse_bg, hparams)
 
         bg_results = _get_results_bg(point_type='bg',
                                   nerf=nerf,
@@ -255,7 +258,10 @@ def _get_results(point_type,
     perturb = hparams.perturb if nerf.training else 0
     z_vals = _expand_and_perturb_z_vals(z_vals, hparams.coarse_samples, perturb, rays_o.shape[0])
     xyz_coarse_fg = rays_o + rays_d * z_vals.unsqueeze(-1)
-    pts = contract_to_unisphere(xyz_coarse_fg, hparams)
+    if hparams.contract_new:
+        pts = contract_to_unisphere_new(xyz_coarse_fg, hparams)
+    else:
+        pts = contract_to_unisphere(xyz_coarse_fg, hparams)
     
     # visualize_points_list = [pts.view(-1, 3).cpu().numpy()]
     # visualize_points(visualize_points_list)
@@ -309,7 +315,8 @@ def _get_results(point_type,
             if point_type == 'fg':
                 fine_sample = hparams.fine_samples
             for i in range(fine_sample // 16):
-                new_z_vals = up_sample(rays_o, rays_d, z_vals, sdf, 16, 64 * 2 **i)
+                up_sample_start, up_sample_end = int(z_vals.shape[1]*0.25), int(z_vals.shape[1]*(0.25+0.625)) # 2023.08.31 改为逐渐向表面收缩
+                new_z_vals = up_sample(rays_o, rays_d, z_vals[:,up_sample_start:up_sample_end], sdf[:,up_sample_start:up_sample_end], 16, 64 * 2 **i)
                 if i == 0:
                     new_z_vals_list = new_z_vals
                 else:
@@ -334,7 +341,11 @@ def _get_results(point_type,
     # # ----instant-nsr or gpnerf---------  
     # NOTE：这里得到的采样点怎么处理
     # new_pts = new_pts.clamp(-bound, bound)
-    new_pts = contract_to_unisphere(new_pts, hparams)
+    if hparams.contract_new:
+        new_pts = contract_to_unisphere_new(new_pts, hparams)
+    else:
+        new_pts = contract_to_unisphere(new_pts, hparams)
+
 
     # visualize_points_list = [new_pts.view(-1, 3).cpu().numpy()]
     # visualize_points(visualize_points_list)
@@ -572,7 +583,10 @@ def _get_results_bg(point_type,
 
 
             xyz_fine, depth_real_fine = xyz_fine_fn(fine_z_vals)
-            xyz_fine = contract_to_unisphere(xyz_fine, hparams)
+            if hparams.contract_new:
+                xyz_fine = contract_to_unisphere_new(xyz_fine, hparams)
+            else:
+                xyz_fine = contract_to_unisphere(xyz_fine, hparams)
             last_delta_diff = torch.zeros_like(last_delta)
             last_delta_diff[last_delta.squeeze() < 1e10, 0] = fine_z_vals[last_delta.squeeze() < 1e10].max(dim=-1)[0]
             last_delta_fine = last_delta - last_delta_diff

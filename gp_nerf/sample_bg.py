@@ -27,27 +27,27 @@ def contract_to_unisphere(x: torch.Tensor, hparams):
     return x
 
 
-#@torch.no_grad()
-# NOTE: 2023/08/08  不在网络部分使用scaling， 改为在contract时使用
-# def contract_to_unisphere_new(x: torch.Tensor, hparams):
+@torch.no_grad()
+## NOTE: 2023/08/08  不在网络部分使用scaling， 改为在contract时使用
+def contract_to_unisphere_new(x: torch.Tensor, hparams):
 
-#     z_range = torch.tensor(hparams.z_range, dtype=torch.float32)
-#     aabb = torch.tensor([z_range[0], hparams.sphere_center[1] - hparams.sphere_radius[1], hparams.sphere_center[2] - hparams.sphere_radius[2], 
-#                          z_range[1], hparams.sphere_center[1] + hparams.sphere_radius[1], hparams.sphere_center[2] + hparams.sphere_radius[2]]).to(x.device)
-
-#     aabb_min, aabb_max = torch.split(aabb, 3, dim=-1)
-#     x = (x - aabb_min) / (aabb_max - aabb_min)   #[0, 1]
-#     x = x * 2 - 1  # aabb is at [-1, 1]
-#     if hparams.contract_norm == 'inf':
-#         mag = x.abs().amax(dim=-1, keepdim=True)
-#     elif hparams.contract_norm == 'l2':
-#         mag = x.norm(dim=-1, keepdim=True)
-#     else:
-#         print("the norm of contract is wrong!")
-#         raise NotImplementedError
-#     mask = mag.squeeze(-1) > 1
-#     x[mask] = (1 + hparams.contract_bg_len - hparams.contract_bg_len / mag[mask]) * (x[mask] / mag[mask])  # out of bound points trun to [-2, 2]
-#     return x
+    
+    
+    aabb = hparams.stretch
+    # aabb_min, aabb_max = torch.split(aabb, 3, dim=-1)
+    aabb_min, aabb_max = aabb[0], aabb[1]
+    x = (x - aabb_min) / (aabb_max - aabb_min)   #[0, 1]
+    x = x * 2 - 1  # aabb is at [-1, 1]
+    if hparams.contract_norm == 'inf':
+        mag = x.abs().amax(dim=-1, keepdim=True)
+    elif hparams.contract_norm == 'l2':
+        mag = x.norm(dim=-1, keepdim=True)
+    else:
+        print("the norm of contract is wrong!")
+        raise NotImplementedError
+    mask = mag.squeeze(-1) > 1
+    x[mask] = (1 + hparams.contract_bg_len - hparams.contract_bg_len / mag[mask]) * (x[mask] / mag[mask])  # out of bound points to [-2, 2]
+    return x
 
 def contract_to_unisphere_box(x: torch.Tensor, hparams):
 

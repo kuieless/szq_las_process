@@ -70,6 +70,7 @@ def get_opts_base():
     parser.add_argument('--use_neus_gradient', default=False, type=eval, choices=[True, False])
 
     
+    parser.add_argument('--contract_new', default=False, type=eval, choices=[True, False])
 
 
 
@@ -94,7 +95,7 @@ def get_opts_base():
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
-    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf', 'sdf_mlp'], help='')
+    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf', 'sdf_mlp', 'sdf_nr3d'], help='')
     # parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')
     
     parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')
