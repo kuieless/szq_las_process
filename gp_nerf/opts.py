@@ -27,6 +27,13 @@ def get_opts_base():
     parser.add_argument('--online_sam_label', type=eval, default=False, help='')
     parser.add_argument('--remove_cluster', type=eval, default=False, help='')
 
+    # nr3d 
+    parser.add_argument('--contract_new', default=False, type=eval, choices=[True, False])
+    parser.add_argument('--use_plane', default=True, type=eval, choices=[True, False])
+    parser.add_argument('--sdf_include_input', default=True, type=eval, choices=[True, False])
+    parser.add_argument('--nr3d_nablas', default=False, type=eval, choices=[True, False])
+
+
     # depth_dji_loss
     parser.add_argument('--depth_dji_loss', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--depth_dji_type', default='mesh', type=str, choices=['mesh', 'las'], help='')
@@ -69,10 +76,6 @@ def get_opts_base():
     parser.add_argument('--sdf_as_gpnerf', default=False, type=eval, choices=[True, False])
     parser.add_argument('--use_neus_gradient', default=False, type=eval, choices=[True, False])
 
-    
-    parser.add_argument('--contract_new', default=False, type=eval, choices=[True, False])
-
-
 
     # normal and depth
     parser.add_argument('--sample_ray_num', default=1024, type=int, help='')
@@ -95,7 +98,7 @@ def get_opts_base():
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
     parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
-    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'mlp', 'sdf', 'sdf_mlp', 'sdf_nr3d'], help='')
+    parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'gpnerf_nr3d', 'mlp', 'sdf', 'sdf_mlp', 'sdf_nr3d'], help='')
     # parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')
     
     parser.add_argument('--clip_grad_max', type=float, default=0, help='use clip_grad_norm and set the max_value')

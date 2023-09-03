@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from mega_nerf.spherical_harmonics import eval_sh
-from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere
+from gp_nerf.sample_bg import bg_sample_inv, contract_to_unisphere, contract_to_unisphere_new
 from gp_nerf.sample_bg import get_box_intersection, contract_to_unisphere_box
 
 import gc
@@ -216,8 +216,9 @@ def render_rays(nerf: nn.Module,
     # visualize_points_list = [xyz_coarse_fg.view(-1, 3).cpu().numpy()]
     # visualize_points(visualize_points_list)
 
-    if hparams.use_fg_box_bound:
-        xyz_coarse_fg = contract_to_unisphere_box(xyz_coarse_fg, hparams)
+
+    if hparams.contract_new:
+        xyz_coarse_fg = contract_to_unisphere_new(xyz_coarse_fg, hparams)
         
     else:
         xyz_coarse_fg = contract_to_unisphere(xyz_coarse_fg, hparams)
@@ -249,7 +250,10 @@ def render_rays(nerf: nn.Module,
         z_vals_outer = _expand_and_perturb_z_vals(z_vals_outer, hparams.coarse_samples // 2, perturb, rays_with_bg.shape[0])
 
         xyz_coarse_bg = rays_o[rays_with_bg] + rays_d[rays_with_bg] * z_vals_outer.unsqueeze(-1)
-        xyz_coarse_bg = contract_to_unisphere(xyz_coarse_bg, hparams)
+        if hparams.contract_new:
+            xyz_coarse_bg = contract_to_unisphere_new(xyz_coarse_bg, hparams)
+        else:
+            xyz_coarse_bg = contract_to_unisphere(xyz_coarse_bg, hparams)
         
         bg_results = _get_results(point_type='bg',
                                   nerf=nerf,
@@ -384,8 +388,10 @@ def _get_results(point_type,
 
         # visualize_points_list = [xyz_fine.view(-1, 3).cpu().numpy()]
         # visualize_points(visualize_points_list)
-
-        xyz_fine = contract_to_unisphere(xyz_fine, hparams)
+        if hparams.contract_new:
+            xyz_fine = contract_to_unisphere_new(xyz_fine, hparams)
+        else:
+            xyz_fine = contract_to_unisphere(xyz_fine, hparams)
         last_delta_diff = torch.zeros_like(last_delta)
         last_delta_diff[last_delta.squeeze() < 1e10, 0] = fine_z_vals[last_delta.squeeze() < 1e10].max(dim=-1)[0]
 

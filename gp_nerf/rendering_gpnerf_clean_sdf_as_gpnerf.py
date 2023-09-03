@@ -245,7 +245,7 @@ def _get_results(point_type,
     # normal_epsilon_ratio = min(train_iterations / (2*hparams.normal_iterations), 0.95)  #[0, 0.95]
 
     #2023/08/30
-    cos_anneal_ratio = min(train_iterations / (hparams.cos_iterations), 1)   #  from 0 -> 0.8
+    cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 1)   #  from 0 -> 0.8
     normal_epsilon_ratio = min(train_iterations / (2*hparams.normal_iterations), 0.95)  #[0, 0.95]
 
     curvature_loss = False  #   和torch-nsr一样，暂时不考虑
@@ -329,14 +329,30 @@ def _get_results(point_type,
         z_vals_mid_fine = new_z_vals_list + 0.5 * deltas_fine
         pts_fine = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals_mid_fine.unsqueeze(-1) # [N, 1, 3] * [N, t, 3] -> [N, t, 3]
 
-
-    # ###这里完成z_vals（coarse+fine）, 这里去掉last_delta=1e10的考虑
-    deltas = z_vals[:, 1:] - z_vals[:, :-1]  # [N, T-1]
-    deltas = torch.cat([deltas, torch.Tensor([1/hparams.fine_samples]).to(device).expand(deltas[..., :1].shape)], -1)  # (N_rays, N_samples_)
-
+    # 2023.09.02之前用的，不严谨
+    # # ###这里完成z_vals（coarse+fine）, 这里去掉last_delta=1e10的考虑
+    # deltas = z_vals[:, 1:] - z_vals[:, :-1]  # [N, T-1]
+    # # 这里用一个固定的值cat到最后一维
+    # # deltas = torch.cat([deltas, torch.Tensor([1/params.fine_samples]).to(device).expand(deltas[..., :1].shape)], -1)  # (N_rays, N_samples_)
+    # # 改用z_vals的最后一个值拼接，即 中点+最后一个点(deltas=0)
+    # deltas = torch.cat([deltas, torch.zeros(1).to(device).expand(deltas[..., :1].shape)], -1)  # (N_rays, N_samples_)
     # # sample pts on new z_vals, 取中点以及最后一个点
-    z_vals_mid = z_vals + 0.5 * deltas
-    new_pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals_mid.unsqueeze(-1) # [N, 1, 3] * [N, t, 3] -> [N, t, 3]
+    # z_vals_mid = z_vals + 0.5 * deltas
+
+    # 先采样中点
+    deltas = z_vals[:, 1:] - z_vals[:, :-1]  # [N, T-1]
+    z_vals_mid = z_vals[:, :-1] + 0.5 * deltas # [N, T-1]
+    # 现在要考虑最后一个点， 最后一个点的delta是 最后一个原始点和最后一个中点的距离
+    deltas = torch.cat([deltas, z_vals[:,-1:]-z_vals_mid[:,-1:]], dim=-1)
+    # 再cat中点和最后一个点
+    z_vals_mid = torch.cat([z_vals_mid, z_vals[:,-1:]], dim=-1)
+
+
+    # 如果采用neuralsim的方式，则先计算原始点的alpha
+    if not hparams.nr3d_nablas:  
+        new_pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals_mid.unsqueeze(-1) # [N, 1, 3] * [N, t, 3] -> [N, t, 3]
+    else:
+        new_pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals.unsqueeze(-1) # [N, 1, 3] * [N, t, 3] -> [N, t, 3]
     
     # # ----instant-nsr or gpnerf---------  
     # NOTE：这里得到的采样点怎么处理
@@ -359,6 +375,7 @@ def _get_results(point_type,
     
     # only forward new points to save computation
     rays_d_ = rays_d.unsqueeze(-2).repeat(1, N_samples_, 1).view(-1, rays_d.shape[-1])
+    
     sdf_nn_output = nerf.forward_sdf(xyz_)
 
     if hparams.enable_semantic:
@@ -378,12 +395,11 @@ def _get_results(point_type,
 
     normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal，做了一个归一化
 
-    color = nerf.forward_color(xyz_, rays_d_, normal.reshape(-1, 3), feature_vector, image_indices_)
-
     # TODO: zyq - save the inv_s_ori parameter to wandb or tb
     inv_s_ori = nerf.forward_variance()     # Single parameter
     inv_s = inv_s_ori.expand(N_rays_ * N_samples_, 1)
 
+    
     true_cos = (rays_d_.reshape(-1, 3) * normal).sum(-1, keepdim=True)  #[-1, 0]
     # "cos_anneal_ratio" grows from 0 to 1 in the beginning training iterations. The anneal strategy below makes
     # the cos value "not dead" at the beginning training iterations, for better convergence.
@@ -394,11 +410,10 @@ def _get_results(point_type,
     # 第一项softplus([0, 1]) * (1 - anneal)
     # 第二项softplus([-1,0]) * anneal
     iter_cos = -(activation(-true_cos * 0.5 + 0.5) * (1.0 - cos_anneal_ratio) +  
-                 activation(-true_cos) * cos_anneal_ratio)  # always non-positive
+                activation(-true_cos) * cos_anneal_ratio)  # always non-positive
 
     # add by zyq : change the last_delta to 1e10 for the fg points 2023/02/20/
     # deltas[rays_with_bg] = torch.cat([deltas[rays_with_bg, :-1],  1e10 * torch.ones_like(deltas[rays_with_bg, :1])], dim=-1)
-    
 
     # Estimate signed distances at section points
     estimated_next_sdf = sdf + iter_cos * deltas.reshape(-1, 1) * 0.5
@@ -412,6 +427,38 @@ def _get_results(point_type,
     # Equation 13 in NeuS
     alpha = ((p + 1e-5) / (c + 1e-5)).reshape(N_rays_, N_samples_).clip(0.0, 1.0)
 
+    if not hparams.nr3d_nablas:
+        color = nerf.forward_color(xyz_, rays_d_, normal.reshape(-1, 3), feature_vector, image_indices_)
+    else:
+        # from neuralsim: https://github.com/PJLab-ADG/nr3d_lib/blob/main/models/fields/neus/renderer_mixin.py
+        # 上面先利用原始点得到alpha
+        # 这里使用终点，实现'real' query 
+        
+        #中点
+        new_pts = rays_o.unsqueeze(-2) + rays_d.unsqueeze(-2) * z_vals_mid.unsqueeze(-1)
+        if hparams.contract_new:
+            new_pts = contract_to_unisphere_new(new_pts, hparams)
+        else:
+            new_pts = contract_to_unisphere(new_pts, hparams)
+
+        """ 对输入进行处理 """
+        N_rays_ = new_pts.shape[0]
+        N_samples_ = new_pts.shape[1]   # 这里点的数量已经是coarse + fine
+        xyz_ = new_pts.view(-1, new_pts.shape[-1])
+        image_indices_ = image_indices.repeat(1, N_samples_, 1).view(-1, 1)
+        B = xyz_.shape[0]
+        rays_d_ = rays_d.unsqueeze(-2).repeat(1, N_samples_, 1).view(-1, rays_d.shape[-1])
+        
+        if nerf.training:
+            sdf, feature_vector, gradient= nerf.forward_sdf_nablas(xyz_)
+        else:
+            sdf, feature_vector, gradient= nerf.forward_sdf_nablas(xyz_, has_grad=False, nablas_has_grad=False)
+        
+        # nablas = nablas.detach().clamp(-1,1)
+        normal =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal，做了一个归一化
+
+        color = nerf.forward_color(xyz_, rays_d_, normal.reshape(-1, 3), feature_vector, image_indices_)
+    
     weights = alpha * torch.cumprod(torch.cat([torch.ones([N_rays_, 1],device=alpha.device), 1. - alpha + 1e-7], -1), -1)[:, :-1]  #cumprod 连乘
 
     # zyq : add bg_lambda (used in get_results_bg or merge fg bg results)
@@ -479,7 +526,9 @@ def _get_results(point_type,
     results[f'depth_{typ}'] = depth
     results[f'normal_map_{typ}'] = normal_map
     results[f'gradient_error_{typ}'] = gradient_error.unsqueeze(0)
-    results['sdf'] = sdf.detach()
+    if nerf.training:
+        results['cos_anneal_ratio'] = cos_anneal_ratio
+        results['normal_epsilon_ratio'] = normal_epsilon_ratio
 
     return results #depth, image, normal_map, gradient_error, curvature_error
 

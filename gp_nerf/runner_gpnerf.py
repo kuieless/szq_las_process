@@ -248,7 +248,7 @@ class Runner:
                 z_range = torch.tensor(hparams.z_range, dtype=torch.float32)
                 hparams.stretch = torch.tensor([[z_range[0], hparams.sphere_center[1] - hparams.sphere_radius[1], hparams.sphere_center[2] - hparams.sphere_radius[2]], 
                                                [z_range[1], hparams.sphere_center[1] + hparams.sphere_radius[1], hparams.sphere_center[2] + hparams.sphere_radius[2]]]).to(self.device)
-
+                hparams.pose_scale_factor = self.pose_scale_factor
 
             else:
                 self.sphere_center = None
@@ -991,8 +991,12 @@ class Runner:
             if self.wandb is not None:
                 self.wandb.log({"train/inv_s": 1.0 / results['inv_s'], 'epoch': train_iterations})
             if self.writer is not None:
-                self.writer.add_scalar('train/inv_s', 1.0 / results['inv_s'], train_iterations)
-            
+                self.writer.add_scalar('1_train/inv_s', 1.0 / results['inv_s'], train_iterations)
+            if self.writer is not None:
+                self.writer.add_scalar('1_train/cos_anneal_ratio', results['cos_anneal_ratio'], train_iterations)
+            if self.writer is not None:
+                self.writer.add_scalar('1_train/normal_epsilon_ratio', results['normal_epsilon_ratio'], train_iterations)
+            del results['cos_anneal_ratio'], results['normal_epsilon_ratio']
         return metrics, bg_nerf_rays_present
 
     def render_zyq(self):
@@ -1284,7 +1288,7 @@ class Runner:
             else:
                 from tools.unetformer.uavid2rgb import remapping
 
-            if self.hparams.use_neus_gradient == False:
+            if self.hparams.use_neus_gradient == False and self.hparams.nr3d_nablas == False:
                 with torch.inference_mode():
                     #semantic 
                     self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -1430,17 +1434,9 @@ class Runner:
                             # self.val_items=self.val_items[:2]
                             indices_to_eval = np.arange(len(self.val_items))
                         elif val_type == 'train':
-                            # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
-                            # indices_to_eval = [0] #np.arange(len(self.train_items))  
                             indices_to_eval = np.arange(800,1200)  
-                            # used_files = []
-                            # import glob
-                            # for ext in ('*.jpg'):
-                            #     used_files.extend(glob.glob(os.path.join('/data/yuqi/code/GP-NeRF-semantic/zyq/project5/sample', ext)))
-                            # used_files.sort()
-                            # used_files = used_files[1:]
-                            # indices_to_eval = [int(Path(x).stem[2:8]) for x in used_files]
-                        
+
+
                         experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                         Path(str(experiment_path_current)).mkdir()
                         Path(str(experiment_path_current / 'val_rgbs')).mkdir()

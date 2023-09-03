@@ -33,6 +33,8 @@ def _get_single_nerf_inner(hparams: Namespace, appearance_count: int, layer_dim:
         from gp_nerf.models.gp_nerf_sdf_mlp import NeRF, ShiftedSoftplus
     elif hparams.network_type == 'sdf_nr3d':
         from gp_nerf.models.gp_nerf_sdf_nr3d import NeRF, ShiftedSoftplus
+    elif hparams.network_type == 'gpnerf_nr3d':
+        from gp_nerf.models.gp_nerf_nr3d import NeRF, ShiftedSoftplus
     
     return NeRF(hparams.pos_xyz_dim,
                 hparams.pos_dir_dim,

@@ -46,6 +46,7 @@ class NeRF(nn.Module):
                  xyz_dim: int,  # xyz_dim : fg = 3, bg =4
                  sigma_activation: nn.Module, hparams):
         super(NeRF, self).__init__()
+        self.sdf_scale = 1    # 1 / hparams.pose_scale_factor
 
         #semantic
         self.enable_semantic = hparams.enable_semantic
@@ -61,7 +62,11 @@ class NeRF(nn.Module):
 
         #sdf 
         print("sdf")
-        self.include_input = True
+        self.nr3d_nablas = hparams.nr3d_nablas
+        if self.nr3d_nablas:
+            self.sdf_include_input = False
+        else:
+            self.sdf_include_input = hparams.sdf_include_input
         self.geometric_init = True
         self.weight_norm = True
         self.deviation_net = SingleVarianceNetwork(0.3)
@@ -84,18 +89,6 @@ class NeRF(nn.Module):
         self.fg_bound = 1
         self.bg_bound = 1+hparams.contract_bg_len
         self.xyz_dim = xyz_dim
-
-        # # plane
-        self.use_scaling = False # hparams.use_scaling
-        if self.use_scaling:
-            if 'quad' in hparams.dataset_path or 'sci' in hparams.dataset_path:
-                self.scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
-                self.scaling_factor_altitude_bottom = 0
-                self.scaling_factor_altitude_range = (abs(hparams.sphere_center[0]) + abs(hparams.sphere_radius[0])) / hparams.aabb_bound
-            else:
-                self.scaling_factor_ground = (abs(hparams.sphere_center[1:]) + abs(hparams.sphere_radius[1:])) / hparams.aabb_bound
-                self.scaling_factor_altitude_bottom = 0.5 * (hparams.z_range[0]+ hparams.z_range[1])/ hparams.aabb_bound
-                self.scaling_factor_altitude_range = (hparams.z_range[1]-hparams.z_range[0]) / (2 * hparams.aabb_bound)
 
 
         self.embedding_a = nn.Embedding(self.appearance_count, self.appearance_dim)
@@ -151,9 +144,15 @@ class NeRF(nn.Module):
         decoder_cfg['activation'] = decoder_activation
 
         # plane feature
-        self.plane_encoder, self.plane_dim = get_Plane_encoder(hparams)
+        self.use_plane = hparams.use_plane
+        if self.use_plane:
+            self.plane_encoder, self.plane_dim = get_Plane_encoder(hparams)
+            self.use_extra_embed = True
+        else:
+            self.plane_dim = 0
+            self.use_extra_embed = False
 
-        if self.include_input:
+        if self.sdf_include_input:
             n_extra_embed_ch = 3 + self.plane_dim
         else:
             n_extra_embed_ch = self.plane_dim
@@ -240,14 +239,74 @@ class NeRF(nn.Module):
         position = x[:, :self.xyz_dim]
         # position in [-bound, bound], bound = 1
         h = self.encoding(position, max_level=None)
-        plane_feat = self.plane_encoder(position, bound=1)
-        h = torch.cat([h, plane_feat], dim=-1)
 
-        if self.include_input:
+        if self.use_plane:
+            plane_feat = self.plane_encoder(position, bound=1)
+            h = torch.cat([h, plane_feat], dim=-1)
+            
+        if self.sdf_include_input:
             h = torch.cat([position, h], dim=-1)
         sdf_output = self.decoder(h)   # sdf + rgb_use_feature
         
         return sdf_output
+
+    # copy from neuralsim
+    def forward_sdf_nablas(self, x, 
+                           has_grad:bool=True, nablas_has_grad:bool=True, 
+                           max_level: int=None, grad_guard=None, 
+                           train_iterations=-1):
+        
+        x = x[:, :self.xyz_dim]
+        
+        # NOTE: x must be in range [-1,1]
+        has_grad = torch.is_grad_enabled() if has_grad is None else has_grad
+        nablas_has_grad = has_grad if nablas_has_grad is None else (nablas_has_grad and has_grad)
+        need_loss_backward_input = x.requires_grad
+        x = x.requires_grad_(True)
+        with torch.enable_grad():
+            h, dy_dx = self.encoding.forward_dydx(x, max_level=max_level, need_loss_backward_input=need_loss_backward_input)
+            if not self.use_extra_embed:
+                h_full = h
+            else:
+                # h_embed = self.extra_embed_fn(x)
+                if self.use_plane:
+                    plane_feat = self.plane_encoder(x, bound=1)
+                    h_embed = plane_feat
+                
+                h_full = torch.cat([h, h_embed.to(h.dtype)], dim=-1)
+            output = self.decoder(h_full)
+            sdf = output[..., 0]
+        
+        #---- Decoder bwd_input
+        dL_dh_full = torch.autograd.grad(sdf, h_full, sdf.new_ones(sdf.shape), retain_graph=has_grad, create_graph=nablas_has_grad, only_inputs=True)[0]
+
+        if not self.use_extra_embed:
+            #---- Encoding bwd_input
+            nablas = self.encoding.backward_dydx(dL_dh_full, dy_dx, x, max_level=max_level, grad_guard=grad_guard)
+        else:
+            #---- Encoding bwd_input
+            nablas = self.encoding.backward_dydx(dL_dh_full[..., :h.shape[-1]], dy_dx, x, max_level=max_level, grad_guard=grad_guard)
+            
+            #---- Extra nablas from extra_embed stream.
+            # NOTE: Calculates dl_dhxxx only once.
+            dL_dh_embed = dL_dh_full[..., h.shape[-1]:]
+            
+            nablas_extra = torch.autograd.grad(h_embed, x, dL_dh_embed, retain_graph=has_grad, create_graph=nablas_has_grad, only_inputs=True)[0]
+            nablas = nablas + nablas_extra
+        
+        # if self.is_extrafeat_from_output: h = output[..., 1:]
+        h = output[..., 1:]
+
+        if not nablas_has_grad:
+            nablas = nablas.detach()
+        if not has_grad:
+            sdf, h = sdf.detach(), h.detach()
+        
+        # NOTE: The 'x' used to compute 'dydx' here is already in the normalized space of [-1,1]^3. 
+        #       Hence, the computed 'nablas' need to be divided by 'self.space.scale0' to obtain 'nablas' under the original input space.
+        # NOTE: Returned nablas are already in obj's coords & scale, not in network's coords & scale
+        return sdf, h, (nablas * float(self.sdf_scale) / self.encoding.space.scale0)
+
 
     # semantic 
     def forward_semantic(self, h):
@@ -288,7 +347,7 @@ class NeRF(nn.Module):
         # zyq: 把sigma net改为sdfnet----------------------------
         for l in range(self.num_layers):
             if l == 0:
-                in_dim = self.in_dim + 3 if self.include_input else self.in_dim
+                in_dim = self.in_dim + 3 if self.sdf_include_input else self.in_dim
                 #in_dim = self.in_dim
                 if True: #self.use_plane:
                     print("Hash and Plane")
@@ -310,7 +369,7 @@ class NeRF(nn.Module):
                         torch.nn.init.constant_(sigma_nets[l].bias, 0)     
 
                     elif l==0:
-                        if self.include_input:
+                        if self.sdf_include_input:
                             torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
                             torch.nn.init.normal_(sigma_nets[l].weight[:, :3], 0.0, np.sqrt(2) / np.sqrt(out_dim))
                             torch.nn.init.constant_(sigma_nets[l].weight[:, 3:], 0.0)

@@ -51,7 +51,7 @@ class NeRF(nn.Module):
 
         #sdf 
         print("sdf")
-        self.include_input = True
+        self.sdf_include_input = hparams.sdf_include_input
         self.geometric_init = True
         self.weight_norm = True
         self.deviation_net = SingleVarianceNetwork(0.3)
@@ -100,8 +100,12 @@ class NeRF(nn.Module):
         self.encoder_bg, _ = get_encoder(encoding, base_resolution=base_resolution,
                                             desired_resolution=desired_resolution,
                                             log2_hashmap_size=19, num_levels=num_levels)
+        self.use_plane = hparams.use_plane
+        if self.use_plane:
+            self.plane_encoder, self.plane_dim = get_Plane_encoder(hparams)
+        else:
+            self.plane_dim = 0
 
-        self.plane_encoder, self.plane_dim = get_Plane_encoder(hparams)
         self.sdf_net, self.color_net, self.encoder_dir = self.get_nerf_mlp()
         self.sigma_net_bg, self.color_net_bg, self.encoder_dir_bg = self.get_nerf_mlp_bg()
 
@@ -172,10 +176,11 @@ class NeRF(nn.Module):
             py = position[:, 1:] / self.scaling_factor_ground
             position = torch.cat([px, py], dim=-1)
             # visualize_points(position.detach().cpu().numpy())
-        plane_feat = self.plane_encoder(position, bound=self.fg_bound)
-        h = torch.cat([h, plane_feat], dim=-1)
+        if self.use_plane:
+            plane_feat = self.plane_encoder(position, bound=self.fg_bound)
+            h = torch.cat([h, plane_feat], dim=-1)
 
-        if self.include_input:
+        if self.sdf_include_input:
             h = torch.cat([position, h], dim=-1)
 
         for l in range(self.num_layers):
@@ -227,7 +232,7 @@ class NeRF(nn.Module):
         # zyq: 把sigma net改为sdfnet----------------------------
         for l in range(self.num_layers):
             if l == 0:
-                in_dim = self.in_dim + 3 if self.include_input else self.in_dim
+                in_dim = self.in_dim + 3 if self.sdf_include_input else self.in_dim
                 #in_dim = self.in_dim
                 if True: #self.use_plane:
                     print("Hash and Plane")
@@ -249,7 +254,7 @@ class NeRF(nn.Module):
                         torch.nn.init.constant_(sigma_nets[l].bias, 0)     
 
                     elif l==0:
-                        if self.include_input:
+                        if self.sdf_include_input:
                             torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
                             torch.nn.init.normal_(sigma_nets[l].weight[:, :3], 0.0, np.sqrt(2) / np.sqrt(out_dim))
                             torch.nn.init.constant_(sigma_nets[l].weight[:, 3:], 0.0)
