@@ -8,9 +8,9 @@ dataset_path=/data/yuqi/Datasets/DJI/subset
 config_file=dji/cuhksz_ray_xml.yaml
 
 
-batch_size=20480  #65536
+batch_size=65536  #65536
 train_iterations=200000
-val_interval=10  # 10000
+val_interval=10000  # 10000
 ckpt_interval=50000
 
 network_type='gpnerf_nr3d'     #  gpnerf   sdf

@@ -214,7 +214,7 @@ class NeRF(nn.Module):
         self.sigma_net_bg, self.color_net_bg, self.encoder_dir_bg = self.get_nerf_mlp(nerf_type='bg')
 
 
-    def get_nerf_mlp(self, input_dim, nerf_type='fg'):
+    def get_nerf_mlp(self, nerf_type='fg'):
         encoding_dir = "sphere_harmonics"
         geo_feat_dim = self.geo_feat_dim
         sigma_nets = []
