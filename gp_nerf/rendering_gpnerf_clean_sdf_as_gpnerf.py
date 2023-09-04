@@ -134,7 +134,7 @@ def render_rays(nerf: nn.Module,
                            xyz_fine_fn=lambda fine_z_vals: (rays_o + rays_d * fine_z_vals.unsqueeze(-1), None),
                            train_iterations=train_iterations,
                            gt_depths=gt_depths,
-                           depth_scale=gt_depths)
+                           depth_scale=depth_scale)
     
     if rays_with_bg.shape[0] != 0:
         z_vals_outer = bg_sample_inv(far_ellipsoid[rays_with_bg], 1e4+1, hparams.coarse_samples // 2, device)
@@ -163,7 +163,7 @@ def render_rays(nerf: nn.Module,
                                   xyz_fine_fn=lambda fine_z_vals: (rays_o[rays_with_bg] + rays_d[rays_with_bg] * fine_z_vals.unsqueeze(-1), None),
                                   train_iterations=train_iterations,
                                   gt_depths=gt_depths,
-                                  depth_scale=gt_depths)
+                                  depth_scale=depth_scale)
         
     # merge the result of inner and outer
     types = ['fine' if hparams.fine_samples > 0 else 'coarse']

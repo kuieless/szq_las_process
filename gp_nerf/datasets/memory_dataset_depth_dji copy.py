@@ -22,19 +22,8 @@ class MemoryDataset(Dataset):
         labels = []
         depth_djis = []
         depth_scales = []
-        metadata_item = metadata_items[0]
-
-        self.W = metadata_item.W
-        self.H = metadata_item.H
-        
-        self._directions = get_ray_directions(metadata_item.W,
-                                        metadata_item.H,
-                                        metadata_item.intrinsics[0],
-                                        metadata_item.intrinsics[1],
-                                        metadata_item.intrinsics[2],
-                                        metadata_item.intrinsics[3],
-                                        center_pixels,
-                                        device)
+        self.W = self.metadata_items[0].W
+        self.H = self.metadata_items[0].H
         
         main_print('Loading data')
         if hparams.debug:
@@ -50,9 +39,16 @@ class MemoryDataset(Dataset):
             image_rgbs, image_indices, image_keep_mask, label, depth_dji = image_data
 
             # print("image index: {}, fx: {}, fy: {}".format(metadata_item.image_index, metadata_item.intrinsics[0], metadata_item.intrinsics[1]))
-            
-            depth_scale = torch.abs(self._directions[:, :, 2]).view(-1).cpu()
-            image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
+            directions = get_ray_directions(metadata_item.W,
+                                            metadata_item.H,
+                                            metadata_item.intrinsics[0],
+                                            metadata_item.intrinsics[1],
+                                            metadata_item.intrinsics[2],
+                                            metadata_item.intrinsics[3],
+                                            center_pixels,
+                                            device)
+            depth_scale = torch.abs(directions[:, :, 2]).view(-1).cpu()
+            image_rays = get_rays(directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
             
             if image_keep_mask is not None:
                 image_rays = image_rays[image_keep_mask == True]

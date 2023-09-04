@@ -67,7 +67,7 @@ class NeRF(nn.Module):
             self.sdf_include_input = False
         else:
             self.sdf_include_input = hparams.sdf_include_input
-        self.geometric_init = True
+        self.geo_init_method = hparams.geo_init_method
         self.weight_norm = True
         self.deviation_net = SingleVarianceNetwork(0.3)
         self.activation = nn.Softplus(beta=100)
@@ -160,15 +160,6 @@ class NeRF(nn.Module):
                                                            n_extra_embed_ch=n_extra_embed_ch ,**decoder_cfg, 
                                                            dtype=self.dtype, device=self.device)
         
-        # NOTE: For lotd-annealing, set zero to non-active part of decoder input at start
-        if self.encoding.annealer is not None:
-            start_level = self.encoding.annealer.start_level
-            start_n_feats = sum(self.encoding.lotd.level_n_feats[:start_level+1])
-        with torch.no_grad():
-            nn.init.zeros_(self.decoder.layers[0].weight[:, start_n_feats:])
-        
-        
-
         self.encoder_bg, self.in_dim = get_encoder(encoding, base_resolution=base_resolution,
                                             desired_resolution=desired_resolution,
                                             log2_hashmap_size=19, num_levels=num_levels)
@@ -176,6 +167,39 @@ class NeRF(nn.Module):
         self.sigma_net_bg, self.color_net_bg, self.encoder_dir_bg = self.get_nerf_mlp_bg()
 
         _, self.color_net, self.encoder_dir = self.get_nerf_mlp()
+
+
+        ### sdf  initialize
+        if self.geo_init_method == 'idr':
+            inside_out = False
+            radius_init = 0.0
+            for l, layer in enumerate(self.decoder.layers):
+                if l == self.decoder.D:
+                    if not inside_out:
+                        nn.init.normal_(layer.weight, mean=np.sqrt(np.pi) / np.sqrt(layer.in_features), std=0.0001)
+                        nn.init.constant_(layer.bias, -1 * radius_init)
+                    else:
+                        nn.init.normal_(layer.weight, mean=-np.sqrt(np.pi) / np.sqrt(layer.in_features), std=0.0001)
+                        nn.init.constant_(layer.bias, radius_init)
+                elif l == 0:
+                    nn.init.zeros_(layer.bias)
+                    nn.init.zeros_(layer.weight)
+                    # NOTE: Concat order: [grid_feature, embed_x]
+                    #       The first 3 dim of embed_x is original x input.
+                    nn.init.normal_(layer.weight[:, -n_extra_embed_ch:], mean=0., std=np.sqrt(2) / np.sqrt(layer.out_features))
+                else:
+                    nn.init.zeros_(layer.bias)
+                    nn.init.normal_(layer.weight, mean=0.0, std=np.sqrt(2) / np.sqrt(layer.out_features))
+        elif self.geo_init_method == 'road_surface':
+            # NOTE: For lotd-annealing, set zero to non-active part of decoder input at start
+            if self.encoding.annealer is not None:
+                start_level = self.encoding.annealer.start_level
+                start_n_feats = sum(self.encoding.lotd.level_n_feats[:start_level+1])
+            with torch.no_grad():
+                nn.init.zeros_(self.decoder.layers[0].weight[:, start_n_feats:])
+                
+            
+
 
 
         
@@ -245,7 +269,7 @@ class NeRF(nn.Module):
             h = torch.cat([h, plane_feat], dim=-1)
             
         if self.sdf_include_input:
-            h = torch.cat([position, h], dim=-1)
+            h = torch.cat([h, position], dim=-1)
         sdf_output = self.decoder(h)   # sdf + rgb_use_feature
         
         return sdf_output
@@ -362,27 +386,6 @@ class NeRF(nn.Module):
                 out_dim = self.layer_dim
             # sigma_nets.append(nn.Linear(in_dim, out_dim, bias=False))
             sigma_nets.append(nn.Linear(in_dim, out_dim))
-
-            if self.geometric_init:
-                    if l == self.num_layers - 1:
-                        torch.nn.init.normal_(sigma_nets[l].weight, mean=np.sqrt(np.pi) / np.sqrt(in_dim), std=0.0001)
-                        torch.nn.init.constant_(sigma_nets[l].bias, 0)     
-
-                    elif l==0:
-                        if self.sdf_include_input:
-                            torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
-                            torch.nn.init.normal_(sigma_nets[l].weight[:, :3], 0.0, np.sqrt(2) / np.sqrt(out_dim))
-                            torch.nn.init.constant_(sigma_nets[l].weight[:, 3:], 0.0)
-                        else:
-                            torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
-                            torch.nn.init.normal_(sigma_nets[l].weight[:, :], 0.0, np.sqrt(2) / np.sqrt(out_dim))
-
-                    else:
-                        torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
-                        torch.nn.init.normal_(sigma_nets[l].weight[:, :], 0.0, np.sqrt(2) / np.sqrt(out_dim))
-
-            if self.weight_norm:
-                sigma_nets[l] = nn.utils.weight_norm(sigma_nets[l])
         sigma_net = nn.ModuleList(sigma_nets)  # 两层全连接
         #---------------------------------------
 

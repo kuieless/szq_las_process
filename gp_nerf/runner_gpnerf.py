@@ -52,6 +52,11 @@ from gp_nerf.eval_utils import prepare_depth_normal_visual
 from gp_nerf.sa3d_utils import seg_loss, _generate_index_matrix, prompting_coarse_N, prompting_coarse
 from tools.segment_anything import sam_model_registry, SamPredictor
 
+from typing import Literal, Union
+from nr3d_lib.logger import Logger
+from nr3d_lib.models.loss.safe import safe_mse_loss
+from gp_nerf.sample_bg import contract_to_unisphere_new
+
 
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 
@@ -282,6 +287,7 @@ class Runner:
                 self.wandb.log({"parameters/fg": fg_parameters})
                 self.wandb.log({"parameters/bg": bg_parameters})
 
+
     def train(self):
 
         self._setup_experiment_dir()
@@ -473,6 +479,9 @@ class Runner:
                 else:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=16,
                                                 pin_memory=False)
+            if train_iterations == 0 and self.hparams.geo_init_method == 'road_surface' and self.hparams.network_type == 'sdf_nr3d':
+                self.pretrain_sdf_road_surface(floor_up_sign=1, ego_height=0)
+            
             for dataset_index, item in enumerate(data_loader): #, start=10462):
                 # if dataset_index < 48000:
                 #     train_iterations += 1
@@ -2046,3 +2055,122 @@ class Runner:
 
 
     
+    
+    def pretrain_sdf_road_surface(
+        self, 
+        num_iters=5000, num_points=5000, 
+        lr=1.0e-4, w_eikonal=1.0e-3, 
+        safe_mse = True, clip_grad_val: float = 0.1, optim_cfg = {}, 
+        # Shape configs
+        # # e.g. For waymo, +z points to sky, and ego_car is about 0.5m. Hence, floor_dim='z', floor_up_sign=1, ego_height=0.5
+        floor_dim: Literal['x','y','z'] = 'x', # The vertical dimension of obj coords
+        floor_up_sign: Literal[1, -1]=-1, # [-1] if (-)dim points to sky else [1]
+        ego_height: float = 0., # Estimated ego's height from road, in obj coords space
+        # Debug & logging related
+        logger: Logger=None, log_prefix: str=None, debug_param_detail=False):
+
+        num_point_each_img = 1024
+        pts_3d = []
+        for idx in range(len(self.train_items)):
+            metadata_item = self.train_items[idx]
+            depth_map = metadata_item.load_depth_dji()
+
+            H, W = depth_map.shape[:2]
+            directions = get_ray_directions(W,
+                                        H,
+                                        metadata_item.intrinsics[0],
+                                        metadata_item.intrinsics[1],
+                                        metadata_item.intrinsics[2],
+                                        metadata_item.intrinsics[3],
+                                        self.hparams.center_pixels,
+                                        'cpu')
+            depth_scale = torch.abs(directions[:, :, 2:3]) # z-axis's values
+            depth_map = (depth_map * depth_scale).numpy()
+            K1 = metadata_item.intrinsics
+            K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
+            E1 = np.array(metadata_item.c2w)
+            E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+
+            for p in range(num_point_each_img):
+                x, y = random.randint(0, W-1), random.randint(0, H-1)
+                depth = depth_map[y, x]   #* 0.5
+                if torch.isinf(torch.from_numpy(depth)):
+                    continue
+                pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
+                pt_3d = np.append(pt_3d, 1)
+                world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
+                pts_3d.append(world_point[:3])
+
+        pts_3d = torch.from_numpy(np.array(pts_3d)).to(self.device)
+        tracks_in_obj = contract_to_unisphere_new(pts_3d, self.hparams)
+        """
+        Pretrain sdf to be a road surface
+        """
+        floor_dim: int = ['x','y','z'].index(floor_dim)
+        other_dims = [i for i in range(3) if i != floor_dim]
+        
+        device = self.device
+        sdf_parameters = list(self.nerf.encoding.parameters())  \
+                       + list(self.nerf.plane_encoder.parameters())  \
+                       + list(self.nerf.decoder.parameters())
+        optimizer = Adam(sdf_parameters, lr=lr, **optim_cfg)
+        scaler = GradScaler(init_scale=128.0)
+        
+        # implicit_surface.preprocess_per_train_step(0)
+        self.nerf.encoding.set_anneal_iter(0)
+        
+        if safe_mse:
+            loss_eikonal_fn = lambda x: safe_mse_loss(x, x.new_ones(x.shape), reduction='mean', limit=1.0)
+        else:
+            loss_eikonal_fn = lambda x: F.mse_loss(x, x.new_ones(x.shape), reduction='mean')
+        
+        # tracks_in_net = implicit_surface.space.normalize_coords(tracks_in_obj)
+        
+        # if log_prefix is None: 
+        #     log_prefix = implicit_surface.__class__.__name__
+        
+        with torch.enable_grad():
+            with tqdm(range(num_iters), desc=f"=> Pretraining SDF...") as pbar:
+                for it in pbar:
+                    samples_in_net = torch.empty([num_points,3], dtype=torch.float, device=device).uniform_(-1, 1)
+                    samples_in_obj = self.nerf.encoding.space.unnormalize_coords(samples_in_net)
+                    
+                    # For each sample point, find the track point of the minimum distance (measured in 3D space.)
+                    # # [num_points, 1, 3] - [1, num_tracks, 3] = [num_points, num_tracks, 3] -> [num_points, num_tracks] -> [num_samples]
+                    # ret_min_dis_in_obj = (samples_in_obj.unsqueeze(-2) - tracks_in_obj.unsqueeze(0)).norm(dim=-1).min(dim=-1)
+                    
+                    # For each sample point, find the track point of the minimum distance (measure at 2D space. i.e. xoy plane for floor_dim=z)
+                    # [num_points, 1, 3] - [1, num_tracks, 3] = [num_points, num_tracks, 3] -> [num_points, num_tracks] -> [num_samples]
+                    ret_min_dis_in_obj = (samples_in_obj[..., None, other_dims] - tracks_in_obj[None, ..., other_dims]).norm(dim=-1).min(dim=-1)
+
+                    # For each sample point, current floor'z coordinate of floor_dim
+                    floor_at_in_obj = tracks_in_obj[ret_min_dis_in_obj.indices][..., floor_dim] - floor_up_sign * ego_height
+                    sdf_gt_in_obj = floor_up_sign * (samples_in_obj[..., floor_dim] - floor_at_in_obj)
+                    
+                    #---- Convert SDF GT value in real-world object's unit to network's unit
+                    sdf_gt = sdf_gt_in_obj / self.nerf.sdf_scale
+                    
+                    pred_sdf, feature_vector, pred_nablas = self.nerf.forward_sdf_nablas(samples_in_net, nablas_has_grad=True)
+                    pred_sdf = pred_sdf
+                    nablas_norm = pred_nablas.norm(dim=-1)
+                    loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * loss_eikonal_fn(nablas_norm)
+                    
+                    optimizer.zero_grad()
+                    
+                    # loss.backward()
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    if clip_grad_val > 0:
+                        torch.nn.utils.clip_grad.clip_grad_value_(sdf_parameters, clip_grad_val)
+                    
+                    # optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    
+                    # pbar.set_postfix(loss=loss.item())
+                    # if logger is not None:
+                    #     logger.add(f"initialize", log_prefix + '.loss', loss.item(), it)
+                    #     logger.add_nested_dict("initialize", log_prefix + '.sdf', tensor_statistics(pred_sdf), it)
+                    #     logger.add_nested_dict("initialize", log_prefix + '.nablas_norm', tensor_statistics(nablas_norm), it)
+                    #     if debug_param_detail:
+                    #         logger.add_nested_dict("initialize", log_prefix + '.encoding', implicit_surface.encoding.stat_param(with_grad=True), it)

@@ -32,6 +32,8 @@ def get_opts_base():
     parser.add_argument('--use_plane', default=True, type=eval, choices=[True, False])
     parser.add_argument('--sdf_include_input', default=True, type=eval, choices=[True, False])
     parser.add_argument('--nr3d_nablas', default=False, type=eval, choices=[True, False])
+    parser.add_argument('--geo_init_method', default='idr', type=str, choices=['idr', 'road_surface'], help='')
+
 
 
     # depth_dji_loss

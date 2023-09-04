@@ -52,7 +52,7 @@ class NeRF(nn.Module):
         #sdf 
         print("sdf")
         self.sdf_include_input = hparams.sdf_include_input
-        self.geometric_init = True
+        self.geo_init_method = hparams.geo_init_method
         self.weight_norm = True
         self.deviation_net = SingleVarianceNetwork(0.3)
         self.activation = nn.Softplus(beta=100)
@@ -248,23 +248,23 @@ class NeRF(nn.Module):
             # sigma_nets.append(nn.Linear(in_dim, out_dim, bias=False))
             sigma_nets.append(nn.Linear(in_dim, out_dim))
 
-            if self.geometric_init:
-                    if l == self.num_layers - 1:
-                        torch.nn.init.normal_(sigma_nets[l].weight, mean=np.sqrt(np.pi) / np.sqrt(in_dim), std=0.0001)
-                        torch.nn.init.constant_(sigma_nets[l].bias, 0)     
+            if self.geo_init_method == 'idr':
+                if l == self.num_layers - 1:
+                    torch.nn.init.normal_(sigma_nets[l].weight, mean=np.sqrt(np.pi) / np.sqrt(in_dim), std=0.0001)
+                    torch.nn.init.constant_(sigma_nets[l].bias, 0)     
 
-                    elif l==0:
-                        if self.sdf_include_input:
-                            torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
-                            torch.nn.init.normal_(sigma_nets[l].weight[:, :3], 0.0, np.sqrt(2) / np.sqrt(out_dim))
-                            torch.nn.init.constant_(sigma_nets[l].weight[:, 3:], 0.0)
-                        else:
-                            torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
-                            torch.nn.init.normal_(sigma_nets[l].weight[:, :], 0.0, np.sqrt(2) / np.sqrt(out_dim))
-
+                elif l==0:
+                    if self.sdf_include_input:
+                        torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
+                        torch.nn.init.normal_(sigma_nets[l].weight[:, :3], 0.0, np.sqrt(2) / np.sqrt(out_dim))
+                        torch.nn.init.constant_(sigma_nets[l].weight[:, 3:], 0.0)
                     else:
                         torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
                         torch.nn.init.normal_(sigma_nets[l].weight[:, :], 0.0, np.sqrt(2) / np.sqrt(out_dim))
+
+                else:
+                    torch.nn.init.constant_(sigma_nets[l].bias, 0.0)
+                    torch.nn.init.normal_(sigma_nets[l].weight[:, :], 0.0, np.sqrt(2) / np.sqrt(out_dim))
 
             if self.weight_norm:
                 sigma_nets[l] = nn.utils.weight_norm(sigma_nets[l])
