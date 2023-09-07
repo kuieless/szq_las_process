@@ -108,6 +108,7 @@ def render_rays(nerf: nn.Module,
         mesh_sample2 = s_near * (1 - z_2) + s_far * z_2
         mesh_sample3 = s_far * (1 - z_3) + far_ellipsoid[valid_depth_mask] * z_3
         z_vals_inbound[valid_depth_mask] = torch.cat([mesh_sample1, mesh_sample2, mesh_sample3], dim=1)
+        # z_vals_inbound[valid_depth_mask] = torch.cat([torch.zeros_like(mesh_sample1), mesh_sample2, torch.zeros_like(mesh_sample3)], dim=1)
         z_vals_inbound, _ = torch.sort(z_vals_inbound, -1)
 
 

@@ -52,10 +52,18 @@ from gp_nerf.eval_utils import prepare_depth_normal_visual
 from gp_nerf.sa3d_utils import seg_loss, _generate_index_matrix, prompting_coarse_N, prompting_coarse
 from tools.segment_anything import sam_model_registry, SamPredictor
 
+# nr3d_sdf
 from typing import Literal, Union
 from nr3d_lib.logger import Logger
 from nr3d_lib.models.loss.safe import safe_mse_loss
 from gp_nerf.sample_bg import contract_to_unisphere_new
+import trimesh
+from scripts.extract_mesh_sdf import extract_geometry
+from scripts.visualize_points import visualize_points
+import open3d as o3d
+import matplotlib.pyplot as plt
+from scipy.spatial import Delaunay
+from scipy.spatial import cKDTree
 
 
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
@@ -479,9 +487,12 @@ class Runner:
                 else:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=16,
                                                 pin_memory=False)
-            if train_iterations == 0 and self.hparams.geo_init_method == 'road_surface' and self.hparams.network_type == 'sdf_nr3d':
-                self.pretrain_sdf_road_surface(floor_up_sign=1, ego_height=0)
-            
+            if train_iterations == 0 and self.hparams.network_type == 'sdf_nr3d':
+                if self.hparams.geo_init_method == 'road_surface':
+                    self.pretrain_sdf_road_surface_3d(floor_up_sign=-1, ego_height=0)
+                torch.cuda.empty_cache()
+                with torch.no_grad():
+                    self.visualize_sdf_surface(self.nerf, save_path='./output/sdf.obj', resolution=256, threshold=0, device=self.device)
             for dataset_index, item in enumerate(data_loader): #, start=10462):
                 # if dataset_index < 48000:
                 #     train_iterations += 1
@@ -2069,7 +2080,7 @@ class Runner:
         # Debug & logging related
         logger: Logger=None, log_prefix: str=None, debug_param_detail=False):
 
-        num_point_each_img = 1024
+        num_point_each_img = 512
         pts_3d = []
         for idx in range(len(self.train_items)):
             metadata_item = self.train_items[idx]
@@ -2085,7 +2096,8 @@ class Runner:
                                         self.hparams.center_pixels,
                                         'cpu')
             depth_scale = torch.abs(directions[:, :, 2:3]) # z-axis's values
-            depth_map = (depth_map * depth_scale).numpy()
+            # depth_map = (depth_map * depth_scale).numpy()   #  这里depth_dji_mesh出来的深度可以直接用，表示z
+            depth_map = depth_map.numpy()
             K1 = metadata_item.intrinsics
             K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
             E1 = np.array(metadata_item.c2w)
@@ -2102,6 +2114,13 @@ class Runner:
                 pts_3d.append(world_point[:3])
 
         pts_3d = torch.from_numpy(np.array(pts_3d)).to(self.device)
+        pts_3d[:,0:1] = pts_3d.mean(0)[0].expand_as(pts_3d[:,0:1])
+        # pts_3d[:,0:1] = pts_3d.min(0).values[0].expand_as(pts_3d[:,0:1])
+
+        
+
+        # visualize_points_list = [pts_3d.view(-1, 3).cpu().numpy()]
+        # visualize_points(visualize_points_list)
         tracks_in_obj = contract_to_unisphere_new(pts_3d, self.hparams)
         """
         Pretrain sdf to be a road surface
@@ -2149,6 +2168,7 @@ class Runner:
                     
                     #---- Convert SDF GT value in real-world object's unit to network's unit
                     sdf_gt = sdf_gt_in_obj / self.nerf.sdf_scale
+                    # sdf_gt = sdf_gt_in_obj / 25
                     
                     pred_sdf, feature_vector, pred_nablas = self.nerf.forward_sdf_nablas(samples_in_net, nablas_has_grad=True)
                     pred_sdf = pred_sdf
@@ -2174,3 +2194,224 @@ class Runner:
                     #     logger.add_nested_dict("initialize", log_prefix + '.nablas_norm', tensor_statistics(nablas_norm), it)
                     #     if debug_param_detail:
                     #         logger.add_nested_dict("initialize", log_prefix + '.encoding', implicit_surface.encoding.stat_param(with_grad=True), it)
+    
+    def pretrain_sdf_road_surface_3d(
+        self, 
+        num_iters=5000, num_points=5000, 
+        lr=1.0e-4, w_eikonal=1.0e-3, 
+        safe_mse = True, clip_grad_val: float = 0.1, optim_cfg = {}, 
+        floor_dim: Literal['x','y','z'] = 'x', # The vertical dimension of obj coords
+        floor_up_sign: Literal[1, -1]=-1, # [-1] if (-)dim points to sky else [1]
+        ego_height: float = 0., # Estimated ego's height from road, in obj coords space
+        logger: Logger=None, log_prefix: str=None, debug_param_detail=False):
+
+        # 读取mesh表面， 获取顶点法线，  提取法线方向朝向+x的上表面点
+        mesh = trimesh.load_mesh('/data/yuqi/code/GP-NeRF-semantic/data/mesh_subset_nerfcoor.obj')
+        
+        vertex_normals = mesh.vertex_normals
+        pts_3d = mesh.vertices[vertex_normals[:, 0] <= 0]
+        upper_surface_normal = vertex_normals[vertex_normals[:, 0] <= 0]
+        
+        min_altitude = pts_3d.min(0)[0]
+        min_altitude = (min_altitude - self.hparams.stretch[0][0]) / (self.hparams.stretch[1][0] - self.hparams.stretch[0][0])   
+
+
+        # sample_points, face_indices = trimesh.sample.sample_surface(mesh, 10000000)
+        # sample_normals = mesh.face_normals[face_indices]
+        # pts_3d_2 = sample_points[sample_normals[:, 0] < 0]
+        # upper_surface_normal_2 = sample_normals[sample_normals[:, 0] < 0]
+        
+        # upper_surface_normal_2 = upper_surface_normal_2[(pts_3d_2 >= self.hparams.stretch[0].cpu().numpy()*1.1).all(axis=1) & (pts_3d_2 <= self.hparams.stretch[1].cpu().numpy()*1.1).all(axis=1)]
+        # pts_3d_2 = pts_3d_2[(pts_3d_2 >= self.hparams.stretch[0].cpu().numpy()*1.1).all(axis=1) & (pts_3d_2 <= self.hparams.stretch[1].cpu().numpy()*1.1).all(axis=1)]  # 只要bound内的点
+        # del sample_points, face_indices, sample_normals, mesh
+        # pts_3d = np.concatenate([pts_3d, pts_3d_2], 0)
+        # upper_surface_normal = np.concatenate([upper_surface_normal, upper_surface_normal_2], 0)
+
+
+
+        # vi = np.concatenate([pts_3d, upper_surface_normal],1)
+        # vi = torch.from_numpy(np.array(vi)).to(self.device)
+        # visualize_points_list = [vi.cpu().numpy()]
+        # visualize_points(visualize_points_list)
+
+        # num_point_each_img = 512
+        # pts_3d = []
+        # for idx in range(len(self.train_items)):
+        #     metadata_item = self.train_items[idx]
+        #     depth_map = metadata_item.load_depth_dji()
+
+        #     H, W = depth_map.shape[:2]
+        #     directions = get_ray_directions(W,
+        #                                 H,
+        #                                 metadata_item.intrinsics[0],
+        #                                 metadata_item.intrinsics[1],
+        #                                 metadata_item.intrinsics[2],
+        #                                 metadata_item.intrinsics[3],
+        #                                 self.hparams.center_pixels,
+        #                                 'cpu')
+        #     depth_scale = torch.abs(directions[:, :, 2:3]) # z-axis's values
+        #     # depth_map = (depth_map * depth_scale).numpy()   #  这里depth_dji_mesh出来的深度可以直接用，表示z
+        #     depth_map = depth_map.numpy()
+        #     K1 = metadata_item.intrinsics
+        #     K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
+        #     E1 = np.array(metadata_item.c2w)
+        #     E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+
+        #     for p in range(num_point_each_img):
+        #         x, y = random.randint(0, W-1), random.randint(0, H-1)
+        #         depth = depth_map[y, x]   #* 0.5
+        #         if torch.isinf(torch.from_numpy(depth)):
+        #             continue
+        #         pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
+        #         pt_3d = np.append(pt_3d, 1)
+        #         world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
+        #         pts_3d.append(world_point[:3])
+
+        pts_3d = torch.from_numpy(np.array(pts_3d)).to(self.device)
+        # pts_3d = pts_3d[(pts_3d >= self.hparams.stretch[0]*1.1).all(axis=1) & (pts_3d <= self.hparams.stretch[1]*1.1).all(axis=1)]  # 只要bound内的点
+
+
+        
+
+
+        # visualize_points_list = [pts_3d.cpu().numpy()]
+        # visualize_points(visualize_points_list)
+        tracks_in_obj = (contract_to_unisphere_new(pts_3d, self.hparams)).float()
+        # tracks_in_obj = tracks_in_obj[(tracks_in_obj >= -1).all(axis=1) & (tracks_in_obj <= 1).all(axis=1)]  # 只要bound内的点
+
+
+        device = self.device
+        sdf_parameters = list(self.nerf.encoding.parameters())  \
+                       + list(self.nerf.plane_encoder.parameters())  \
+                       + list(self.nerf.decoder.parameters())
+        optimizer = Adam(sdf_parameters, lr=lr, **optim_cfg)
+        scaler = GradScaler(init_scale=128.0)
+        
+        # implicit_surface.preprocess_per_train_step(0)
+        self.nerf.encoding.set_anneal_iter(0)
+        
+        if safe_mse:
+            loss_eikonal_fn = lambda x: safe_mse_loss(x, x.new_ones(x.shape), reduction='mean', limit=1.0)
+        else:
+            loss_eikonal_fn = lambda x: F.mse_loss(x, x.new_ones(x.shape), reduction='mean')
+        
+        
+        with torch.enable_grad():
+            with tqdm(range(num_iters), desc=f"=> Pretraining SDF...") as pbar:
+                for it in pbar:
+                    samples_in_net = torch.empty([num_points,3], dtype=torch.float, device=device).uniform_(-1, 1)
+                    # samples_in_obj = self.nerf.encoding.space.unnormalize_coords(samples_in_net)
+                    
+
+                    # kdtree_B = cKDTree(tracks_in_obj.cpu().numpy())
+                    # nearest_distances, nearest_indices = kdtree_B.query(samples_in_net.cpu().numpy(), k=1)
+                    
+                    nearest_distances = torch.cdist(samples_in_net, tracks_in_obj)
+                    nearest_indices = torch.argmin(nearest_distances, dim=1)
+
+
+                    # 计算与最近点的距离， 符号由法线的朝向决定， 这里负值向天空
+                    floor_at_in_obj = tracks_in_obj[nearest_indices]
+                    sdf_gt_in_obj = (samples_in_net - floor_at_in_obj).norm(dim=-1)
+
+
+                    derection_vector = (samples_in_net - floor_at_in_obj)
+                    mesh_normal = torch.from_numpy(upper_surface_normal[nearest_indices.cpu().numpy()]).to(self.device)
+                    dot_product = torch.sum(derection_vector * mesh_normal, axis=1)
+                    sign_adjust = torch.where((dot_product > 0) | (samples_in_net[:,0] < min_altitude), 1, -1)
+                    # sign_adjust = torch.where(dot_product > 0, 1, -1)
+                    sdf_gt_in_obj = sign_adjust * sdf_gt_in_obj
+
+
+                    #---- Convert SDF GT value in real-world object's unit to network's unit
+                    sdf_gt = sdf_gt_in_obj / self.nerf.sdf_scale
+                    # sdf_gt = sdf_gt_in_obj / 25
+                    
+                    # 1. nablas
+                    pred_sdf, feature_vector, pred_nablas = self.nerf.forward_sdf_nablas(samples_in_net, nablas_has_grad=True)
+                    pred_sdf = pred_sdf
+                    nablas_norm = pred_nablas.norm(dim=-1)
+                    # # 2. neus
+                    # sdf_nn_output= self.nerf.forward_sdf(samples_in_net)
+                    # pred_sdf = sdf_nn_output[:, :1]
+                    # gradient = self.nerf.gradient(samples_in_net, 0.005).squeeze()
+                    # nablas_norm =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal，做了一个归一化
+
+                    loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * loss_eikonal_fn(nablas_norm)
+                    
+                    optimizer.zero_grad()
+                    
+                    # loss.backward()
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    if clip_grad_val > 0:
+                        torch.nn.utils.clip_grad.clip_grad_value_(sdf_parameters, clip_grad_val)
+                    
+                    # optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    
+
+    def visualize_sdf_surface(self, nerf, save_path, resolution, threshold, device=None):
+        print(f"==> Saving mesh to {save_path}")
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        def query_func(pts):
+            with torch.no_grad():
+                with torch.cuda.amp.autocast(enabled=True):
+                    sdf, feature_vector, gradient= nerf.forward_sdf_nablas(pts.to(device))
+
+                    # sdf_nn_output= self.nerf.forward_sdf(pts.to(device))
+                    # sdf = sdf_nn_output[:, :1]
+            return sdf
+        
+        aabb = self.hparams.stretch
+        aabb_min, aabb_max = aabb[0], aabb[1]
+
+        bound=1
+        bound_min = torch.FloatTensor([-bound] * 3)
+        bound_max = torch.FloatTensor([bound] * 3)
+
+        # bounds_min = torch.FloatTensor([0.2, -1, -1])
+        # bounds_max = torch.FloatTensor([1, 1, 1])
+
+        
+        vertices, triangles, u = extract_geometry(bound_min, bound_max, resolution=resolution, threshold=threshold, query_func = query_func, use_sdf = True)
+        self.save_geometry(vertices, triangles, aabb_max, aabb_min, save_path[:-4]+f'_{threshold}.obj')
+
+        # threshold = u.max()
+        # # 为点云创建坐标网格
+        # x, y, z = np.meshgrid(np.arange(255), np.arange(255), np.arange(255))
+        # x = x.flatten()
+        # y = y.flatten()
+        # z = z.flatten()
+        # vmin = u.min()
+        # vmax = u.max()
+        # # 将SDF值和坐标连接成点云
+        # points = np.vstack((x, y, z)).T
+
+        # b_max_np = bound_max.detach().cpu().numpy()
+        # b_min_np = bound_min.detach().cpu().numpy()
+        # points = points / (resolution - 1.0) * (b_max_np - b_min_np)[None, :] + b_min_np[None, :]
+        # points = (points+1)/2
+        # points = points * (aabb_max.cpu().numpy() - aabb_min.cpu().numpy()) + aabb_min.cpu().numpy()
+
+        # cmap = plt.get_cmap('viridis')
+        # colors = cmap((u - vmin) / (vmax - vmin))[..., :3]  # 将SDF值映射到颜色
+
+        # # 创建TriangleMesh对象
+        # mesh = o3d.geometry.TriangleMesh()
+        # mesh.vertices = o3d.utility.Vector3dVector(points)
+        # mesh.vertex_colors = o3d.utility.Vector3dVector((colors*255).reshape(-1,3))
+
+        # # 保存点云到PLY文件
+        # o3d.io.write_triangle_mesh("point_cloud.ply", mesh)
+
+
+
+    def save_geometry(self, vertices, triangles, aabb_max, aabb_min, save_path):
+        vertices = (vertices+1)/2
+        vertices = vertices * (aabb_max.cpu().numpy() - aabb_min.cpu().numpy()) + aabb_min.cpu().numpy()
+        mesh = trimesh.Trimesh(vertices, triangles, process=False) # important, process=True leads to seg fault...
+        mesh.export(save_path)
+
+        print(f"==> Finished saving mesh.")

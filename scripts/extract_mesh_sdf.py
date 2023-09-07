@@ -43,7 +43,7 @@ def extract_geometry(bound_min, bound_max, resolution, threshold, query_func, us
     b_min_np = bound_min.detach().cpu().numpy()
 
     vertices = vertices / (resolution - 1.0) * (b_max_np - b_min_np)[None, :] + b_min_np[None, :]
-    return vertices, triangles
+    return vertices, triangles, u
 
 
 def save_mesh(nerf, device, save_path=None, resolution= 256, bound=1, threshold=0.,  use_sdf = False):
@@ -71,7 +71,7 @@ def save_mesh(nerf, device, save_path=None, resolution= 256, bound=1, threshold=
         bounds_min = torch.FloatTensor([0.2, -1, -1])
         bounds_max = torch.FloatTensor([1, 1, 1])
 
-        vertices, triangles = extract_geometry(bounds_min, bounds_max, resolution=resolution, threshold=threshold, query_func = query_func, use_sdf = use_sdf)
+        vertices, triangles, _ = extract_geometry(bounds_min, bounds_max, resolution=resolution, threshold=threshold, query_func = query_func, use_sdf = use_sdf)
         
         # align camera
         vertices = np.concatenate([vertices[:,2:3], vertices[:,0:1], vertices[:,1:2]], axis=-1)

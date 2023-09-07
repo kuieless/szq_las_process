@@ -286,9 +286,9 @@ def _get_opts():
     parser.add_argument('--img_w', default=5472, type=int, help='')
     parser.add_argument('--down', default=4, type=float, help='')
     parser.add_argument('--camera_type', default='perspective', help='')
-    parser.add_argument('--save_mesh', default=False, action='store_true')
+    parser.add_argument('--save_mesh', default=True, action='store_true')
     parser.add_argument('--visualize', default=False, action='store_true')
-    parser.add_argument('--split', default='val', help='')
+    parser.add_argument('--split', default='train', help='')
 
     return parser.parse_known_args()[0]
 

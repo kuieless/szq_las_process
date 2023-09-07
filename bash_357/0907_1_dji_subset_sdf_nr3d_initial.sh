@@ -1,8 +1,8 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=4
 
-exp_name=logs_dji/0904_4_dji_subset_sdf_nr3d_initial
+exp_name=logs_dji/0907_1_dji_subset_sdf_nr3d_initial
 
 dataset_path=/data/yuqi/Datasets/DJI/subset
 config_file=dji/cuhksz_ray_xml.yaml
@@ -19,6 +19,7 @@ dataset_type=memory_depth_dji
 enable_semantic=False
 use_scaling=False
 sampling_mesh_guidance=True
+
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
     --network_type   $network_type   --config_file  $config_file   \

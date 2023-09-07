@@ -46,7 +46,7 @@ class NeRF(nn.Module):
                  xyz_dim: int,  # xyz_dim : fg = 3, bg =4
                  sigma_activation: nn.Module, hparams):
         super(NeRF, self).__init__()
-        self.sdf_scale = 1    # 1 / hparams.pose_scale_factor
+        self.sdf_scale = 1 # float(hparams.pose_scale_factor)
 
         #semantic
         self.enable_semantic = hparams.enable_semantic

@@ -13,9 +13,11 @@ def visualize_points(points, size=0.04):
         if point.shape[0] == 0:
             continue
         pcd_o3d = o3d.geometry.PointCloud()
-        pcd_o3d.points = o3d.utility.Vector3dVector(point)
+        pcd_o3d.points = o3d.utility.Vector3dVector(point[:,0:3])
         pcd_o3d.paint_uniform_color(get_color(i))
-        # np.savetxt('data_points_{}.txt'.format(i), point)
+        if point.shape[1]==6:
+            pcd_o3d.normals = o3d.utility.Vector3dVector(point[:,3:6])
+
         # if i==0:
         o3d.io.write_point_cloud('./0808_box_{}.ply'.format(i), pcd_o3d)
         point_visual.append(pcd_o3d)
