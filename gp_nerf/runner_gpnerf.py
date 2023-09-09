@@ -2212,14 +2212,14 @@ class Runner:
 
 
 
-        mesh = trimesh.load_mesh(self.hparams.mesh_path)
-        vertex_normals = mesh.vertex_normals
-        pts_3d = mesh.vertices[vertex_normals[:, 0] <= 0]
-        upper_surface_normal = vertex_normals[vertex_normals[:, 0] <= 0]
-        min_altitude = pts_3d.min(0)[0]
-        min_altitude = (min_altitude - self.hparams.stretch[0][0]) / (self.hparams.stretch[1][0] - self.hparams.stretch[0][0])   
+        # mesh = trimesh.load_mesh(self.hparams.mesh_path)
+        # vertex_normals = mesh.vertex_normals
+        # pts_3d = mesh.vertices[vertex_normals[:, 0] <= 0]
+        # upper_surface_normal = vertex_normals[vertex_normals[:, 0] <= 0]
+        # min_altitude = pts_3d.min(0)[0]
+        # min_altitude = (min_altitude - self.hparams.stretch[0][0]) / (self.hparams.stretch[1][0] - self.hparams.stretch[0][0])   
 
-        num_point_each_img = 512
+        num_point_each_img = 128
         pts_3d = []
         for idx in range(len(self.train_items)):
             metadata_item = self.train_items[idx]
@@ -2304,7 +2304,7 @@ class Runner:
                     # For each sample point, current floor'z coordinate of floor_dim
                     floor_at_in_obj = tracks_in_obj[ret_min_dis_in_obj.indices][..., floor_dim] - floor_up_sign * ego_height
                     sdf_gt_in_obj = floor_up_sign * (samples_in_net[..., floor_dim] - floor_at_in_obj)
-                    sign_adjust = torch.where(samples_in_net[:,0] < min_altitude, True, False)
+                    # sign_adjust = torch.where(samples_in_net[:,0] < min_altitude, True, False)
                     # sdf_gt_in_obj[sign_adjust] = torch.abs(sdf_gt_in_obj[sign_adjust])
 
                     #---- Convert SDF GT value in real-world object's unit to network's unit
