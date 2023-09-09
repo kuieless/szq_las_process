@@ -30,8 +30,9 @@ def main(hparams: Namespace) -> None:
         hparams.use_neus_gradient=True
         hparams.layer_dim =256
     elif hparams.network_type == 'sdf_nr3d':
-        hparams.log2_hashmap_size=20
+        # hparams.log2_hashmap_size=20
         hparams.contract_new=True
+        hparams.sdf_include_input=False
         
     from gp_nerf.runner_gpnerf import Runner
     print(f"stop_semantic_grad:{hparams.stop_semantic_grad}")

@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=7
 
 
 dataset_path=/data/yuqi/Datasets/DJI/subset
@@ -21,9 +21,9 @@ sampling_mesh_guidance=True
 
 
 depth_dji_loss=True
-wgt_depth_mse_loss=0.01
+wgt_depth_mse_loss=0.001
 
-exp_name=logs_dji/0907_2_dji_subset_sdf_nr3d_initial_depth
+exp_name=logs_dji/0907_2_dji_subset_sdf_nr3d_initial_depth_$wgt_depth_mse_loss
 
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \

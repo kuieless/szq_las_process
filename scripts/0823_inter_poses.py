@@ -48,9 +48,14 @@ from pathlib import Path
 
 
 @click.command()
-@click.option('--data_dir', type=str, default='/data/yuqi/Datasets/MegaNeRF/residence_subset')
-@click.option('--key_poses', type=str, default='0,50,100,150')
-@click.option('--n_out_poses', type=int, default=60)
+# @click.option('--data_dir', type=str, default='/data/yuqi/Datasets/MegaNeRF/residence_subset')
+# @click.option('--key_poses', type=str, default='0,50,100,150')
+# @click.option('--n_out_poses', type=int, default=60)
+@click.option('--data_dir', type=str, default='/data/yuqi/Datasets/DJI/subset')
+@click.option('--key_poses', type=str, default='24,30')
+@click.option('--n_out_poses', type=int, default=30)
+
+# /data/yuqi/Datasets/DJI/subset
 
 def hello(data_dir, n_out_poses, key_poses):
 
@@ -64,18 +69,18 @@ def hello(data_dir, n_out_poses, key_poses):
     key_poses = np.array([int(_) for _ in key_poses.split(',')])
     key_poses_1 = poses[key_poses]
 
-    ###这里对所有图像使用相同的插值
-    key_poses_2 = []
-    for i in key_poses:
-        x_path = str(metadata_paths[i])
-        x_path = x_path.replace('residence_subset', 'UrbanScene3D/residence/residence-labels')
-        metadata = torch.load(x_path, map_location='cpu')
-        pose = np.array(metadata['c2w'])
-        key_poses_2.append(pose)
+    # ###这里对所有图像使用相同的插值
+    # key_poses_2 = []
+    # for i in key_poses:
+    #     x_path = str(metadata_paths[i])
+    #     # x_path = x_path.replace('residence_subset', 'UrbanScene3D/residence/residence-labels')
+    #     metadata = torch.load(x_path, map_location='cpu')
+    #     pose = np.array(metadata['c2w'])
+    #     key_poses_2.append(pose)
 
     
 
-    out_poses = inter_poses(key_poses_2, n_out_poses)
+    out_poses = inter_poses(key_poses_1, n_out_poses)
     out_poses = np.ascontiguousarray(out_poses.astype(np.float64))
 
 

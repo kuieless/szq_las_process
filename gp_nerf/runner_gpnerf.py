@@ -489,10 +489,10 @@ class Runner:
                                                 pin_memory=False)
             if train_iterations == 0 and self.hparams.network_type == 'sdf_nr3d':
                 if self.hparams.geo_init_method == 'road_surface':
-                    self.pretrain_sdf_road_surface_3d(floor_up_sign=-1, ego_height=0)
-                torch.cuda.empty_cache()
-                with torch.no_grad():
-                    self.visualize_sdf_surface(self.nerf, save_path='./output/sdf.obj', resolution=256, threshold=0, device=self.device)
+                    self.pretrain_sdf_road_surface_2d(floor_up_sign=-1, ego_height=0)
+                    torch.cuda.empty_cache()
+                    with torch.no_grad():
+                        self.visualize_sdf_surface(self.nerf, save_path='./output/sdf.obj', resolution=256, threshold=0, device=self.device)
             for dataset_index, item in enumerate(data_loader): #, start=10462):
                 # if dataset_index < 48000:
                 #     train_iterations += 1
@@ -1836,7 +1836,7 @@ class Runner:
 
             rays = rays.view(-1, 8).to(self.device, non_blocking=True).cuda()  # (H*W, 8)
             if self.hparams.render_zyq:
-                image_indices = 0 * torch.ones(rays.shape[0], device=rays.device)
+                image_indices = 8 * torch.ones(rays.shape[0], device=rays.device)
             else:
                 image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device) \
                     if self.hparams.appearance_dim > 0 else None
@@ -2080,6 +2080,8 @@ class Runner:
         # Debug & logging related
         logger: Logger=None, log_prefix: str=None, debug_param_detail=False):
 
+
+
         num_point_each_img = 512
         pts_3d = []
         for idx in range(len(self.train_items)):
@@ -2195,9 +2197,149 @@ class Runner:
                     #     if debug_param_detail:
                     #         logger.add_nested_dict("initialize", log_prefix + '.encoding', implicit_surface.encoding.stat_param(with_grad=True), it)
     
-    def pretrain_sdf_road_surface_3d(
+    def pretrain_sdf_road_surface_2d(
         self, 
         num_iters=5000, num_points=5000, 
+        lr=1.0e-4, w_eikonal=1.0e-3, 
+        safe_mse = True, clip_grad_val: float = 0.1, optim_cfg = {}, 
+        # Shape configs
+        # # e.g. For waymo, +z points to sky, and ego_car is about 0.5m. Hence, floor_dim='z', floor_up_sign=1, ego_height=0.5
+        floor_dim: Literal['x','y','z'] = 'x', # The vertical dimension of obj coords
+        floor_up_sign: Literal[1, -1]=-1, # [-1] if (-)dim points to sky else [1]
+        ego_height: float = 0., # Estimated ego's height from road, in obj coords space
+        # Debug & logging related
+        logger: Logger=None, log_prefix: str=None, debug_param_detail=False):
+
+
+
+        mesh = trimesh.load_mesh(self.hparams.mesh_path)
+        vertex_normals = mesh.vertex_normals
+        pts_3d = mesh.vertices[vertex_normals[:, 0] <= 0]
+        upper_surface_normal = vertex_normals[vertex_normals[:, 0] <= 0]
+        min_altitude = pts_3d.min(0)[0]
+        min_altitude = (min_altitude - self.hparams.stretch[0][0]) / (self.hparams.stretch[1][0] - self.hparams.stretch[0][0])   
+
+        num_point_each_img = 512
+        pts_3d = []
+        for idx in range(len(self.train_items)):
+            metadata_item = self.train_items[idx]
+            depth_map = metadata_item.load_depth_dji()
+
+            H, W = depth_map.shape[:2]
+            directions = get_ray_directions(W,
+                                        H,
+                                        metadata_item.intrinsics[0],
+                                        metadata_item.intrinsics[1],
+                                        metadata_item.intrinsics[2],
+                                        metadata_item.intrinsics[3],
+                                        self.hparams.center_pixels,
+                                        'cpu')
+            depth_scale = torch.abs(directions[:, :, 2:3]) # z-axis's values
+            # depth_map = (depth_map * depth_scale).numpy()   #  这里depth_dji_mesh出来的深度可以直接用，表示z
+            depth_map = depth_map.numpy()
+            K1 = metadata_item.intrinsics
+            K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
+            E1 = np.array(metadata_item.c2w)
+            E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+
+            for p in range(num_point_each_img):
+                x, y = random.randint(0, W-1), random.randint(0, H-1)
+                depth = depth_map[y, x]   #* 0.5
+                if torch.isinf(torch.from_numpy(depth)):
+                    continue
+                pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
+                pt_3d = np.append(pt_3d, 1)
+                world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
+                pts_3d.append(world_point[:3])
+
+        pts_3d = torch.from_numpy(np.array(pts_3d)).to(self.device)
+        # pts_3d[:,0:1] = pts_3d.mean(0)[0].expand_as(pts_3d[:,0:1])
+        # pts_3d[:,0:1] = pts_3d.min(0).values[0].expand_as(pts_3d[:,0:1])
+
+        
+
+        # visualize_points_list = [pts_3d.view(-1, 3).cpu().numpy()]
+        # visualize_points(visualize_points_list)
+        tracks_in_obj = contract_to_unisphere_new(pts_3d, self.hparams)
+        """
+        Pretrain sdf to be a road surface
+        """
+        floor_dim: int = ['x','y','z'].index(floor_dim)
+        other_dims = [i for i in range(3) if i != floor_dim]
+        
+        device = self.device
+        sdf_parameters = list(self.nerf.encoding.parameters())  \
+                       + list(self.nerf.plane_encoder.parameters())  \
+                       + list(self.nerf.decoder.parameters())
+        optimizer = Adam(sdf_parameters, lr=lr, **optim_cfg)
+        scaler = GradScaler(init_scale=128.0)
+        
+        # implicit_surface.preprocess_per_train_step(0)
+        self.nerf.encoding.set_anneal_iter(0)
+        
+        if safe_mse:
+            loss_eikonal_fn = lambda x: safe_mse_loss(x, x.new_ones(x.shape), reduction='mean', limit=1.0)
+        else:
+            loss_eikonal_fn = lambda x: F.mse_loss(x, x.new_ones(x.shape), reduction='mean')
+        
+        # tracks_in_net = implicit_surface.space.normalize_coords(tracks_in_obj)
+        
+        # if log_prefix is None: 
+        #     log_prefix = implicit_surface.__class__.__name__
+        
+        with torch.enable_grad():
+            with tqdm(range(num_iters), desc=f"=> Pretraining SDF...") as pbar:
+                for it in pbar:
+                    samples_in_net = torch.empty([num_points,3], dtype=torch.float, device=device).uniform_(-1, 1)
+                    # samples_in_obj = self.nerf.encoding.space.unnormalize_coords(samples_in_net)
+                    
+                    # For each sample point, find the track point of the minimum distance (measured in 3D space.)
+                    # # [num_points, 1, 3] - [1, num_tracks, 3] = [num_points, num_tracks, 3] -> [num_points, num_tracks] -> [num_samples]
+                    # ret_min_dis_in_obj = (samples_in_obj.unsqueeze(-2) - tracks_in_obj.unsqueeze(0)).norm(dim=-1).min(dim=-1)
+                    
+                    # For each sample point, find the track point of the minimum distance (measure at 2D space. i.e. xoy plane for floor_dim=z)
+                    # [num_points, 1, 3] - [1, num_tracks, 3] = [num_points, num_tracks, 3] -> [num_points, num_tracks] -> [num_samples]
+                    ret_min_dis_in_obj = (samples_in_net[..., None, other_dims] - tracks_in_obj[None, ..., other_dims]).norm(dim=-1).min(dim=-1)
+
+                    # For each sample point, current floor'z coordinate of floor_dim
+                    floor_at_in_obj = tracks_in_obj[ret_min_dis_in_obj.indices][..., floor_dim] - floor_up_sign * ego_height
+                    sdf_gt_in_obj = floor_up_sign * (samples_in_net[..., floor_dim] - floor_at_in_obj)
+                    sign_adjust = torch.where(samples_in_net[:,0] < min_altitude, True, False)
+                    # sdf_gt_in_obj[sign_adjust] = torch.abs(sdf_gt_in_obj[sign_adjust])
+
+                    #---- Convert SDF GT value in real-world object's unit to network's unit
+                    sdf_gt = sdf_gt_in_obj / self.nerf.sdf_scale
+                    # sdf_gt = sdf_gt_in_obj / 25
+                    
+                    pred_sdf, feature_vector, pred_nablas = self.nerf.forward_sdf_nablas(samples_in_net, nablas_has_grad=True)
+                    pred_sdf = pred_sdf
+                    nablas_norm = pred_nablas.norm(dim=-1)
+                    loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * loss_eikonal_fn(nablas_norm)
+                    
+                    optimizer.zero_grad()
+                    
+                    # loss.backward()
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    if clip_grad_val > 0:
+                        torch.nn.utils.clip_grad.clip_grad_value_(sdf_parameters, clip_grad_val)
+                    
+                    # optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    
+                    # pbar.set_postfix(loss=loss.item())
+                    # if logger is not None:
+                    #     logger.add(f"initialize", log_prefix + '.loss', loss.item(), it)
+                    #     logger.add_nested_dict("initialize", log_prefix + '.sdf', tensor_statistics(pred_sdf), it)
+                    #     logger.add_nested_dict("initialize", log_prefix + '.nablas_norm', tensor_statistics(nablas_norm), it)
+                    #     if debug_param_detail:
+                    #         logger.add_nested_dict("initialize", log_prefix + '.encoding', implicit_surface.encoding.stat_param(with_grad=True), it)
+    
+
+    def pretrain_sdf_road_surface_3d(
+        self, 
+        num_iters=1000, num_points=5000, 
         lr=1.0e-4, w_eikonal=1.0e-3, 
         safe_mse = True, clip_grad_val: float = 0.1, optim_cfg = {}, 
         floor_dim: Literal['x','y','z'] = 'x', # The vertical dimension of obj coords
@@ -2206,7 +2348,11 @@ class Runner:
         logger: Logger=None, log_prefix: str=None, debug_param_detail=False):
 
         # 读取mesh表面， 获取顶点法线，  提取法线方向朝向+x的上表面点
-        mesh = trimesh.load_mesh('/data/yuqi/code/GP-NeRF-semantic/data/mesh_subset_nerfcoor.obj')
+        # mesh = trimesh.load_mesh('/data/yuqi/code/GP-NeRF-semantic/data/mesh_subset_nerfcoor.obj')
+        # mesh = trimesh.load_mesh('/data/yuqi/code/GP-NeRF-semantic/data/mesh.obj')
+        mesh = trimesh.load_mesh(self.hparams.mesh_path)
+        
+
         
         vertex_normals = mesh.vertex_normals
         pts_3d = mesh.vertices[vertex_normals[:, 0] <= 0]
@@ -2268,7 +2414,7 @@ class Runner:
         #         pts_3d.append(world_point[:3])
 
         pts_3d = torch.from_numpy(np.array(pts_3d)).to(self.device)
-        # pts_3d = pts_3d[(pts_3d >= self.hparams.stretch[0]*1.1).all(axis=1) & (pts_3d <= self.hparams.stretch[1]*1.1).all(axis=1)]  # 只要bound内的点
+        # pts_3d = pts_3d[(pts_3d[:,1:] >= self.hparams.stretch[0][1:]*1.1).all(axis=1) & (pts_3d[:,1:] <= self.hparams.stretch[1][1:]*1.1).all(axis=1)]  # 只要bound内的点
 
 
         
@@ -2299,6 +2445,8 @@ class Runner:
         with torch.enable_grad():
             with tqdm(range(num_iters), desc=f"=> Pretraining SDF...") as pbar:
                 for it in pbar:
+                    # torch.cuda.empty_cache()
+
                     samples_in_net = torch.empty([num_points,3], dtype=torch.float, device=device).uniform_(-1, 1)
                     # samples_in_obj = self.nerf.encoding.space.unnormalize_coords(samples_in_net)
                     
@@ -2331,13 +2479,26 @@ class Runner:
                     pred_sdf, feature_vector, pred_nablas = self.nerf.forward_sdf_nablas(samples_in_net, nablas_has_grad=True)
                     pred_sdf = pred_sdf
                     nablas_norm = pred_nablas.norm(dim=-1)
-                    # # 2. neus
+                    gradient_error = loss_eikonal_fn(nablas_norm)
+                    loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * gradient_error
+
+                    # # # 2. neus
                     # sdf_nn_output= self.nerf.forward_sdf(samples_in_net)
                     # pred_sdf = sdf_nn_output[:, :1]
                     # gradient = self.nerf.gradient(samples_in_net, 0.005).squeeze()
-                    # nablas_norm =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal，做了一个归一化
+                    # # nablas_norm =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal，做了一个归一化
+                    # pts_norm = torch.linalg.norm(samples_in_net.reshape(-1, 3), ord=2, dim=-1, keepdim=True).reshape(-1)
+                    # inside_sphere = (pts_norm < 1.0).float().detach()
+                    # relax_inside_sphere = (pts_norm < 1.5).float().detach()
+                    # gradient_error = (torch.linalg.norm(gradient.reshape(num_points, 3), ord=2, dim=-1) - 1.0) ** 2
+                    # # gradient_error = (relax_inside_sphere * gradient_error).sum() / (relax_inside_sphere.sum() + 1e-5)
+                    # gradient_error = gradient_error.sum()
+                    # loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * gradient_error
+                    
+                    self.writer.add_scalar('sdf_initial/sdf_loss', F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean'), it)
+                    self.writer.add_scalar('sdf_initial/gradient_error', gradient_error, it)
 
-                    loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * loss_eikonal_fn(nablas_norm)
+
                     
                     optimizer.zero_grad()
                     

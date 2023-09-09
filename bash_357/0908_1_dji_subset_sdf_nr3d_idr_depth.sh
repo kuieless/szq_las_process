@@ -2,8 +2,10 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=5
 
-
+# 1. 测试idr, 复现0904的结果  
+# 2. 测试guidance的影响
 dataset_path=/data/yuqi/Datasets/DJI/subset
+mesh_path=/data/yuqi/code/GP-NeRF-semantic/data/mesh_subset_nerfcoor.obj
 config_file=dji/cuhksz_ray_xml.yaml
 
 
@@ -23,7 +25,7 @@ sampling_mesh_guidance=True
 depth_dji_loss=True
 wgt_depth_mse_loss=0.01
 
-exp_name=logs_dji/0907_2_dji_subset_sdf_nr3d_initial_depth
+exp_name=logs_dji/0908_1_dji_subset_sdf_nr3d_idr_depth
 
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
@@ -32,5 +34,6 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --train_iterations   $train_iterations   --val_interval  $val_interval   --ckpt_interval   $ckpt_interval  \
     --dataset_type $dataset_type     --use_scaling  $use_scaling  \
     --sampling_mesh_guidance   $sampling_mesh_guidance   --sdf_as_gpnerf  True  \
-    --geo_init_method=road_surface   \
-    --depth_dji_loss   $depth_dji_loss   --wgt_depth_mse_loss  $wgt_depth_mse_loss  --wgt_sigma_loss  0
+    --geo_init_method=idr   \
+    --depth_dji_loss   $depth_dji_loss   --wgt_depth_mse_loss  $wgt_depth_mse_loss  --wgt_sigma_loss  0  \
+    --mesh_path $mesh_path   --sdf_include_input=False

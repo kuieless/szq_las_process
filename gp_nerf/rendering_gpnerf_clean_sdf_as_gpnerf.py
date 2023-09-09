@@ -316,8 +316,12 @@ def _get_results(point_type,
             if point_type == 'fg':
                 fine_sample = hparams.fine_samples
             for i in range(fine_sample // 16):
-                up_sample_start, up_sample_end = int(z_vals.shape[1]*0.25), int(z_vals.shape[1]*(0.25+0.625)) # 2023.08.31 改为逐渐向表面收缩
-                new_z_vals = up_sample(rays_o, rays_d, z_vals[:,up_sample_start:up_sample_end], sdf[:,up_sample_start:up_sample_end], 16, 64 * 2 **i)
+                if hparams.depth_dji_type == "mesh" and hparams.sampling_mesh_guidance:
+                    up_sample_start, up_sample_end = int(z_vals.shape[1]*0.25), int(z_vals.shape[1]*(0.25+0.625)) # 2023.08.31 改为逐渐向表面收缩
+                    new_z_vals = up_sample(rays_o, rays_d, z_vals[:,up_sample_start:up_sample_end], sdf[:,up_sample_start:up_sample_end], 16, 64 * 2 **i)
+                else:
+                    new_z_vals = up_sample(rays_o, rays_d, z_vals, sdf, 16, 64 * 2 **i)
+
                 if i == 0:
                     new_z_vals_list = new_z_vals
                 else:
