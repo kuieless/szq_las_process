@@ -317,7 +317,7 @@ def _get_results(point_type,
                 fine_sample = hparams.fine_samples
             for i in range(fine_sample // 16):
                 # if hparams.depth_dji_type == "mesh" and hparams.sampling_mesh_guidance:
-                if hparams.geo_init_method =='idr':
+                if hparams.fine_sample_filter:
                     up_sample_start, up_sample_end = int(z_vals.shape[1]*0.25), int(z_vals.shape[1]*(0.25+0.625)) # 2023.08.31 改为逐渐向表面收缩
                     new_z_vals = up_sample(rays_o, rays_d, z_vals[:,up_sample_start:up_sample_end], sdf[:,up_sample_start:up_sample_end], 16, 64 * 2 **i)
                 else:
