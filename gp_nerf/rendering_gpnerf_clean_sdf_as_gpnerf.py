@@ -316,7 +316,8 @@ def _get_results(point_type,
             if point_type == 'fg':
                 fine_sample = hparams.fine_samples
             for i in range(fine_sample // 16):
-                if hparams.depth_dji_type == "mesh" and hparams.sampling_mesh_guidance:
+                # if hparams.depth_dji_type == "mesh" and hparams.sampling_mesh_guidance:
+                if hparams.geo_init_method =='idr':
                     up_sample_start, up_sample_end = int(z_vals.shape[1]*0.25), int(z_vals.shape[1]*(0.25+0.625)) # 2023.08.31 改为逐渐向表面收缩
                     new_z_vals = up_sample(rays_o, rays_d, z_vals[:,up_sample_start:up_sample_end], sdf[:,up_sample_start:up_sample_end], 16, 64 * 2 **i)
                 else:
@@ -489,9 +490,11 @@ def _get_results(point_type,
     normal_map = normal.reshape(N_rays_, N_samples_, 3) # [N, T, 3]
     normal_map = torch.sum(normal_map * weights[:, :, None], dim=1)
     
+    # 0911  这里depth直接用z_val,不做归一化
     # # calculate depth 
-    ori_z_vals = ((z_vals - near) / (far - near)).clamp(0, 1)
-    depth = torch.sum(weights * ori_z_vals, dim=-1)
+    # ori_z_vals = ((z_vals - near) / (far - near)).clamp(0, 1)
+    # depth = torch.sum(weights * ori_z_vals, dim=-1)
+    depth = torch.sum(weights * z_vals, dim=-1)
 
     # TODO:Eikonal loss 
     pts_norm = torch.linalg.norm(xyz_.reshape(-1, 3), ord=2, dim=-1, keepdim=True).reshape(N_rays_, N_samples_)

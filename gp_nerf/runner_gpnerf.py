@@ -1924,18 +1924,39 @@ class Runner:
         return res_list
     
     @staticmethod
-    def visualize_scalars(scalar_tensor: torch.Tensor, invalid_mask=None) -> np.ndarray:
-        if invalid_mask is not None:
-            w, h, _ = invalid_mask.shape
-            to_use = scalar_tensor[~invalid_mask].view(-1)
+    # def visualize_scalars(scalar_tensor: torch.Tensor, invalid_mask=None) -> np.ndarray:
+    #     if invalid_mask is not None:
+    #         w, h, _ = invalid_mask.shape
+    #         to_use = scalar_tensor[~invalid_mask].view(-1)
+    #     else:
+    #         to_use = scalar_tensor.view(-1)
+    #     while to_use.shape[0] > 2 ** 24:
+    #         to_use = to_use[::2]
+
+    #     mi = torch.quantile(to_use, 0.05)
+    #     ma = torch.quantile(to_use, 0.95)
+
+    #     scalar_tensor = (scalar_tensor - mi) / max(ma - mi, 1e-8)  # normalize to 0~1
+    #     scalar_tensor = scalar_tensor.clamp_(0, 1)
+
+    #     scalar_tensor = ((1 - scalar_tensor) * 255).byte().numpy()  # inverse heatmap
+    #     return cv2.cvtColor(cv2.applyColorMap(scalar_tensor, cv2.COLORMAP_INFERNO), cv2.COLOR_BGR2RGB)
+    
+    def visualize_scalars(scalar_tensor: torch.Tensor, ma=None, mi=None, invalid_mask=None) -> np.ndarray:
+        if ma is not None and mi is not None:
+            pass
         else:
-            to_use = scalar_tensor.view(-1)
-        while to_use.shape[0] > 2 ** 24:
-            to_use = to_use[::2]
+            if invalid_mask is not None:
+                w, h, _ = invalid_mask.shape
+                to_use = scalar_tensor[~invalid_mask].view(-1)
+            else:
+                to_use = scalar_tensor.view(-1)
+            while to_use.shape[0] > 2 ** 24:
+                to_use = to_use[::2]
 
-        mi = torch.quantile(to_use, 0.05)
-        ma = torch.quantile(to_use, 0.95)
-
+            mi = torch.quantile(to_use, 0.05)
+            ma = torch.quantile(to_use, 0.95)
+        
         scalar_tensor = (scalar_tensor - mi) / max(ma - mi, 1e-8)  # normalize to 0~1
         scalar_tensor = scalar_tensor.clamp_(0, 1)
 
@@ -2316,6 +2337,9 @@ class Runner:
                     nablas_norm = pred_nablas.norm(dim=-1)
                     loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * loss_eikonal_fn(nablas_norm)
                     
+                    self.writer.add_scalar('sdf_initial/sdf_loss', F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean'), it)
+                    self.writer.add_scalar('sdf_initial/gradient_error', loss_eikonal_fn(nablas_norm), it)
+
                     optimizer.zero_grad()
                     
                     # loss.backward()

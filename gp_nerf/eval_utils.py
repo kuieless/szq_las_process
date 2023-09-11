@@ -257,19 +257,36 @@ def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current,
 def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, visualize_scalars):
     depth_map = None
     H, W = metadata_item.H, metadata_item.W
+
+    from mega_nerf.ray_utils import get_ray_directions
+    directions = get_ray_directions(metadata_item.W,
+                                    metadata_item.H,
+                                    metadata_item.intrinsics[0],
+                                    metadata_item.intrinsics[1],
+                                    metadata_item.intrinsics[2],
+                                    metadata_item.intrinsics[3],
+                                    hparams.center_pixels,
+                                    torch.device('cpu'))
+    depth_scale = torch.abs(directions[:, :, 2])
+    
     if f'depth_{typ}' in results:
-        depth_map = results[f'depth_{typ}']
-        if f'fg_depth_{typ}' in results:
-            to_use = results[f'fg_depth_{typ}'].view(-1)
+        ma, mi = None, None 
+        if (hparams.depth_dji_loss or (hparams.dataset_type=='memory_depth_dji')) and not hparams.render_zyq:  # DJI Gt depth
+            depth_dji = metadata_item.load_depth_dji().float()
+            invalid_mask = torch.isinf(depth_dji)
+        
+            to_use = depth_dji[~invalid_mask].view(-1)
             while to_use.shape[0] > 2 ** 24:
                 to_use = to_use[::2]
+            mi = torch.quantile(to_use, 0.05)
             ma = torch.quantile(to_use, 0.95)
-            depth_clamp = depth_map.clamp_max(ma)
-        else:
-            depth_clamp = depth_map
 
-        depth_vis = torch.from_numpy(visualize_scalars(
-                torch.log(depth_clamp + 1e-8).view(H, W).cpu()))
+            depth_dji = torch.from_numpy(visualize_scalars(depth_dji, ma, mi))
+            img_list.append(depth_dji)
+
+        # gt_depth 是z， 网络得到的depth是z_val， 所以需要用scale进行处理
+        depth_map = results[f'depth_{typ}'] * depth_scale.view(-1)
+        depth_vis = torch.from_numpy(visualize_scalars(depth_map.view(H, W).cpu(), ma, mi))
         img_list.append(depth_vis)
 
     if hparams.depth_loss:  # GT depth
@@ -277,11 +294,8 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         depth_cue = torch.from_numpy(visualize_scalars(depth_cue))
         img_list.append(depth_cue)
     
-    if (hparams.depth_dji_loss or (hparams.dataset_type=='memory_depth_dji')) and not hparams.render_zyq:  # DJI Gt depth
-        depth_dji = metadata_item.load_depth_dji().float()
-        invalid_mask = torch.isinf(depth_dji)
-        depth_dji = torch.from_numpy(visualize_scalars(depth_dji,invalid_mask))
-        img_list.append(depth_dji)
+    
+        
 
 
     if f'normal_map_{typ}' in results:

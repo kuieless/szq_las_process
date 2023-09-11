@@ -171,33 +171,28 @@ class NeRF(nn.Module):
 
         ### sdf  initialize
         if self.geo_init_method == 'idr':
-            # NOTE: For lotd-annealing, set zero to non-active part of decoder input at start
             if self.encoding.annealer is not None:
                 start_level = self.encoding.annealer.start_level
                 start_n_feats = sum(self.encoding.lotd.level_n_feats[:start_level+1])
             with torch.no_grad():
                 nn.init.zeros_(self.decoder.layers[0].weight[:, start_n_feats:])
-
-            # inside_out = False
-            # radius_init = 0.0
-            # for l, layer in enumerate(self.decoder.layers):
-            #     if l == self.decoder.D:
-            #         if not inside_out:
-            #             nn.init.normal_(layer.weight, mean=np.sqrt(np.pi) / np.sqrt(layer.in_features), std=0.0001)
-            #             nn.init.constant_(layer.bias, -1 * radius_init)
-            #         else:
-            #             nn.init.normal_(layer.weight, mean=-np.sqrt(np.pi) / np.sqrt(layer.in_features), std=0.0001)
-            #             nn.init.constant_(layer.bias, radius_init)
-            #     elif l == 0:
-
-            #         nn.init.zeros_(layer.bias)
-            #         nn.init.zeros_(layer.weight)
-            #         # NOTE: Concat order: [grid_feature, embed_x]
-            #         if self.sdf_include_input:
-            #             nn.init.normal_(layer.weight[:, :3], mean=0., std=np.sqrt(2) / np.sqrt(layer.out_features))
-            #     else:
-            #         nn.init.zeros_(layer.bias)
-            #         nn.init.normal_(layer.weight, mean=0.0, std=np.sqrt(2) / np.sqrt(layer.out_features))
+            if hparams.idr_initial:
+                for l, layer in enumerate(self.decoder.layers):
+                    if l == self.decoder.D:
+                        nn.init.normal_(layer.weight, mean=np.sqrt(np.pi) / np.sqrt(layer.in_features), std=0.0001)
+                        nn.init.constant_(layer.bias, 0)
+                    elif l == 0:
+                        if self.sdf_include_input:
+                            torch.nn.init.constant_(layer.bias, 0.0)
+                            torch.nn.init.normal_(layer.weight[:, :3], 0.0, np.sqrt(2) / np.sqrt(layer.out_features))
+                            torch.nn.init.constant_(layer.weight[:, 3:], 0.0)
+                        else:
+                            torch.nn.init.constant_(layer.bias, 0.0)
+                            torch.nn.init.normal_(layer.weight[:, :], 0.0, np.sqrt(2) / np.sqrt(layer.out_features))
+                    else:
+                        nn.init.zeros_(layer.bias)
+                        nn.init.normal_(layer.weight, mean=0.0, std=np.sqrt(2) / np.sqrt(layer.out_features))
+    
         elif self.geo_init_method == 'road_surface':
             # NOTE: For lotd-annealing, set zero to non-active part of decoder input at start
             if self.encoding.annealer is not None:
