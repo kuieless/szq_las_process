@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=5
 
 # 测试idr情况下，
 # 4. w/o depth, w/o fine
@@ -27,10 +27,10 @@ sampling_mesh_guidance=True
 
 
 depth_dji_loss=True
-wgt_depth_mse_loss=0.01
-fine_sample_filter=True
+wgt_depth_mse_loss=1
+fine_sample_filter=False
 
-exp_name=logs_dji/0911_demo_idr7
+exp_name=logs_dji/0911_demo_idr_${wgt_depth_mse_loss}
 
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \

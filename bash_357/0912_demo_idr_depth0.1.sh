@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=4
 
 # 测试idr情况下，
 # 4. w/o depth, w/o fine
@@ -26,11 +26,11 @@ use_scaling=False
 sampling_mesh_guidance=True
 
 
-depth_dji_loss=False
-wgt_depth_mse_loss=0
+depth_dji_loss=True
+wgt_depth_mse_loss=0.1
 fine_sample_filter=False
 
-exp_name=logs_dji/0911_demo_idr4
+exp_name=logs_dji/0911_demo_idr_${wgt_depth_mse_loss}
 
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
@@ -41,4 +41,4 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --sampling_mesh_guidance   $sampling_mesh_guidance   --sdf_as_gpnerf  True  \
     --geo_init_method=idr   \
     --depth_dji_loss   $depth_dji_loss   --wgt_depth_mse_loss  $wgt_depth_mse_loss  --wgt_sigma_loss  0  \
-    --fine_sample_filter $fine_sample_filter   
+    --fine_sample_filter $fine_sample_filter
