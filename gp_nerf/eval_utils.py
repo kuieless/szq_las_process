@@ -111,16 +111,31 @@ def calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, wandb, wr
     return val_metrics
 
 
+def get_semantic_gt_pred_render_zyq(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, 
+                         metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer, hparams):
+    if f'sem_map_{typ}' in results:
+        sem_logits = results[f'sem_map_{typ}']
+        sem_label = logits_2_label(sem_logits)
 
+        sem_label = remapping(sem_label)
+
+        visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+        img_list.append(torch.from_numpy(visualize_sem))
+        # Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / ("%06d_pred_label.jpg" % i)))
+    return
 
 def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, 
                          metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer, hparams):
     if f'sem_map_{typ}' in results:
         sem_logits = results[f'sem_map_{typ}']
-        if val_type == 'val':
-                gt_label = metadata_item.load_gt()
-        elif val_type == 'train':
-            gt_label = metadata_item.load_label()
+        # if val_type == 'val':
+        #         gt_label = metadata_item.load_gt()
+        # elif val_type == 'train':
+        #     gt_label = metadata_item.load_label()
+        
+        gt_label = metadata_item.load_label()
+        sem_label = logits_2_label(sem_logits)
+
         if hparams.dataset_type == 'sam_project':
             pass
         else:
@@ -128,7 +143,6 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
             sem_label = remapping(sem_label)
 
         gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-        sem_label = logits_2_label(sem_logits)
         visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         if hparams.remove_cluster:
             ignore_cluster_index = gt_label.view(-1) * sem_label

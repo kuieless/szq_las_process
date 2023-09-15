@@ -44,7 +44,7 @@ from tools.unetformer.metric import Evaluator
 
 import pandas as pd
 
-from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map 
+from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map, get_semantic_gt_pred_render_zyq
 from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folder_logger, save_semantic_metric
 from gp_nerf.eval_utils import prepare_depth_normal_visual
 
@@ -302,8 +302,7 @@ class Runner:
         scaler = torch.cuda.amp.GradScaler(enabled=self.hparams.amp)
 
         if self.hparams.enable_semantic and self.hparams.freeze_geo and self.hparams.ckpt_path is not None:
-            for p_base in self.nerf.encoder.parameters():
-                p_base.requires_grad = False
+            
             for p_base in self.nerf.encoder_bg.parameters():
                 p_base.requires_grad = False
             for p_base in self.nerf.plane_encoder.parameters():
@@ -324,6 +323,14 @@ class Runner:
                 p_base.requires_grad = False
             for p_base in self.nerf.encoder_dir_bg.parameters():
                 p_base.requires_grad = False
+            if self.hparams.network_type == 'sdf_nr3d':
+                for p_base in self.nerf.encoding.parameters():
+                    p_base.requires_grad = False
+                for p_base in self.nerf.decoder.parameters():
+                    p_base.requires_grad = False
+            else:
+                for p_base in self.nerf.encoder.parameters():
+                    p_base.requires_grad = False
             
                 
                 
@@ -343,7 +350,7 @@ class Runner:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             # # add by zyq : load the pretrain-gpnerf to train the semantic
             # if self.hparams.resume_ckpt_state:
-            if True:
+            if not self.hparams.enable_semantic:
                 train_iterations = checkpoint['iteration']
                 for key, optimizer in optimizers.items():
                     optimizer_dict = optimizer.state_dict()
@@ -351,7 +358,7 @@ class Runner:
                     optimizer.load_state_dict(optimizer_dict)
             else:
                 print(f'load weights from {self.hparams.ckpt_path}, strat training from 0')
-                train_iterations = checkpoint['iteration']
+                train_iterations = 0
 
 
             scaler_dict = scaler.state_dict()
@@ -533,10 +540,16 @@ class Runner:
                     # 调整shape
                     if self.hparams.enable_semantic:
                         for key in item.keys():
-                            if item[key].dim() == 2:
-                                item[key] = item[key].reshape(-1)
-                            elif item[key].dim() == 3:
-                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                            if item[key].dim() != 1:
+                                if item[key].shape[-1] == 1:
+                                    item[key] = item[key].reshape(-1)
+                                else:
+                                    item[key] = item[key].reshape(-1, item[key].shape[-1])
+
+                            # if item[key].dim() == 2:
+                            #     item[key] = item[key].reshape(-1)
+                            # elif item[key].dim() == 3:
+                            #     item[key] = item[key].reshape(-1, *item[key].shape[2:])
                         for key in item.keys():
                             if 'random' in key:
                                 continue
@@ -811,14 +824,17 @@ class Runner:
                     'psnr': psnr_,
                     'depth_variance': depth_variance,
                 }
+            metrics['loss'] = 0
 
             photo_loss = F.mse_loss(results[f'rgb_{typ}'], rgbs, reduction='mean')
             metrics['photo_loss'] = photo_loss
+            metrics['loss'] += photo_loss
         else:
             metrics = {}
+            metrics['loss'] = 0
             photo_loss = torch.zeros(1, device='cuda')
             metrics['photo_loss'] = photo_loss
-        metrics['loss'] = photo_loss
+            metrics['loss'] += photo_loss
 
         if 'air_sigma_loss' in results:
             air_sigma_loss = results['air_sigma_loss'] * self.hparams.wgt_air_sigma_loss
@@ -996,7 +1012,7 @@ class Runner:
                 self.writer.add_scalar('1_train/nloss_decay', nloss_decay, train_iterations)
 
 
-        if 'sdf' in self.hparams.network_type:
+        if 'sdf' in self.hparams.network_type and not self.hparams.freeze_geo:
 
             # sdf 
             metrics['gradient_error'] = results[f'gradient_error_{typ}'].squeeze(-1)
@@ -1083,7 +1099,12 @@ class Runner:
                     
                     # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                     img_list = [viz_result_rgbs * 255]
+
+                    
                     prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
+
+                    get_semantic_gt_pred_render_zyq(results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping,
+                                        self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
                     
                     # NOTE: 对需要可视化的list进行处理
                     # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
@@ -1384,11 +1405,12 @@ class Runner:
                                 image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
                                 img_list.append(torch.from_numpy(image_diff_color))
                                 
+                                
+                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
+                                
                                 get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
                                                     self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
                                     
-                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
-                                
 
                                 # NOTE: 对需要可视化的list进行处理
                                 # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
@@ -1507,13 +1529,13 @@ class Runner:
                                 image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
                                 image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
                                 img_list.append(torch.from_numpy(image_diff_color))
-                                
-                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
-                                                    self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
-                                    
+                                 
                                 prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
                                 
 
+                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
+                                                    self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
+                                   
                                 # NOTE: 对需要可视化的list进行处理
                                 # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
                                 # 将None元素转换为zeros矩阵
@@ -1836,7 +1858,7 @@ class Runner:
 
             rays = rays.view(-1, 8).to(self.device, non_blocking=True).cuda()  # (H*W, 8)
             if self.hparams.render_zyq:
-                image_indices = 8 * torch.ones(rays.shape[0], device=rays.device)
+                image_indices = 817 * torch.ones(rays.shape[0], device=rays.device)
             else:
                 image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device) \
                     if self.hparams.appearance_dim > 0 else None

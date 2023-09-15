@@ -34,6 +34,7 @@ def main(hparams: Namespace) -> None:
     elif hparams.network_type == 'sdf_nr3d':
         # hparams.log2_hashmap_size=20
         hparams.contract_new=True
+        hparams.use_scaling=False
 
     
 

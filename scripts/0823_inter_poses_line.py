@@ -49,9 +49,9 @@ from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 
 @click.command()
-@click.option('--data_dir', type=str, default='/data/yuqi/Datasets/MegaNeRF/residence_subset')
-@click.option('--key_poses', type=str, default='96')
-@click.option('--n_out_poses', type=int, default=20)
+@click.option('--data_dir', type=str, default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan')
+@click.option('--key_poses', type=str, default='368,404,1368,969')
+@click.option('--n_out_poses', type=int, default=120)
 
 def hello(data_dir, n_out_poses, key_poses):
 
@@ -112,6 +112,7 @@ def hello(data_dir, n_out_poses, key_poses):
 
 
     np.save(pjoin(data_dir, 'poses_render.npy'), out_poses)
+    print('Done')
 
 
 if __name__ == '__main__':

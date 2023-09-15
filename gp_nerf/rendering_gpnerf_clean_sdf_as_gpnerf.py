@@ -246,8 +246,12 @@ def _get_results(point_type,
     # normal_epsilon_ratio = min(train_iterations / (2*hparams.normal_iterations), 0.95)  #[0, 0.95]
 
     #2023/08/30
-    cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 1)   #  from 0 -> 0.8
-    normal_epsilon_ratio = min(train_iterations / (2*hparams.normal_iterations), 0.95)  #[0, 0.95]
+    if hparams.enable_semantic:
+        cos_anneal_ratio = 1
+        normal_epsilon_ratio = 0.95
+    else:
+        cos_anneal_ratio = min(train_iterations / (2*hparams.cos_iterations), 1)   #  from 0 -> 0.8
+        normal_epsilon_ratio = min(train_iterations / (2*hparams.normal_iterations), 0.95)  #[0, 0.95]
 
     curvature_loss = False  #   和torch-nsr一样，暂时不考虑
 
@@ -385,7 +389,7 @@ def _get_results(point_type,
     sdf_nn_output = nerf.forward_sdf(xyz_)
 
     if hparams.enable_semantic:
-        sem_logits = nerf.forward_semantic(sdf_nn_output)
+        sem_logits = nerf.forward_semantic(xyz_, sdf_nn_output)
     
     sdf = sdf_nn_output[:, :1]
     feature_vector = sdf_nn_output[:, 1:]
