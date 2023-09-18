@@ -326,7 +326,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         img_list.append(depth_vis)
 
 
-        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_depth')) and hparams.save_individual:
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_depth')):
             Path(str(experiment_path_current / 'val_rgbs' / 'pred_depth')).mkdir()
             Image.fromarray((depth_vis.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_depth' / ("%06d_pred_depth.jpg" % i)))
 
