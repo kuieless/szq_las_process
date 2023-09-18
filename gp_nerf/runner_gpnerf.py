@@ -323,7 +323,7 @@ class Runner:
                 p_base.requires_grad = False
             for p_base in self.nerf.encoder_dir_bg.parameters():
                 p_base.requires_grad = False
-            if self.hparams.network_type == 'sdf_nr3d':
+            if 'nr3d' in self.hparams.network_type:
                 for p_base in self.nerf.encoding.parameters():
                     p_base.requires_grad = False
                 for p_base in self.nerf.decoder.parameters():
@@ -1101,7 +1101,7 @@ class Runner:
                     img_list = [viz_result_rgbs * 255]
 
                     
-                    prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
+                    prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
 
                     get_semantic_gt_pred_render_zyq(results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping,
                                         self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
@@ -1351,7 +1351,7 @@ class Runner:
                         elif val_type == 'train':
                             # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
                             # indices_to_eval = [0] #np.arange(len(self.train_items))  
-                            indices_to_eval = np.arange(800,1200)  
+                            indices_to_eval = np.arange(450,510)  
                             
                         
                         experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
@@ -1406,7 +1406,7 @@ class Runner:
                                 img_list.append(torch.from_numpy(image_diff_color))
                                 
                                 
-                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
+                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
                                 
                                 get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
                                                     self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
@@ -1430,14 +1430,25 @@ class Runner:
 
                                 if val_type == 'val':
                                     #save  [pred_label, pred_rgb, fg_bg] to the folder 
+
+                                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')) and self.hparams.save_individual:
+                                        Path(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')).mkdir()
+                                        Image.fromarray((viz_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                            str(experiment_path_current / 'val_rgbs' / 'gt_rgb' / ("%06d_gt_rgb.jpg" % i)))
+
+                                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
+                                        Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
                                     Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                                        str(experiment_path_current / 'val_rgbs' / ("%06d_pred_rgb.jpg" % i)))
+                                        str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
                                     
 
                                     if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
                                         img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
                                                                         results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
-                                        img.save(str(experiment_path_current / 'val_rgbs' / ("%06d_fg_bg.jpg" % i)))
+                                        
+                                        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')) and self.hparams.save_individual:
+                                            Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
+                                            img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
                                     
                                     # logger
                                     samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
@@ -1530,7 +1541,7 @@ class Runner:
                                 image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
                                 img_list.append(torch.from_numpy(image_diff_color))
                                  
-                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars)
+                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
                                 
 
                                 get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
@@ -1554,14 +1565,25 @@ class Runner:
 
                                 if val_type == 'val':
                                     #save  [pred_label, pred_rgb, fg_bg] to the folder 
+
+                                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')) and self.hparams.save_individual:
+                                        Path(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')).mkdir()
+                                        Image.fromarray((viz_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                            str(experiment_path_current / 'val_rgbs' / 'gt_rgb' / ("%06d_gt_rgb.jpg" % i)))
+
+                                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
+                                        Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
                                     Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                                        str(experiment_path_current / 'val_rgbs' / ("%06d_pred_rgb.jpg" % i)))
+                                        str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
                                     
 
                                     if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
                                         img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
                                                                         results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
-                                        img.save(str(experiment_path_current / 'val_rgbs' / ("%06d_fg_bg.jpg" % i)))
+                                        
+                                        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')) and self.hparams.save_individual:
+                                            Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
+                                            img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
                                     
                                     # logger
                                     samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)

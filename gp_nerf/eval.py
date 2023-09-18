@@ -29,7 +29,7 @@ def main(hparams: Namespace) -> None:
     elif hparams.network_type == 'sdf_mlp':
         hparams.use_neus_gradient=True
         hparams.layer_dim =256
-    elif hparams.network_type == 'sdf_nr3d':
+    elif 'nr3d' in hparams.network_type:
         # hparams.log2_hashmap_size=20
         hparams.contract_new=True
         hparams.sdf_include_input=False
@@ -41,8 +41,8 @@ def main(hparams: Namespace) -> None:
     hparams.bg_nerf = False
 
     if hparams.render_zyq:
-        hparams.val_scale_factor = 8
-        hparams.train_scale_factor = 8
+        hparams.val_scale_factor = 4
+        hparams.train_scale_factor = 4
         hparams.depth_dji_type = 'mesh'
         hparams.visual_normal=True
 

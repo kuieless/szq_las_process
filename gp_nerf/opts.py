@@ -37,6 +37,7 @@ def get_opts_base():
     parser.add_argument('--idr_initial', default=True, type=eval, choices=[True, False])
     parser.add_argument('--fine_sample_filter', default=False, type=eval, choices=[True, False])
 
+    parser.add_argument('--save_individual', default=False, type=eval, choices=[True, False])
 
     
 

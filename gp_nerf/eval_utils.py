@@ -5,6 +5,8 @@ import torch
 from tools.unetformer.uavid2rgb import custom2rgb
 import numpy as np
 from PIL import Image
+import os
+from pathlib import Path
 
 ### https://github.com/nianticlabs/monodepth2/blob/b676244e5a1ca55564eb5d16ab521a48f823af31/evaluate_depth.py#L214
 def compute_errors(gt, pred):
@@ -121,6 +123,10 @@ def get_semantic_gt_pred_render_zyq(results, val_type, metadata_item, viz_rgbs, 
 
         visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         img_list.append(torch.from_numpy(visualize_sem))
+
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_label')):
+            Path(str(experiment_path_current / 'val_rgbs' / 'pred_label')).mkdir()
+        Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_label' / ("%06d_pred_label.jpg" % i)))
         # Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / ("%06d_pred_label.jpg" % i)))
     return
 
@@ -166,7 +172,18 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         img_list.append(pseudo_gt_label_rgb)
         img_list.append(gt_label_rgb)
         img_list.append(torch.from_numpy(visualize_sem))
-        Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / ("%06d_pred_label.jpg" % i)))
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_label')):
+            Path(str(experiment_path_current / 'val_rgbs' / 'pred_label')).mkdir()
+        Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_label' / ("%06d_pred_label.jpg" % i)))
+
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'm2f_label')) and hparams.save_individual:
+            Path(str(experiment_path_current / 'val_rgbs' / 'm2f_label')).mkdir()
+            Image.fromarray((pseudo_gt_label_rgb.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'm2f_label' / ("%06d_m2f_label.jpg" % i)))
+
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_label')) and hparams.save_individual:
+            Path(str(experiment_path_current / 'val_rgbs' / 'gt_label')).mkdir()
+            Image.fromarray((gt_label_rgb.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'gt_label' / ("%06d_gt_label.jpg" % i)))
+
         if writer is not None:
             writer.add_image('5_val_images_semantic/{}'.format(i), torch.from_numpy(visualize_sem).permute(2, 0, 1), i)
 
@@ -268,7 +285,7 @@ def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current,
 
 
 
-def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, visualize_scalars):
+def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, visualize_scalars, experiment_path_current, i):
     depth_map = None
     H, W = metadata_item.H, metadata_item.W
 
@@ -298,10 +315,21 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
             depth_dji = torch.from_numpy(visualize_scalars(depth_dji, ma, mi))
             img_list.append(depth_dji)
 
+            if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_dji_depth')) and hparams.save_individual:
+                Path(str(experiment_path_current / 'val_rgbs' / 'gt_dji_depth')).mkdir()
+                Image.fromarray((depth_dji.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'gt_dji_depth' / ("%06d_gt_dji_depth.jpg" % i)))
+
+
         # gt_depth 是z， 网络得到的depth是z_val， 所以需要用scale进行处理
         depth_map = results[f'depth_{typ}'] * depth_scale.view(-1)
         depth_vis = torch.from_numpy(visualize_scalars(depth_map.view(H, W).cpu(), ma, mi))
         img_list.append(depth_vis)
+
+
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_depth')) and hparams.save_individual:
+            Path(str(experiment_path_current / 'val_rgbs' / 'pred_depth')).mkdir()
+            Image.fromarray((depth_vis.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_depth' / ("%06d_pred_depth.jpg" % i)))
+
 
     if hparams.depth_loss:  # GT depth
         depth_cue = metadata_item.load_depth().float()
@@ -310,7 +338,6 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
     
     
         
-
 
     if f'normal_map_{typ}' in results:
         # world -> camera 
@@ -327,6 +354,10 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         
         normal_viz = (normal_map + 1)*0.5
         img_list.append(normal_viz*255)
+
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_normal')) and hparams.save_individual:
+            Path(str(experiment_path_current / 'val_rgbs' / 'pred_normal')).mkdir()
+            Image.fromarray(((normal_viz*255).cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_normal' / ("%06d_pred_normal.jpg" % i)))
 
         
 
@@ -351,6 +382,10 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
         geo_viz = (ambiant.unsqueeze(0) + diffuse).clamp_max(1.0)
         geo_viz = geo_viz.view(H, W, 3).cpu()
         img_list.append(geo_viz*255)
+
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_shading')) and hparams.save_individual:
+            Path(str(experiment_path_current / 'val_rgbs' / 'pred_shading')).mkdir()
+            Image.fromarray(((geo_viz*255).cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_shading' / ("%06d_pred_shading.jpg" % i)))
 
 
 
