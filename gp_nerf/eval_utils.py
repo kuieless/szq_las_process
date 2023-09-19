@@ -176,12 +176,13 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
             Path(str(experiment_path_current / 'val_rgbs' / 'pred_label')).mkdir()
         Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_label' / ("%06d_pred_label.jpg" % i)))
 
-        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'm2f_label')) and hparams.save_individual:
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'm2f_label')):
             Path(str(experiment_path_current / 'val_rgbs' / 'm2f_label')).mkdir()
-            Image.fromarray((pseudo_gt_label_rgb.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'm2f_label' / ("%06d_m2f_label.jpg" % i)))
+        Image.fromarray((pseudo_gt_label_rgb.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'm2f_label' / ("%06d_m2f_label.jpg" % i)))
 
         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_label')) and hparams.save_individual:
             Path(str(experiment_path_current / 'val_rgbs' / 'gt_label')).mkdir()
+        if hparams.save_individual:
             Image.fromarray((gt_label_rgb.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'gt_label' / ("%06d_gt_label.jpg" % i)))
 
         if writer is not None:
@@ -317,6 +318,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
 
             if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_dji_depth')) and hparams.save_individual:
                 Path(str(experiment_path_current / 'val_rgbs' / 'gt_dji_depth')).mkdir()
+            if hparams.save_individual:
                 Image.fromarray((depth_dji.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'gt_dji_depth' / ("%06d_gt_dji_depth.jpg" % i)))
 
 
@@ -328,7 +330,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
 
         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_depth')):
             Path(str(experiment_path_current / 'val_rgbs' / 'pred_depth')).mkdir()
-            Image.fromarray((depth_vis.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_depth' / ("%06d_pred_depth.jpg" % i)))
+        Image.fromarray((depth_vis.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_depth' / ("%06d_pred_depth.jpg" % i)))
 
 
     if hparams.depth_loss:  # GT depth
@@ -357,6 +359,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
 
         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_normal')) and hparams.save_individual:
             Path(str(experiment_path_current / 'val_rgbs' / 'pred_normal')).mkdir()
+        if hparams.save_individual:
             Image.fromarray(((normal_viz*255).cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_normal' / ("%06d_pred_normal.jpg" % i)))
 
         
@@ -385,6 +388,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
 
         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_shading')) and hparams.save_individual:
             Path(str(experiment_path_current / 'val_rgbs' / 'pred_shading')).mkdir()
+        if hparams.save_individual:
             Image.fromarray(((geo_viz*255).cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_shading' / ("%06d_pred_shading.jpg" % i)))
 
 

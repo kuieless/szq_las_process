@@ -1255,7 +1255,8 @@ class Runner:
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
                     # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
-                    indices_to_eval = [0] #np.arange(len(self.train_items)) 
+                    # indices_to_eval = [0] #np.arange(len(self.train_items)) 
+                    indices_to_eval = np.arange(415,490)  
                 
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                 Path(str(experiment_path_current)).mkdir()
@@ -1270,7 +1271,11 @@ class Runner:
                     results, _ = self.render_image(metadata_item, train_index)
 
                     typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    viz_rgbs = metadata_item.load_image().float() / 255.
+                    self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
                     viz_result_rgbs = results[f'rgb_{typ}'].view(self.H, self.W, 3).cpu()
+                    # viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
+
                     # Image.fromarray(viz_result_rgbs*255).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
                     # viz_result_rgbs = (viz_result_rgbs.numpy()*255)[:,:,::-1]
                     # viz_result_rgbs = viz_result_rgbs[:,:,::-1]
@@ -1299,7 +1304,14 @@ class Runner:
                                     if self.hparams.num_semantic_classes <10:
                                         img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
                                     colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = self.color_list[seg_idx]  # torch.randint(0, 255,(3,)).to(torch.float32)
+                                
                                 img_list.append(colorize_mask)
+                                if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'colorize_mask')):
+                                    Path(str(experiment_path_current / 'val_rgbs' / 'colorize_mask')).mkdir()
+                                Image.fromarray((colorize_mask.numpy() * 255).astype(np.uint8)).save(
+                                    str(experiment_path_current / 'val_rgbs' / 'colorize_mask' / ("%06d_colorize_mask.jpg" % i)))
+                                
+
                     if f'depth_{typ}' in results:
                         depth_map = results[f'depth_{typ}']
                         # if f'fg_depth_{typ}' in results:
@@ -1351,7 +1363,9 @@ class Runner:
                         elif val_type == 'train':
                             # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
                             # indices_to_eval = [0] #np.arange(len(self.train_items))  
-                            indices_to_eval = np.arange(450,510)  
+                            # indices_to_eval = np.arange(450,510)  
+                            # indices_to_eval = np.arange(370,800)  
+                            indices_to_eval = np.arange(370,490)  
                             
                         
                         experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
@@ -1428,19 +1442,21 @@ class Runner:
                                     self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
                                 
 
+                                if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
+                                    Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
+                                Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                    str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
+                                
+                                
                                 if val_type == 'val':
                                     #save  [pred_label, pred_rgb, fg_bg] to the folder 
 
                                     if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')) and self.hparams.save_individual:
                                         Path(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')).mkdir()
+                                    if self.hparams.save_individual:
                                         Image.fromarray((viz_rgbs.numpy() * 255).astype(np.uint8)).save(
                                             str(experiment_path_current / 'val_rgbs' / 'gt_rgb' / ("%06d_gt_rgb.jpg" % i)))
 
-                                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
-                                        Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
-                                    Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                                        str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
-                                    
 
                                     if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
                                         img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
@@ -1448,6 +1464,7 @@ class Runner:
                                         
                                         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')) and self.hparams.save_individual:
                                             Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
+                                        if self.hparams.save_individual:
                                             img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
                                     
                                     # logger
@@ -1568,6 +1585,7 @@ class Runner:
 
                                     if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')) and self.hparams.save_individual:
                                         Path(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')).mkdir()
+                                    if self.hparams.save_individual:
                                         Image.fromarray((viz_rgbs.numpy() * 255).astype(np.uint8)).save(
                                             str(experiment_path_current / 'val_rgbs' / 'gt_rgb' / ("%06d_gt_rgb.jpg" % i)))
 
@@ -1583,6 +1601,8 @@ class Runner:
                                         
                                         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')) and self.hparams.save_individual:
                                             Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
+                                        if self.hparams.save_individual:
+                                        
                                             img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
                                     
                                     # logger
