@@ -191,6 +191,12 @@ class Runner:
                 self.far = 2
             main_print('Ray bounds: {}, {}'.format(self.near, self.far))
 
+            # mesh = trimesh.load_mesh('/data/jxchen/GPNeRF-semantic/residence/all/residence_meshlabnorm.obj')
+            # pts_3d = mesh.vertices
+            # pts_3d = np.array(pts_3d) * self.pose_scale_factor + self.origin_drb[0].numpy()
+            # np.savetxt('tran_meshpoint.txt', pts_3d)
+
+             
             self.ray_altitude_range = [(x - self.origin_drb[0]) / self.pose_scale_factor for x in
                                     hparams.ray_altitude_range] if hparams.ray_altitude_range is not None else None
             main_print('Ray altitude range in [-1, 1] space: {}'.format(self.ray_altitude_range))
@@ -1304,7 +1310,11 @@ class Runner:
                                     if self.hparams.num_semantic_classes <10:
                                         img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
                                     colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = self.color_list[seg_idx]  # torch.randint(0, 255,(3,)).to(torch.float32)
-                                
+                                    # if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'each')):
+                                    #     Path(str(experiment_path_current / 'val_rgbs' / 'each')).mkdir()
+                                    # Image.fromarray((colorize_mask.numpy() * 255).astype(np.uint8)).save(
+                                    #     str(experiment_path_current / 'val_rgbs' / 'each' / ("%06d_colorize_mask_%01d.jpg" % (i, seg_idx))))
+                                    
                                 img_list.append(colorize_mask)
                                 if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'colorize_mask')):
                                     Path(str(experiment_path_current / 'val_rgbs' / 'colorize_mask')).mkdir()

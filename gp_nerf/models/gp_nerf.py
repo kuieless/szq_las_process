@@ -91,14 +91,14 @@ class NeRF(nn.Module):
                 'DenseGrid', channels=hparams.num_semantic_classes, world_size=torch.tensor([375,333,261]),
                 xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
                 
-                # if self.separate_semantic:
-                #     print('separate the semantic mlp from nerf')
-                #     self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
-                #     self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
-                # else:
-                #     print('add the semantic head to nerf')
-                #     self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
-                #     self.semantic_linear_bg = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
+                if self.separate_semantic:
+                    print('separate the semantic mlp from nerf')
+                    self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                    self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                else:
+                    print('add the semantic head to nerf')
+                    self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
+                    self.semantic_linear_bg = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
 
             elif self.use_mask_type == 'densegrid_mlp':
                 with torch.enable_grad():

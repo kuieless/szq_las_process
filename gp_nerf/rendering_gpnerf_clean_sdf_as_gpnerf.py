@@ -99,6 +99,8 @@ def render_rays(nerf: nn.Module,
         z_3 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.125), device=device)
         surface_point = gt_depths[valid_depth_mask] / (depth_scale[valid_depth_mask])  # 得到表面点的far
         epsilon =  hparams.around_mesh_meter / pose_scale_factor
+        # epsilon =  (far-near).max() / 100
+
         s_near = (surface_point - epsilon).unsqueeze(-1)
         s_far = (surface_point + epsilon).unsqueeze(-1)
 
@@ -107,8 +109,10 @@ def render_rays(nerf: nn.Module,
         mesh_sample1 = near[valid_depth_mask] * (1 - z_1) + s_near * z_1
         mesh_sample2 = s_near * (1 - z_2) + s_far * z_2
         mesh_sample3 = s_far * (1 - z_3) + far_ellipsoid[valid_depth_mask] * z_3
+        
         z_vals_inbound[valid_depth_mask] = torch.cat([mesh_sample1, mesh_sample2, mesh_sample3], dim=1)
         # z_vals_inbound[valid_depth_mask] = torch.cat([torch.zeros_like(mesh_sample1), mesh_sample2, torch.zeros_like(mesh_sample3)], dim=1)
+        
         z_vals_inbound, _ = torch.sort(z_vals_inbound, -1)
 
 
@@ -263,6 +267,10 @@ def _get_results(point_type,
     perturb = hparams.perturb if nerf.training else 0
     z_vals = _expand_and_perturb_z_vals(z_vals, hparams.coarse_samples, perturb, rays_o.shape[0])
     xyz_coarse_fg = rays_o + rays_d * z_vals.unsqueeze(-1)
+    
+    # visualize_points_list = [xyz_coarse_fg.view(-1, 3).cpu().numpy()]
+    # visualize_points(visualize_points_list)
+    
     if hparams.contract_new:
         pts = contract_to_unisphere_new(xyz_coarse_fg, hparams)
     else:

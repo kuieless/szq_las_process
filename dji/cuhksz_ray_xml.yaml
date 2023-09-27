@@ -2,6 +2,8 @@
 
 ray_altitude_range: [-138, -35]   # xml
 
+# ray_altitude_range: [0.76, 2.86]   # xml
+
 
 # ray_altitude_range: [-138, -45]   # xml     +depth loss效果反而不好  2023/08/07
 

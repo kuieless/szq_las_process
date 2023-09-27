@@ -72,7 +72,8 @@ import xml.etree.ElementTree as ET
 def main(hparams):
     # initialize
     output_path = Path(hparams.output_path)
-    AT_images_path = Path(hparams.AT_images_path)
+    # Note 空三后的图像颜色比较奇怪，暂时不用
+    # AT_images_path = Path(hparams.AT_images_path)
     original_images_path = Path(hparams.original_images_path)
     original_images_list_json_path = Path(hparams.original_images_list_json_path)
 
@@ -87,18 +88,22 @@ def main(hparams):
                         float(pose.find('Rotation/Phi').text),
                         float(pose.find('Rotation/Kappa').text)] for pose in root.findall('Block/Photogroups/Photogroup/Photo/Pose')])
     images_name = [Images_path.text.split("\\")[-1] for Images_path in root.findall('Block/Photogroups/Photogroup/Photo/ImagePath')]
-
+    # print(images_name)
     # load "original_images_list.json"
     with open(hparams.original_images_list_json_path, "r") as file:
         json_data = json.load(file)
 
     sorted_json_data = sorted(json_data, key=lambda x: x["origin_path"])  # 虽然json_data中的顺序也是按飞行顺序来，还是做个sorted保险一些
+    print(len(sorted_json_data))
     sorted_process_data = []
+    
     for i in tqdm(range(len(sorted_json_data)), desc="load meta_data"):
         sorted_process_line = {}
         json_line = json_data[i]
         id = json_line['id']
         index = images_name.index(id+'.jpg')
+        # index = images_name.index(id)
+
         sorted_process_line['images_name'] = images_name[index]
         
         path_segments = json_line['origin_path'].split('/')
@@ -119,6 +124,7 @@ def main(hparams):
         # for tag, value in tags.items():
         #     print(f"{tag:25}: {value}")
         sorted_process_line['meta_tags'] = tags
+
         sorted_process_data.append(sorted_process_line)
 
         
@@ -213,13 +219,13 @@ def main(hparams):
                 # cv2.imwrite(str(split_dir / 'rgbs' / '{0:06d}.jpg'.format(i)), undistorted)
                 
                 # NOTE 根据 dji智图质量报告上的数值进行修改
-                distortion1 = np.array([float(-0.009831534),
-                           float(0.013398247),
-                           float(-0.002080232),
-                           float(-0.001410897),
-                           float(-0.010848353)])  # k1 k2 p1 p2 k3
-                camera_matrix1 = np.array([[3695.607, 0, 2713.97],
-                                        [0, 3695.607, 1811.31],
+                distortion1 = np.array([float(-0.014544237),
+                           float(0.004694901),
+                           float(-0.001346389),
+                           float(-0.00096356),
+                           float(0.004985782)])  # k1 k2 p1 p2 k3
+                camera_matrix1 = np.array([[3692.801, 0, 2730.325],
+                                        [0, 3692.801, 1817.382],
                                         [0, 0, 1]])
                 img1 = cv2.imread(str(original_images_path) + '/' + original_image_name_sorted[i]) 
                 img_change = cv2.undistort(img1, camera_matrix1, distortion1, None, camera_matrix)
