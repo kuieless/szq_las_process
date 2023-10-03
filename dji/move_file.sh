@@ -1,8 +1,9 @@
 #!/bin/bash
-# .1npy    .1pt  .1jpg
-source_dir="/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/train/rgbs"
-destination_dir="/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/val/rgbs"
-filenames=("000082.jpg" "000098.jpg" "000190.jpg" "000202.jpg" "000350.jpg" "000438.jpg" "000496.jpg" "000501.jpg" "000561.jpg" "000815.jpg" "000879.jpg" "000961.jpg" "001010.jpg" "001037.jpg" "001352.jpg" "001384.jpg" "001414.jpg" "001615.jpg" "001733.jpg" "001834.jpg" "001926.jpg")  # 在这里列出你想要移动的文件名
+#  depth_mesh  rgbs     image_metadata    metadata
+# .1npy        .1jpg   .1pt     
+source_dir="/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/train/image_metadata"
+destination_dir="/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/val/image_metadata"
+filenames=("000082.pt" "000098.pt" "000190.pt" "000202.pt" "000350.pt" "000438.pt" "000496.pt" "000501.pt" "000561.pt" "000815.pt" "000879.pt" "000961.pt" "001010.pt" "001037.pt" "001352.pt" "001384.pt" "001414.pt" "001615.pt" "001733.pt" "001834.pt" "001926.pt")  # 在这里列出你想要移动的文件名
 
 # 进入源文件夹
 cd "$source_dir" || exit

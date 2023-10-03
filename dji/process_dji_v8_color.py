@@ -1,10 +1,5 @@
-#
-#  这个代码是用于处理大疆智图空三导出的xml文件
-#  首先，将xml的gos坐标系转换成cecf坐标系
-#  再进行缩放旋转，使其朝向+x轴，
-#  ps：根据xml的yaw pitch roll赋予label，在训练中去除黑影（脚架）
-#
-
+#### 注意手动更改智图报告中的相机参数（优化），
+# 包括fx,fy,cx,cy,k1,k2,p1,p2,k3
 
 from argparse import Namespace
 from pathlib import Path

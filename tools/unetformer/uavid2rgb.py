@@ -26,7 +26,7 @@ def custom2rgb(mask):
     mask_rgb[np.all(mask_convert == 0, axis=0)] = [0, 0, 0]             # cluster       black
     
     mask_rgb[np.all(mask_convert == 1, axis=0)] = [128, 0, 0]           # building      red
-    mask_rgb[np.all(mask_convert == 2, axis=0)] = [192, 192, 192]         # road        grey  
+    mask_rgb[np.all(mask_convert == 2, axis=0)] = [192, 192, 192]       # road        grey  
     mask_rgb[np.all(mask_convert == 3, axis=0)] = [192, 0, 192]         # car           light violet
     mask_rgb[np.all(mask_convert == 4, axis=0)] = [0, 128, 0]           # tree          green
     mask_rgb[np.all(mask_convert == 5, axis=0)] = [128, 128, 0]         # vegetation    dark green
@@ -41,6 +41,17 @@ def custom2rgb(mask):
     return mask_rgb
 
 def remapping(mask):
+    mask[mask==5] = 2               # vegetation -> road
+    mask[mask==6] = 0               # human  /
+    mask[mask==7] = 0               # sky    /
+    mask[mask==8] = 0               # water  /
+    mask[mask==9] = 2               # ground -> road
+    mask[mask==10] = 0              # mountain   /
+
+    
+    return mask
+
+def remapping_1001_bk(mask):
     mask[mask==6] = 0               # human
     mask[mask==7] = 0               # sky
     mask[mask==8] = 0               # water

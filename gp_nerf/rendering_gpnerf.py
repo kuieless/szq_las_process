@@ -168,6 +168,7 @@ def render_rays(nerf: nn.Module,
         z_2 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.625), device=device)
         z_3 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.125), device=device)
         surface_point = gt_depths[valid_depth_mask] / (depth_scale[valid_depth_mask])  # 得到表面点的far
+        # epsilon =  (far-near).max() / 100
         epsilon =  hparams.around_mesh_meter / pose_scale_factor
         s_near = (surface_point - epsilon).unsqueeze(-1)
         s_far = (surface_point + epsilon).unsqueeze(-1)
@@ -178,6 +179,8 @@ def render_rays(nerf: nn.Module,
         mesh_sample2 = s_near * (1 - z_2) + s_far * z_2
         mesh_sample3 = s_far * (1 - z_3) + far_ellipsoid[valid_depth_mask] * z_3
         z_vals_inbound[valid_depth_mask] = torch.cat([mesh_sample1, mesh_sample2, mesh_sample3], dim=1)
+        # z_vals_inbound[valid_depth_mask] = torch.cat([torch.zeros_like(mesh_sample1), mesh_sample2, torch.zeros_like(mesh_sample3)], dim=1)
+
         z_vals_inbound, _ = torch.sort(z_vals_inbound, -1)
 
 
