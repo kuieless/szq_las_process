@@ -134,12 +134,17 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
                          metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer, hparams):
     if f'sem_map_{typ}' in results:
         sem_logits = results[f'sem_map_{typ}']
+        
         # if val_type == 'val':
-        #         gt_label = metadata_item.load_gt()
+        #     gt_label = metadata_item.load_gt()
         # elif val_type == 'train':
         #     gt_label = metadata_item.load_label()
         
-        gt_label = metadata_item.load_label()
+        # gt_label = metadata_item.load_label()
+        # print(f'm2f label: {gt_label.shape}')
+
+        gt_label = metadata_item.load_gt()
+        # print(f'gt label: {gt_label.shape}')
         sem_label = logits_2_label(sem_logits)
 
         if hparams.dataset_type == 'sam_project':
@@ -151,7 +156,8 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         if hparams.remove_cluster:
-            ignore_cluster_index = gt_label.view(-1) * sem_label
+            # ignore_cluster_index = gt_label.view(-1) * sem_label
+            ignore_cluster_index = gt_label.view(-1)
             gt_label_ig = gt_label.view(-1)[ignore_cluster_index.nonzero()].view(-1)
             sem_label_ig = sem_label[ignore_cluster_index.nonzero()].view(-1)
             metrics_val.add_batch(gt_label_ig.cpu().numpy(), sem_label_ig.cpu().numpy())
@@ -163,6 +169,7 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         if val_type == 'val':
             gt_label_rgb = torch.from_numpy(gt_label_rgb)
             pseudo_gt_label_rgb = metadata_item.load_label()
+            pseudo_gt_label_rgb = remapping(pseudo_gt_label_rgb)
             pseudo_gt_label_rgb = custom2rgb(pseudo_gt_label_rgb.view(*viz_rgbs.shape[:-1]).cpu().numpy())
             pseudo_gt_label_rgb = torch.from_numpy(pseudo_gt_label_rgb)
         elif val_type == 'train':
@@ -233,10 +240,16 @@ def save_semantic_metric(metrics_val_each, CLASSES, samantic_each_value, wandb, 
 
     return samantic_each_value
 
-def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current, samantic_each_value, wandb, writer, train_index):
-    mIoU = np.nanmean(metrics_val.Intersection_over_Union())
-    FW_IoU = metrics_val.Frequency_Weighted_Intersection_over_Union()
-    F1 = np.nanmean(metrics_val.F1())
+def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current, samantic_each_value, wandb, writer, train_index, hparams):
+    if hparams.remove_cluster:
+
+        mIoU = np.nanmean(metrics_val.Intersection_over_Union()[1:])
+        FW_IoU = metrics_val.Frequency_Weighted_Intersection_over_Union()
+        F1 = np.nanmean(metrics_val.F1()[1:])
+    else:
+        mIoU = np.nanmean(metrics_val.Intersection_over_Union())
+        FW_IoU = metrics_val.Frequency_Weighted_Intersection_over_Union()
+        F1 = np.nanmean(metrics_val.F1())
     # OA = np.nanmean(metrics_val.OA())
     iou_per_class = metrics_val.Intersection_over_Union()
 
@@ -261,9 +274,9 @@ def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current,
 
     with (experiment_path_current /'metrics.txt').open('a') as f:
         for key in eval_value:
-            f.write(f'{eval_value[key]}\t')
+            f.write(f'{eval_value[key]} ')
         for key in iou_value:
-            f.write(f'{iou_value[key]}\t')
+            f.write(f'{iou_value[key]} ')
         f.write(f'\n\n')
         f.write('eval_value:\n')
         for key in eval_value:

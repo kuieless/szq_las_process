@@ -12,7 +12,7 @@ def get_opts_base():
     parser.add_argument('--logger_interval', type=int, default=10, help='training iterations')
     
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
-    parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
+    parser.add_argument('--separate_semantic', type=eval, default=False, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
     parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['memory_depth_dji','sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff', 'llff_sa3d', 'mega_sa3d'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
@@ -25,7 +25,7 @@ def get_opts_base():
     parser.add_argument('--balance_weight', type=eval, default=True, help='')
     
     parser.add_argument('--online_sam_label', type=eval, default=False, help='')
-    parser.add_argument('--remove_cluster', type=eval, default=False, help='')
+    parser.add_argument('--remove_cluster', type=eval, default=True, help='')
 
     # nr3d 
     parser.add_argument('--contract_new', default=False, type=eval, choices=[True, False])

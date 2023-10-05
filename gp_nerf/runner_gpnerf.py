@@ -1094,7 +1094,7 @@ class Runner:
                 for i in main_tqdm(indices_to_eval):
                     self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                     metadata_item = render_items[i]
-
+                    i = int(Path(metadata_item.depth_dji_path).stem)
                     self.hparams.sampling_mesh_guidance = False
                     results, _ = self.render_image(metadata_item, train_index)
                     typ = 'fine' if 'rgb_fine' in results else 'coarse'
@@ -1103,6 +1103,14 @@ class Runner:
                     viz_result_rgbs = results[f'rgb_{typ}'].view(H, W, 3).cpu()
                     viz_result_rgbs = viz_result_rgbs.clamp(0,1)
                     
+
+                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
+                        Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
+                    Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                        str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d.jpg" % i)))
+                    
+                    
+                        
                     # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                     img_list = [viz_result_rgbs * 255]
 
@@ -1482,7 +1490,7 @@ class Runner:
                                     self.metrics_val_each.reset()
                                 del results
                         # logger
-                        write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index)
+                        write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index, self.hparams)
                         self.metrics_val.reset()
                         
                         self.writer.flush()
