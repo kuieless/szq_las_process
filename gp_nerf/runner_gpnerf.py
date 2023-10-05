@@ -1061,7 +1061,7 @@ class Runner:
             
             dataset_path = Path(self.hparams.dataset_path)
 
-            val_paths = sorted(list((dataset_path / 'render' / 'metadata').iterdir()))
+            val_paths = sorted(list((dataset_path / 'render_far' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_line' / 'metadata').iterdir()))
 
             train_paths = val_paths
@@ -1071,7 +1071,7 @@ class Runner:
             for i, train_path in enumerate(train_paths):
                 image_indices[train_path.name] = i
             render_items = [
-                self._get_metadata_item(x, image_indices[x.name], self.hparams.train_scale_factor, x in val_paths_set) for x
+                self._get_metadata_item(x, image_indices[x.name], self.hparams.val_scale_factor, x in val_paths_set) for x
                 in train_paths]
 
             H = render_items[0].H

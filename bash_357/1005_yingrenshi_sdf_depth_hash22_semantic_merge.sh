@@ -22,13 +22,14 @@ sampling_mesh_guidance=True
 enable_semantic=True
 
 freeze_geo=True
-label_name=m2f
-ckpt_path=logs_dji/1004_yingrenshi_sdf_depth_hash22/0/models/200000.pt
+label_name=merge
+separate_semantic=False
+ckpt_path=logs_dji/1003_yingrenshi_sdf_depth_hash22/0/models/200000.pt
 
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 
-exp_name=logs_dji/1003_yingrenshi_sdf_depth_hash22_semantic
+exp_name=logs_dji/1005_yingrenshi_sdf_depth_hash22_semantic_merge
 
 log2_hashmap_size=22
 desired_resolution=8192
@@ -41,4 +42,4 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --sampling_mesh_guidance   $sampling_mesh_guidance   --sdf_as_gpnerf  True  \
     --log2_hashmap_size=$log2_hashmap_size   --desired_resolution=$desired_resolution  \
     --freeze_geo=$freeze_geo  --ckpt_path=$ckpt_path  --wgt_sem_loss=1 \
-    --label_name=$label_name
+    --separate_semantic=$separate_semantic   --label_name=$label_name
