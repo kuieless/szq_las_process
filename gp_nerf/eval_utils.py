@@ -7,6 +7,8 @@ import numpy as np
 from PIL import Image
 import os
 from pathlib import Path
+from torchvision.utils import make_grid
+
 
 ### https://github.com/nianticlabs/monodepth2/blob/b676244e5a1ca55564eb5d16ab521a48f823af31/evaluate_depth.py#L214
 def compute_errors(gt, pred):
@@ -131,7 +133,7 @@ def get_semantic_gt_pred_render_zyq(results, val_type, metadata_item, viz_rgbs, 
     return
 
 def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, 
-                         metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer, hparams):
+                         metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer, hparams, viz_result_rgbs):
     if f'sem_map_{typ}' in results:
         sem_logits = results[f'sem_map_{typ}']
         
@@ -179,6 +181,7 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         img_list.append(pseudo_gt_label_rgb)
         img_list.append(gt_label_rgb)
         img_list.append(torch.from_numpy(visualize_sem))
+        
         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_label')):
             Path(str(experiment_path_current / 'val_rgbs' / 'pred_label')).mkdir()
         Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_label' / ("%06d_pred_label.jpg" % i)))
@@ -191,6 +194,33 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
             Path(str(experiment_path_current / 'val_rgbs' / 'gt_label')).mkdir()
         if hparams.save_individual:
             Image.fromarray((gt_label_rgb.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'gt_label' / ("%06d_gt_label.jpg" % i)))
+
+
+        alpha = 0.7
+        label_list = [viz_result_rgbs]
+        label_list.append(pseudo_gt_label_rgb * (1-alpha) + viz_result_rgbs * alpha)
+        label_list.append(gt_label_rgb * (1-alpha) + viz_result_rgbs * alpha)
+        label_list.append(torch.from_numpy(visualize_sem) * (1-alpha) + viz_result_rgbs * alpha)
+        label_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in label_list]
+        label_list = torch.stack(label_list).permute(0,3,1,2)
+        img = make_grid(label_list, nrow=2)
+        img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'all_label')):
+            Path(str(experiment_path_current / 'val_rgbs' / 'all_label')).mkdir()
+        Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / 'all_label' / ("%06d_all_label.jpg" % i)))
+        
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'alpha_pred_label')):
+            Path(str(experiment_path_current / 'val_rgbs' / 'alpha_pred_label')).mkdir()
+        Image.fromarray((visualize_sem * (1-alpha) + viz_result_rgbs.cpu().numpy() * alpha).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'alpha_pred_label' / ("%06d_pred_label.jpg" % i)))
+
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label')):
+            Path(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label')).mkdir()
+        Image.fromarray((pseudo_gt_label_rgb.cpu().numpy() * (1-alpha) + viz_result_rgbs.cpu().numpy() * alpha).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label' / ("%06d_m2f_label.jpg" % i)))
+
+        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label')) and hparams.save_individual:
+            Path(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label')).mkdir()
+        if hparams.save_individual:
+            Image.fromarray((gt_label_rgb.cpu().numpy() * (1-alpha) + viz_result_rgbs.cpu().numpy() * alpha).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label' / ("%06d_gt_label.jpg" % i)))
 
         if writer is not None:
             writer.add_image('5_val_images_semantic/{}'.format(i), torch.from_numpy(visualize_sem).permute(2, 0, 1), i)
