@@ -103,7 +103,7 @@ def get_opts_base():
     parser.add_argument('--stop_semantic_grad', default=True, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
     parser.add_argument('--use_pano_lift', default=False, type=eval, choices=[True, False], help='activate the logits by sofrmax before volume rendering')
     parser.add_argument('--ignore_index', type=int, default=-1, help='')
-    parser.add_argument('--label_name', type=str, default='m2f', choices=['m2f', 'merge'], help='')
+    parser.add_argument('--label_name', type=str, default='m2f', choices=['m2f', 'merge', 'gt'], help='')
 
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')

@@ -41,8 +41,8 @@ def main(hparams: Namespace) -> None:
     hparams.bg_nerf = False
 
     if hparams.render_zyq:
-        hparams.val_scale_factor = 4
-        hparams.train_scale_factor = 4
+        # hparams.val_scale_factor = 4
+        # hparams.train_scale_factor = 4
         hparams.depth_dji_type = 'mesh'
         hparams.visual_normal=True
 
