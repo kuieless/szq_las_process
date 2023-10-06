@@ -9,8 +9,8 @@ config_file=configs/yingrenshi.yaml
 
 batch_size=40960
 train_iterations=200000
-val_interval=50000
-ckpt_interval=50000
+val_interval=20000
+ckpt_interval=20000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf
 dataset_type=memory_depth_dji

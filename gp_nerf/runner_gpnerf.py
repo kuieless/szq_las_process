@@ -565,9 +565,11 @@ class Runner:
 
                     if self.hparams.enable_semantic and 'labels' in item.keys():
                         labels = item['labels'].to(self.device, non_blocking=True)
-                        if self.hparams.dataset_type != 'sam_project':
-                            from tools.unetformer.uavid2rgb import remapping
-                            labels = remapping(labels)
+                        # if self.hparams.dataset_type != 'sam_project':
+                            # from tools.unetformer.uavid2rgb import remapping
+                            # labels = remapping(labels)
+                        from tools.unetformer.uavid2rgb import remapping
+                        labels = remapping(labels)
                     else:
                         labels = None
 
