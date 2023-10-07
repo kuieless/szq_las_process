@@ -104,6 +104,7 @@ class Runner:
         faulthandler.register(signal.SIGUSR1)
         print(f"ignore_index: {hparams.ignore_index}")
         if hparams.balance_weight:
+            # cluster 1  building  1 road  1 car 5 tree 5 vegetation 5
             balance_weight = torch.FloatTensor([1, 1, 1, 5, 5, 5, 1, 1, 1, 1, 1]).cuda()
             CrossEntropyLoss = nn.CrossEntropyLoss(weight=balance_weight, ignore_index=hparams.ignore_index)
         else:

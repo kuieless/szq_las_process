@@ -9,6 +9,9 @@ from mega_nerf.misc_utils import main_tqdm, main_print
 from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 import numpy as np
+import glob
+import os
+from pathlib import Path
 
 class MemoryDataset(Dataset):
 
@@ -39,8 +42,21 @@ class MemoryDataset(Dataset):
         main_print('Loading data')
         if hparams.debug:
             metadata_items = metadata_items[::20]
+        load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
+            if hparams.use_subset:
+                used_files = []
+                for ext in ('*.png', '*.jpg'):
+                    used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs', ext)))
+                    used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/val/rgbs', ext)))
+                used_files.sort()
+                file_names = [os.path.splitext(os.path.basename(file_path))[0] for file_path in used_files]
+                if Path(metadata_item.label_path).stem not in file_names:
+                    continue
+                else:
+                    load_subset = load_subset+1
+
             image_data = get_rgb_index_mask_depth_dji(metadata_item)
 
             if image_data is None:
@@ -66,6 +82,7 @@ class MemoryDataset(Dataset):
             depth_djis.append(depth_dji)
             depth_scales.append(depth_scale)
 
+        print(f"load_subset: {load_subset}")
         main_print('Finished loading data')
 
         self._rgbs = torch.cat(rgbs)

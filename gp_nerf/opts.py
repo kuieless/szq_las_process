@@ -27,6 +27,10 @@ def get_opts_base():
     parser.add_argument('--online_sam_label', type=eval, default=False, help='')
     parser.add_argument('--remove_cluster', type=eval, default=True, help='')
 
+    parser.add_argument('--use_subset', default=False, type=eval, choices=[True, False], help='')
+
+
+
     # nr3d 
     parser.add_argument('--contract_new', default=False, type=eval, choices=[True, False])
     parser.add_argument('--use_plane', default=True, type=eval, choices=[True, False])
