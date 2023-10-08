@@ -112,7 +112,7 @@ def get_opts_base():
 
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
-    parser.add_argument('--wgt_sem_loss', default=4e-2, type=float, help='')
+    parser.add_argument('--wgt_sem_loss', default=1, type=float, help='')
     parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'gpnerf_nr3d', 'mlp', 'sdf', 'sdf_mlp', 'sdf_nr3d'], help='')
     # parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')
     

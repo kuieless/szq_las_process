@@ -9,8 +9,8 @@ config_file=configs/yingrenshi.yaml
 
 batch_size=40960
 train_iterations=200000
-val_interval=5000
-ckpt_interval=20000
+val_interval=10000
+ckpt_interval=10000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf
 dataset_type=memory_depth_dji
@@ -29,10 +29,11 @@ ckpt_path=logs_dji/1003_yingrenshi_density_depth_hash22/0/models/200000.pt
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 
-exp_name=logs_dji/1007_yingrenshi_density_depth_hash22_semantic_gt_separate_large_wobalan
+exp_name=logs_dji/1007_z_yingrenshi_density_depth_hash22_semantic_gt_separate_large_s
 
 log2_hashmap_size=22
 desired_resolution=8192
+# wgt_sem_loss=1
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
     --network_type   $network_type   --config_file  $config_file   \
@@ -42,5 +43,5 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --sampling_mesh_guidance   $sampling_mesh_guidance   --sdf_as_gpnerf  True  \
     --log2_hashmap_size=$log2_hashmap_size   --desired_resolution=$desired_resolution  \
     --freeze_geo=$freeze_geo  --ckpt_path=$ckpt_path  --wgt_sem_loss=1 \
-    --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=3  \
-    --use_subset=True  --balance_weight=False
+    --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=3    --semantic_layer_dim=256 \
+    --use_subset=True       #--wgt_sem_loss=$wgt_sem_loss 
