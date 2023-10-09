@@ -160,12 +160,19 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         if hparams.remove_cluster:
-            # ignore_cluster_index = gt_label.view(-1) * sem_label
-            ignore_cluster_index = gt_label.view(-1)
-            gt_label_ig = gt_label.view(-1)[ignore_cluster_index.nonzero()].view(-1)
-            sem_label_ig = sem_label[ignore_cluster_index.nonzero()].view(-1)
+
+            # ignore_cluster_index = gt_label.view(-1)
+            # gt_label_ig = gt_label.view(-1)[ignore_cluster_index.nonzero()].view(-1)
+            # sem_label_ig = sem_label[ignore_cluster_index.nonzero()].view(-1)
+            # metrics_val.add_batch(gt_label_ig.cpu().numpy(), sem_label_ig.cpu().numpy())
+            # metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+            gt_label = gt_label.view(-1)
+            sem_label = sem_label.view(-1)
+            gt_no_zero_mask = (gt_label != 0)
+            gt_label_ig = gt_label[gt_no_zero_mask]
+            sem_label_ig = sem_label[gt_no_zero_mask]
             metrics_val.add_batch(gt_label_ig.cpu().numpy(), sem_label_ig.cpu().numpy())
-            metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+            metrics_val_each.add_batch(gt_label_ig.view(-1).cpu().numpy(), sem_label_ig.cpu().numpy())
         else:
             metrics_val.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
             metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())

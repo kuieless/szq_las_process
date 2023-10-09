@@ -40,6 +40,27 @@ def custom2rgb(mask):
     # mask_rgb = cv2.cvtColor(mask_rgb, cv2.COLOR_RGB2BGR)
     return mask_rgb
 
+
+def rgb2custom(rgb):
+    h, w = rgb.shape[0], rgb.shape[1]
+    mask = np.zeros(shape=(h, w), dtype=np.uint8)
+    mask_convert = rgb
+    mask[np.all(mask_convert == [0, 0, 0], axis=2)] = 0             # cluster       black
+    mask[np.all(mask_convert == [128, 0, 0], axis=2)] = 1           # building      red
+    mask[np.all(mask_convert == [192, 192, 192], axis=2)] = 2       # road          grey  
+    mask[np.all(mask_convert == [192, 0, 192], axis=2)] = 3         # car           light violet
+    mask[np.all(mask_convert == [0, 128, 0], axis=2)] = 4           # tree          green
+    mask[np.all(mask_convert == [128, 128, 0], axis=2)] = 5         # vegetation    dark green
+    mask[np.all(mask_convert == [255, 255, 0], axis=2)] = 6         # human         yellow
+    mask[np.all(mask_convert == [135, 206, 250], axis=2)] = 7       # sky           light blue
+    mask[np.all(mask_convert == [0, 0, 128], axis=2)] = 8           # water         blue
+    mask[np.all(mask_convert == [252,230,201], axis=2)] = 9         # ground        egg
+    mask[np.all(mask_convert == [128, 64, 128], axis=2)] = 10       # mountain      dark violet
+
+    # mask_rgb = cv2.cvtColor(mask_rgb, cv2.COLOR_RGB2BGR)
+    return mask
+
+
 def remapping(mask):
     mask[mask==5] = 2               # vegetation -> road
     mask[mask==6] = 0               # human  /

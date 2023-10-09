@@ -1643,6 +1643,120 @@ class Runner:
                             shutil.rmtree(base_tmp_path)
 
                     return val_metrics
+    
+    def val_3d_to_2d(self):
+        self._setup_experiment_dir()
+        val_metrics = self._run_validation_val_3d_to_2d(0)
+        self._write_final_metrics(val_metrics, train_iterations=0)
+
+    def _run_validation_val_3d_to_2d(self, train_index=-1) -> Dict[str, float]:
+
+        from tools.unetformer.uavid2rgb import remapping
+        with torch.inference_mode():
+            #semantic 
+            self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+            CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
+            self.nerf.eval()
+            val_metrics = defaultdict(float)
+            base_tmp_path = None
+            
+            val_type = 'val'  # train  val
+            print('val_type: ', val_type)
+ 
+            indices_to_eval = np.arange(len(self.val_items))
+            
+            experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+            Path(str(experiment_path_current)).mkdir()
+            Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+            with (experiment_path_current / 'psnr.txt').open('w') as f:
+                
+                samantic_each_value = {}
+                for class_name in CLASSES:
+                    samantic_each_value[f'{class_name}_iou'] = []
+                samantic_each_value['mIoU'] = []
+                samantic_each_value['FW_IoU'] = []
+                samantic_each_value['F1'] = []
+
+                
+                for i in main_tqdm(indices_to_eval):
+                    self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
+                    metadata_item = self.val_items[i]
+                    
+                    typ = 'fine'
+                    
+                    viz_rgbs = metadata_item.load_image().float() / 255.
+                    
+                    
+                    # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                    img_list = [viz_rgbs * 255]
+
+                    gt_label = metadata_item.load_gt()
+                    gt_label = remapping(gt_label)
+                    
+                    # 这里读取点云投影的图片，或者进行点云投影
+                    # sem_label
+
+                    sem_label_path = os.path.join(self.hparams.dataset_path, 'val', 'labels_pc', f"{metadata_item.label_path.stem}.png")
+                    sem_label = Image.open(sem_label_path)    #.convert('RGB')
+                    sem_label =  torch.ByteTensor(np.asarray(sem_label)).view(-1)
+                    
+                    sem_label = remapping(sem_label)
+                    
+                    gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                    visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                    if self.hparams.remove_cluster:
+                        gt_label = gt_label.view(-1)
+                        sem_label = sem_label.view(-1)
+                        gt_no_zero_mask = (gt_label != 0)
+                        # pred_no_zero_mask = (sem_label != 0)
+                        # no_cluster_mask = gt_no_zero_mask * pred_no_zero_mask
+                        gt_label_ig = gt_label[gt_no_zero_mask]
+                        sem_label_ig = sem_label[gt_no_zero_mask]
+                        self.metrics_val.add_batch(gt_label_ig.cpu().numpy(), sem_label_ig.cpu().numpy())
+                        self.metrics_val_each.add_batch(gt_label_ig.view(-1).cpu().numpy(), sem_label_ig.cpu().numpy())
+                    else:
+                        self.metrics_val.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+                        self.metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+                    
+
+                    img_list.append(torch.from_numpy(gt_label_rgb))
+                    img_list.append(torch.from_numpy(visualize_sem))
+                    
+                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'label_pc')):
+                        Path(str(experiment_path_current / 'val_rgbs' / 'label_pc')).mkdir()
+                    Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'label_pc' / ("%06d_label_pc.jpg" % i)))
+
+                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_label')):
+                        Path(str(experiment_path_current / 'val_rgbs' / 'gt_label')).mkdir()
+                    
+                    Image.fromarray((gt_label_rgb).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'gt_label' / ("%06d_gt_label.jpg" % i)))
+
+
+
+                    # NOTE: 对需要可视化的list进行处理
+                    # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                    # 将None元素转换为zeros矩阵
+                    img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                    img_list = torch.stack(img_list).permute(0,3,1,2)
+                    img = make_grid(img_list, nrow=3)
+                    img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+
+                    
+                    if val_type == 'val':
+                        samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
+                        self.metrics_val_each.reset()
+
+            # logger
+            write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index, self.hparams)
+            self.metrics_val.reset()
+            
+            self.writer.flush()
+            self.writer.close()
+            self.nerf.train()
+
+        return val_metrics
+    
 
     def _run_validation_project_val_points(self, train_index=-1) -> Dict[str, float]:
         self._setup_experiment_dir()

@@ -62,45 +62,45 @@ def hello(hparams: Namespace) -> None:
 
         # building  road car tree
 
-        # for process_id in [1, 2]:
-        #     a_mask = (gt_label == process_id).view(-1)
-        #     num_true = a_mask.sum().item()
-        #     num_samples = num_true //3
-        #     true_indices = torch.nonzero(a_mask)
-        #     num_samples = min(num_samples, len(true_indices))
-        #     if num_samples > 0:
-        #         shuffled_indices = torch.randperm(true_indices.size(0))
-        #         selected_indices = true_indices[shuffled_indices[:num_samples]]
+        for process_id in [1, 2]:
+            a_mask = (gt_label == process_id).view(-1)
+            num_true = a_mask.sum().item()
+            num_samples = num_true //3
+            true_indices = torch.nonzero(a_mask)
+            num_samples = min(num_samples, len(true_indices))
+            if num_samples > 0:
+                shuffled_indices = torch.randperm(true_indices.size(0))
+                selected_indices = true_indices[shuffled_indices[:num_samples]]
 
-        #         sampled_mask = torch.zeros_like(a_mask, dtype=torch.bool)
+                sampled_mask = torch.zeros_like(a_mask, dtype=torch.bool)
                 
-        #         sampled_mask[selected_indices] = True
+                sampled_mask[selected_indices] = True
 
-        #         sampled_mask = sampled_mask.view(H,W)
+                sampled_mask = sampled_mask.view(H,W)
 
-        #         no_a_mask = (gt_label != 1)
-        #         sampled_mask = sampled_mask + no_a_mask
-        #         valid_depth_mask = valid_depth_mask * sampled_mask
+                no_a_mask = (gt_label != 1)
+                sampled_mask = sampled_mask + no_a_mask
+                valid_depth_mask = valid_depth_mask * sampled_mask
         
-        # for process_id in [3,4]:
-        #     a_mask = (gt_label == process_id).view(-1)
-        #     num_true = a_mask.sum().item()
-        #     num_samples = num_true //3
-        #     true_indices = torch.nonzero(a_mask)
-        #     num_samples = min(num_samples, len(true_indices))
-        #     if num_samples > 0:
-        #         shuffled_indices = torch.randperm(true_indices.size(0))
-        #         selected_indices = true_indices[shuffled_indices[:num_samples]]
+        for process_id in [3,4]:
+            a_mask = (gt_label == process_id).view(-1)
+            num_true = a_mask.sum().item()
+            num_samples = num_true //3
+            true_indices = torch.nonzero(a_mask)
+            num_samples = min(num_samples, len(true_indices))
+            if num_samples > 0:
+                shuffled_indices = torch.randperm(true_indices.size(0))
+                selected_indices = true_indices[shuffled_indices[:num_samples]]
 
-        #         sampled_mask = torch.zeros_like(a_mask, dtype=torch.bool)
+                sampled_mask = torch.zeros_like(a_mask, dtype=torch.bool)
                 
-        #         sampled_mask[selected_indices] = True
+                sampled_mask[selected_indices] = True
 
-        #         sampled_mask = sampled_mask.view(H,W)
+                sampled_mask = sampled_mask.view(H,W)
 
-        #         no_a_mask = (gt_label != 1)
-        #         sampled_mask = sampled_mask + no_a_mask
-        #         valid_depth_mask = valid_depth_mask * sampled_mask
+                no_a_mask = (gt_label != 1)
+                sampled_mask = sampled_mask + no_a_mask
+                valid_depth_mask = valid_depth_mask * sampled_mask
             
 
         gt_label = custom2rgb(gt_label.cpu().numpy())
@@ -157,9 +157,10 @@ def hello(hparams: Namespace) -> None:
         world_points.append(pc_rgb)
 
     combined_array = np.concatenate(world_points, axis=0)
-
     print(combined_array.shape)
-    combined_array=combined_array[::50]
+
+    # combined_array=combined_array[::10]
+    print(combined_array.shape)
 
     print('writing ply ...')
 
