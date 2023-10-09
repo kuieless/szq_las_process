@@ -210,8 +210,9 @@ class NeRF(nn.Module):
                     linear.bias.requires_grad_(False)
             else:
                 if self.separate_semantic:
+                    print('separate the semantic mlp from nerf')
+                    print(f'semantic_net_type: {self.semantic_net_type}')
                     if self.semantic_net_type == 'mlp':
-                        print('separate the semantic mlp from nerf')
                         self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
                         self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
                     elif self.semantic_net_type == 'hashgrid_mlp':
@@ -223,8 +224,7 @@ class NeRF(nn.Module):
                         self.semantic_hash_encoding_bg = LoTDEncoding(3, **encoding_cfg, dtype=self.dtype, device=self.device)
                         semantic_mlp_in_dim_bg = self.semantic_hash_encoding_bg.out_features
                         self.semantic_linear_bg = semantic_mlp(semantic_mlp_in_dim_bg, hparams.num_semantic_classes, self.layer_dim, self.num_layers_color)
-                        
-                        
+                            
                 else:
                     print('add the semantic head to nerf')
                     self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
@@ -333,15 +333,10 @@ class NeRF(nn.Module):
             else:
                 input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
                 if self.separate_semantic:
-                    print('separate the semantic mlp from nerf')
-                    print(f'semantic_net_type: {self.semantic_net_type}')
-
                     if self.semantic_net_type == 'mlp':
-
                         sem_feature = self.semantic_linear[:-2](input_xyz)  
                         sem_logits = self.semantic_linear[-2:](sem_feature)   
                     elif self.semantic_net_type == 'hashgrid_mlp':
-
                         semantic_hash = self.semantic_hash_encoding(x[:, :self.xyz_dim], max_level=None)
                         sem_logits = self.semantic_linear(semantic_hash)  
                     

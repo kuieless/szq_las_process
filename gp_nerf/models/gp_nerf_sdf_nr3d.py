@@ -261,8 +261,9 @@ class NeRF(nn.Module):
                     linear.bias.requires_grad_(False)
             else:
                 if self.separate_semantic:
+                    print('separate the semantic mlp from nerf')
+                    print(f'semantic_net_type: {self.semantic_net_type}')
                     if self.semantic_net_type == 'mlp':
-                        print('separate the semantic mlp from nerf')
                         self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
                         self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
                     elif self.semantic_net_type == 'hashgrid_mlp':
@@ -430,8 +431,6 @@ class NeRF(nn.Module):
         else:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])  ######
             if self.separate_semantic:
-                print('separate the semantic mlp from nerf')
-                print(f'semantic_net_type: {self.semantic_net_type}')
                 if self.semantic_net_type == 'mlp':
                     sem_feature = self.semantic_linear[:-2](input_xyz)   ######
                     sem_logits = self.semantic_linear[-2:](sem_feature)   #######
