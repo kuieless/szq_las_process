@@ -334,7 +334,7 @@ class NeRF(nn.Module):
                 input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
                 if self.separate_semantic:
                     print('separate the semantic mlp from nerf')
-                    print(f'semantic_net_type: {semantic_net_type}')
+                    print(f'semantic_net_type: {self.semantic_net_type}')
 
                     if self.semantic_net_type == 'mlp':
 

@@ -29,7 +29,7 @@ ckpt_path=logs_dji/1003_yingrenshi_density_depth_hash22/0/models/200000.pt
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 lr=0.01
-exp_name=logs_dji/1009_yingrenshi_density_semantic_gt_hash_mlp.01_128_wo_balance
+exp_name=logs_dji/1009_yingrenshi_density_semantic_gt_hash_mlp
 
 log2_hashmap_size=22
 desired_resolution=8192
