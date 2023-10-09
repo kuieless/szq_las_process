@@ -430,14 +430,19 @@ class NeRF(nn.Module):
         else:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])  ######
             if self.separate_semantic:
+                print('separate the semantic mlp from nerf')
+                print(f'semantic_net_type: {semantic_net_type}')
                 if self.semantic_net_type == 'mlp':
                     sem_feature = self.semantic_linear[:-2](input_xyz)   ######
                     sem_logits = self.semantic_linear[-2:](sem_feature)   #######
                 elif self.semantic_net_type == 'hashgrid_mlp':
+
                     semantic_hash = self.semantic_hash_encoding(x[:, :self.xyz_dim], max_level=None)
                     sem_logits = self.semantic_linear(semantic_hash) 
 
             else:
+                print('add the semantic head to nerf')
+
                 if self.stop_semantic_grad:
                     h_stop = h.detach()
                     sem_logits = self.semantic_linear(torch.cat([h_stop, input_xyz], dim=-1))
