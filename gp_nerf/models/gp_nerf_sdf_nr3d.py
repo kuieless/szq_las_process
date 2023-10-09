@@ -75,52 +75,7 @@ class NeRF(nn.Module):
         self.dataset_type = hparams.dataset_type
         print(f"the dataset_type is :{self.dataset_type}")
         
-        #semantic
-        self.semantic_layer_dim = hparams.semantic_layer_dim
-        self.separate_semantic = hparams.separate_semantic
-        self.embedding_xyz = Embedding(pos_xyz_dim)
-        in_channels_xyz = xyz_dim + xyz_dim * pos_xyz_dim * 2
-        self.num_layers_semantic_hidden = hparams.num_layers_semantic_hidden
-        print("semantic layer_dim: {}".format(self.semantic_layer_dim))
-    
-        self.enable_semantic = hparams.enable_semantic
-        self.stop_semantic_grad = hparams.stop_semantic_grad
-        self.use_pano_lift = hparams.use_pano_lift
-        if self.enable_semantic:
-            self.use_mask_type = hparams.use_mask_type
-            self.num_semantic_classes = hparams.num_semantic_classes
-            if self.use_mask_type == 'densegrid':
-                self.seg_mask_grid = grid.create_grid(
-                'DenseGrid', channels=hparams.num_semantic_classes, world_size=torch.tensor([375,333,261]),
-                xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
-            
-            elif self.use_mask_type == 'densegrid_mlp':
-                with torch.enable_grad():
-                    self.seg_mask_grid = grid.create_grid(
-                    'DenseGrid', channels=hparams.densegird_mlp_dim, world_size=torch.tensor([375,333,261]),
-                    xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
-                
-                self.mask_view_counts = torch.zeros_like(self.seg_mask_grid.grid, requires_grad=False, device='cuda')
-                self.mask_linear = torch.nn.Linear(hparams.densegird_mlp_dim, hparams.num_semantic_classes)
-                self.mask_linear.weight.requires_grad_(False)
-                self.mask_linear.bias.requires_grad_(False)
-                # nn.init.zeros_(self.mask_linear.bias)
-            elif self.use_mask_type == 'hashgrid_mlp':
-                seg_mask_grid, self.seg_mask_grids_dim = get_encoder("hashgrid", base_resolution=64, desired_resolution=1024, log2_hashmap_size=19, num_levels=2, level_dim=1)
-                self.seg_mask_grids = torch.nn.ModuleList([seg_mask_grid for i in range(self.num_semantic_classes)])
-                self.mask_linears = torch.nn.ModuleList([torch.nn.Linear(self.seg_mask_grids_dim, 1) for i in range(self.num_semantic_classes)])
-                for linear in self.mask_linears:
-                    linear.weight.requires_grad_(False)
-                    linear.bias.requires_grad_(False)
-            else:
-                if self.separate_semantic:
-                    print('separate the semantic mlp from nerf')
-                    self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
-                    self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
-                else:
-                    print('add the semantic head to nerf')
-                    self.semantic_linear = nn.Sequential(fc_block(1 + hparams.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
-                    self.semantic_linear_bg = nn.Sequential(fc_block(1 + hparams.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
+
 
         #sdf 
         print("sdf")
@@ -264,6 +219,66 @@ class NeRF(nn.Module):
                 nn.init.zeros_(self.decoder.layers[0].weight[:, start_n_feats:])
                 
             
+
+        #semantic
+        self.semantic_layer_dim = hparams.semantic_layer_dim
+        self.separate_semantic = hparams.separate_semantic
+        self.semantic_net_type = hparams.semantic_net_type
+
+        self.embedding_xyz = Embedding(pos_xyz_dim)
+        in_channels_xyz = xyz_dim + xyz_dim * pos_xyz_dim * 2
+        self.num_layers_semantic_hidden = hparams.num_layers_semantic_hidden
+        print("semantic layer_dim: {}".format(self.semantic_layer_dim))
+    
+        self.enable_semantic = hparams.enable_semantic
+        self.stop_semantic_grad = hparams.stop_semantic_grad
+        self.use_pano_lift = hparams.use_pano_lift
+        if self.enable_semantic:
+            self.use_mask_type = hparams.use_mask_type
+            self.num_semantic_classes = hparams.num_semantic_classes
+            if self.use_mask_type == 'densegrid':
+                self.seg_mask_grid = grid.create_grid(
+                'DenseGrid', channels=hparams.num_semantic_classes, world_size=torch.tensor([375,333,261]),
+                xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
+            
+            elif self.use_mask_type == 'densegrid_mlp':
+                with torch.enable_grad():
+                    self.seg_mask_grid = grid.create_grid(
+                    'DenseGrid', channels=hparams.densegird_mlp_dim, world_size=torch.tensor([375,333,261]),
+                    xyz_min=torch.tensor([-1.4360, -1.2948, -1.000]), xyz_max=torch.tensor([1.4386, 1.2588, 1.0000]))
+                
+                self.mask_view_counts = torch.zeros_like(self.seg_mask_grid.grid, requires_grad=False, device='cuda')
+                self.mask_linear = torch.nn.Linear(hparams.densegird_mlp_dim, hparams.num_semantic_classes)
+                self.mask_linear.weight.requires_grad_(False)
+                self.mask_linear.bias.requires_grad_(False)
+                # nn.init.zeros_(self.mask_linear.bias)
+            elif self.use_mask_type == 'hashgrid_mlp':
+                seg_mask_grid, self.seg_mask_grids_dim = get_encoder("hashgrid", base_resolution=64, desired_resolution=1024, log2_hashmap_size=19, num_levels=2, level_dim=1)
+                self.seg_mask_grids = torch.nn.ModuleList([seg_mask_grid for i in range(self.num_semantic_classes)])
+                self.mask_linears = torch.nn.ModuleList([torch.nn.Linear(self.seg_mask_grids_dim, 1) for i in range(self.num_semantic_classes)])
+                for linear in self.mask_linears:
+                    linear.weight.requires_grad_(False)
+                    linear.bias.requires_grad_(False)
+            else:
+                if self.separate_semantic:
+                    if self.semantic_net_type == 'mlp':
+                        print('separate the semantic mlp from nerf')
+                        self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                        self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                    elif self.semantic_net_type == 'hashgrid_mlp':
+                        # # 这里semantic分支也用hash+mlp，但mlp的结构和color_net一样
+                        self.semantic_hash_encoding = LoTDEncoding(3, **encoding_cfg, dtype=self.dtype, device=self.device)
+                        semantic_mlp_in_dim = self.semantic_hash_encoding.out_features
+                        self.semantic_linear = semantic_mlp(semantic_mlp_in_dim, hparams.num_semantic_classes, self.layer_dim, self.num_layers_color)
+                        
+                        self.semantic_hash_encoding_bg = LoTDEncoding(3, **encoding_cfg, dtype=self.dtype, device=self.device)
+                        semantic_mlp_in_dim_bg = self.semantic_hash_encoding_bg.out_features
+                        self.semantic_linear_bg = semantic_mlp(semantic_mlp_in_dim_bg, hparams.num_semantic_classes, self.layer_dim, self.num_layers_color)
+                       
+                else:
+                    print('add the semantic head to nerf')
+                    self.semantic_linear = nn.Sequential(fc_block(1 + hparams.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
+                    self.semantic_linear_bg = nn.Sequential(fc_block(1 + hparams.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
 
 
 
@@ -415,8 +430,13 @@ class NeRF(nn.Module):
         else:
             input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])  ######
             if self.separate_semantic:
-                sem_feature = self.semantic_linear[:-2](input_xyz)   ######
-                sem_logits = self.semantic_linear[-2:](sem_feature)   #######
+                if self.semantic_net_type == 'mlp':
+                    sem_feature = self.semantic_linear[:-2](input_xyz)   ######
+                    sem_logits = self.semantic_linear[-2:](sem_feature)   #######
+                elif self.semantic_net_type == 'hashgrid_mlp':
+                    semantic_hash = self.semantic_hash_encoding(x[:, :self.xyz_dim], max_level=None)
+                    sem_logits = self.semantic_linear(semantic_hash) 
+
             else:
                 if self.stop_semantic_grad:
                     h_stop = h.detach()
@@ -563,8 +583,12 @@ class NeRF(nn.Module):
             else:
                 input_xyz = self.embedding_xyz(x[:, :self.xyz_dim])
                 if self.separate_semantic:
-                    sem_feature = self.semantic_linear_bg[:-2](input_xyz)
-                    sem_logits = self.semantic_linear_bg[-2](sem_feature)
+                    if self.semantic_net_type == 'mlp':
+                        sem_feature = self.semantic_linear_bg[:-2](input_xyz)
+                        sem_logits = self.semantic_linear_bg[-2](sem_feature)
+                    elif self.semantic_net_type == 'hashgrid_mlp':
+                        semantic_hash = self.semantic_hash_encoding_bg(x[:, :self.xyz_dim], max_level=None)
+                        sem_logits = self.semantic_linear_bg(semantic_hash) 
                 else:
                     if self.stop_semantic_grad:
                         h_stop = h.detach()

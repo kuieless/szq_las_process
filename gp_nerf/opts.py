@@ -29,6 +29,7 @@ def get_opts_base():
 
     parser.add_argument('--use_subset', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--only_car_label', default=False, type=eval, choices=[True, False], help='only train dense car labels with other sparse label')
+    parser.add_argument('--semantic_net_type', type=str, default='mlp', choices=['mlp', 'hashgrid_mlp'],help='')
 
 
 
