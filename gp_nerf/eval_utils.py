@@ -153,6 +153,8 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
             pass
         else:
             gt_label = remapping(gt_label)
+            # mask_gt = (gt_label != 3)
+            # gt_label[mask_gt] = 0
             sem_label = remapping(sem_label)
 
         gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())

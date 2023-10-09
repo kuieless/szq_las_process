@@ -12,6 +12,8 @@ import numpy as np
 import glob
 import os
 from pathlib import Path
+import random
+from PIL import Image
 
 class MemoryDataset(Dataset):
 
@@ -70,9 +72,63 @@ class MemoryDataset(Dataset):
             depth_scale = torch.abs(self._directions[:, :, 2]).view(-1).cpu()
             image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
             
+            
             if image_keep_mask is not None:
                 image_rays = image_rays[image_keep_mask == True]
                 depth_scale = depth_scale[image_keep_mask == True]
+
+            if hparams.only_car_label:
+                N = label.size(0)
+                M =256*256
+                visual_rgb = image_rgbs
+                visualize_mask = torch.zeros((N,3))
+                fliter_mask = torch.zeros((N), dtype=torch.bool)
+
+                label_car_indices = (label == 3).nonzero().squeeze()
+                fliter_mask[label_car_indices] = True
+                # visualize_mask[label_car_indices] = torch.FloatTensor([255,0,0])
+
+                label_not_car_indices = (label != 3).nonzero().squeeze()
+                random_indices = torch.randperm(len(label_not_car_indices))[:M]
+                fliter_mask[label_not_car_indices[random_indices]] = True
+                # visualize_mask[label_not_car_indices[random_indices]] = torch.FloatTensor([0,0,255])
+
+
+                image_rgbs = image_rgbs[fliter_mask]
+                image_rays = image_rays[fliter_mask]
+                image_indices = image_indices[fliter_mask]
+                if label is not None:
+                    label[label_not_car_indices] = 0
+                    label = label[fliter_mask]
+
+                    
+                depth_dji = depth_dji[fliter_mask]
+                depth_scale = depth_scale[fliter_mask]
+
+                # # 可视化
+                # fliter_mask = fliter_mask.view(912, N//912)
+                # binary_image = np.uint8(fliter_mask) * 255
+                # output_array = np.zeros((binary_image.shape[0], binary_image.shape[1], 3), dtype=binary_image.dtype)
+                # output_array[:, :, 0] = binary_image
+                # binary_image = output_array
+
+                
+                # image = Image.fromarray(binary_image)
+                # image.save(f'zyq/car_vis/binary_image_{metadata_item.image_index}.png')
+
+
+                # visualize_mask = visualize_mask.view(912, N//912,3)
+
+                # visualize_mask=np.uint8(visualize_mask)
+                # Image.fromarray(visualize_mask).save(f'zyq/car_vis/visualize_mask_{metadata_item.image_index}.png')
+
+
+
+                # visual_rgb = visual_rgb.view(912, N//912,3)
+                # visual_rgb = np.uint8(visual_rgb)
+                # visualize_mask = 0.6 * visualize_mask + 0.4 * visual_rgb
+                # image = Image.fromarray(np.uint8(visualize_mask))
+                # image.save(f'zyq/car_vis/rgb_{metadata_item.image_index}.png')
 
             rgbs.append(image_rgbs)
             rays.append(image_rays)

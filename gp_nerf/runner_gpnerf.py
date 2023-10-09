@@ -104,7 +104,7 @@ class Runner:
         faulthandler.register(signal.SIGUSR1)
         print(f"ignore_index: {hparams.ignore_index}")
         if hparams.balance_weight:
-            # cluster 1  building  1 road  1 car 5 tree 5 vegetation 5
+            # cluster 1，  building 1， road 1， car 5， tree 5， vegetation 5
             balance_weight = torch.FloatTensor([1, 1, 1, 5, 5, 5, 1, 1, 1, 1, 1]).cuda()
             CrossEntropyLoss = nn.CrossEntropyLoss(weight=balance_weight, ignore_index=hparams.ignore_index)
         else:
@@ -1484,10 +1484,10 @@ class Runner:
                                         img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
                                                                         results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
                                         
-                                        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')) and self.hparams.save_individual:
+                                        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')):
                                             Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
-                                        if self.hparams.save_individual:
-                                            img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
+                                        
+                                        img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
                                     
                                     # logger
                                     samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
