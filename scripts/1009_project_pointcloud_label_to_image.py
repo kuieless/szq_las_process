@@ -24,6 +24,8 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='zyq/pc2label',required=False, help='experiment name')
+
     
     return parser.parse_args()
 
@@ -34,7 +36,7 @@ def hello(hparams: Namespace) -> None:
 
     import open3d as o3d
 
-    point_cloud = o3d.io.read_point_cloud("zyq/pc2label/point_cloud_100_3e.ply")
+    point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_full.ply")
 
     points_nerf = np.asarray(point_cloud.points)
     points_color = np.asarray(point_cloud.colors)*255
@@ -108,7 +110,7 @@ def hello(hparams: Namespace) -> None:
 
 
 
-        output_path = 'zyq/pc2label'
+        output_path = hparams.output_path
         if not os.path.exists(output_path):
             Path(output_path).mkdir(parents=True)
             Path(os.path.join(output_path, 'vis')).mkdir(parents=True)

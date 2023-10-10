@@ -38,7 +38,7 @@ def hello(hparams: Namespace) -> None:
     hparams.ray_altitude_range = [-95, 54]
     hparams.dataset_type='memory_depth_dji'
 
-
+    hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
 
     runner = Runner(hparams)
     train_items = runner.train_items
@@ -54,53 +54,18 @@ def hello(hparams: Namespace) -> None:
         valid_depth_mask = ~torch.isinf(depth_map)
 
         
-        gt_label = metadata_item.load_gt()
+        if hparams.label_name == 'gt':
+            gt_label = metadata_item.load_gt()
+        else:
+            gt_label = metadata_item.load_label()
+
+        # center_gt_label = metadata_item.load_gt()
+        # center_gt_label = remapping(center_gt_label)
+        
         gt_label = remapping(gt_label)
         
         non_zero_mask = (gt_label != 0)
         valid_depth_mask = valid_depth_mask * non_zero_mask
-
-        # building  road car tree
-
-        # for process_id in [1, 2]:
-        #     a_mask = (gt_label == process_id).view(-1)
-        #     num_true = a_mask.sum().item()
-        #     num_samples = num_true //3
-        #     true_indices = torch.nonzero(a_mask)
-        #     num_samples = min(num_samples, len(true_indices))
-        #     if num_samples > 0:
-        #         shuffled_indices = torch.randperm(true_indices.size(0))
-        #         selected_indices = true_indices[shuffled_indices[:num_samples]]
-
-        #         sampled_mask = torch.zeros_like(a_mask, dtype=torch.bool)
-                
-        #         sampled_mask[selected_indices] = True
-
-        #         sampled_mask = sampled_mask.view(H,W)
-
-        #         no_a_mask = (gt_label != 1)
-        #         sampled_mask = sampled_mask + no_a_mask
-        #         valid_depth_mask = valid_depth_mask * sampled_mask
-        
-        # for process_id in [3,4]:
-        #     a_mask = (gt_label == process_id).view(-1)
-        #     num_true = a_mask.sum().item()
-        #     num_samples = num_true //3
-        #     true_indices = torch.nonzero(a_mask)
-        #     num_samples = min(num_samples, len(true_indices))
-        #     if num_samples > 0:
-        #         shuffled_indices = torch.randperm(true_indices.size(0))
-        #         selected_indices = true_indices[shuffled_indices[:num_samples]]
-
-        #         sampled_mask = torch.zeros_like(a_mask, dtype=torch.bool)
-                
-        #         sampled_mask[selected_indices] = True
-
-        #         sampled_mask = sampled_mask.view(H,W)
-
-        #         no_a_mask = (gt_label != 1)
-        #         sampled_mask = sampled_mask + no_a_mask
-        #         valid_depth_mask = valid_depth_mask * sampled_mask
             
 
         gt_label = custom2rgb(gt_label.cpu().numpy())
@@ -158,17 +123,38 @@ def hello(hparams: Namespace) -> None:
 
     combined_array = np.concatenate(world_points, axis=0)
 
-    print(combined_array.shape)
-    combined_array=combined_array[::50]
-
+    
     print('writing ply ...')
 
+
+    print(combined_array.shape)
     cloud = PyntCloud(pd.DataFrame(
         # same arguments that you are passing to visualize_pcl
         data=np.hstack((combined_array[:, :3], np.uint8(combined_array[:, 3:6]))),
         columns=["x", "y", "z", "red", "green", "blue"]))
+    cloud.to_file("point_cloud_full.ply")
+    print('full pc saved')
 
-    cloud.to_file("point_cloud.ply")
+
+    pc=combined_array[::50]
+    print(combined_array.shape)
+    cloud = PyntCloud(pd.DataFrame(
+        # same arguments that you are passing to visualize_pcl
+        data=np.hstack((pc[:, :3], np.uint8(pc[:, 3:6]))),
+        columns=["x", "y", "z", "red", "green", "blue"]))
+    cloud.to_file("point_cloud_50.ply")
+    print('1/50 pc saved')
+
+    pc=combined_array[::10]
+    print(combined_array.shape)
+    cloud = PyntCloud(pd.DataFrame(
+        # same arguments that you are passing to visualize_pcl
+        data=np.hstack((pc[:, :3], np.uint8(pc[:, 3:6]))),
+        columns=["x", "y", "z", "red", "green", "blue"]))
+    cloud.to_file("point_cloud_10.ply")
+    print('1/10 pc saved')
+
+
 
     print('done')
 
