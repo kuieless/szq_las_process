@@ -38,7 +38,7 @@ def hello(hparams: Namespace) -> None:
     device = 'cuda'
     threshold=0.015
     print('read point cloud')
-    point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f_no_depth_filter/point_cloud_10.ply")
+    point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_10.ply")
 
     points_nerf = np.asarray(point_cloud.points)
     points_color = np.asarray(point_cloud.colors)*255
@@ -51,7 +51,7 @@ def hello(hparams: Namespace) -> None:
 
 
     runner = Runner(hparams)
-    val_items = runner.val_items[:3]
+    val_items = runner.val_items
     print(f"len train_items: {len(val_items)}")
 
 
@@ -120,11 +120,10 @@ def hello(hparams: Namespace) -> None:
             if depth < thresh:
                 depth_map[y, x] = depth
                 image[y, x] = torch.flip(color, [0])
-                image_expand[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = torch.flip(color, [0])
-
             if expand and depth < depth_map_expand[y, x] and depth < thresh:
                 depth_map_expand[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = depth
                 image_expand_depth[y, x] = torch.flip(color, [0])
+                image_expand[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = torch.flip(color, [0])
 
         image = image.cpu().numpy()[:, :, ::-1]
         image_label = rgb2custom(image)

@@ -24,6 +24,21 @@ import pickle
 import math
 from dji.process_dji_v8_color import euler2rotation, rad
 import xml.etree.ElementTree as ET
+from collections import Counter
+from pyntcloud import PyntCloud
+import pandas as pd
+
+
+
+
+def calculate_entropy(labels):
+    unique_labels, label_counts = np.unique(labels, return_counts=True)
+    total_labels = len(labels)
+
+    probabilities = label_counts / total_labels
+    entropy = -np.sum(probabilities * np.log2(probabilities))
+
+    return entropy
 
 
 def custom2rgb_1(mask):
@@ -53,7 +68,7 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_1_5',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_test',required=False, help='experiment name')
     parser.add_argument('--metaXml_path', default='/data/yuqi/Datasets/DJI/origin/Yingrenshi_20230926_origin/terra_point_ply/metadata.xml', type=str)
 
     
@@ -65,6 +80,10 @@ def hello(hparams: Namespace) -> None:
     hparams.dataset_type='memory_depth_dji'
     device = 'cpu'
     threshold=0.015
+
+    hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
+    runner = Runner(hparams)
+
 
     output_path = hparams.output_path
     if not os.path.exists(output_path):
@@ -78,7 +97,7 @@ def hello(hparams: Namespace) -> None:
     points_nerf = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(0, 1, 2))
     print(points_nerf.shape)
     root = ET.parse(hparams.metaXml_path).getroot()
-    translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float) 
+    translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float64) 
     coordinate_info = torch.load(hparams.dataset_path + '/coordinates.pt')
     origin_drb = coordinate_info['origin_drb'].numpy()
     pose_scale_factor = coordinate_info['pose_scale_factor']
@@ -89,6 +108,8 @@ def hello(hparams: Namespace) -> None:
                             [0, math.cos(rad(135)), math.sin(rad(135))],
                             [0, -math.sin(rad(135)), math.cos(rad(135))]])      
     points_nerf = np.array(points_nerf)
+    # points_nerf = points_nerf[::10]
+    print(points_nerf.shape)
     points_nerf += translation
     points_nerf = ZYQ.numpy() @ points_nerf.T
     points_nerf = (ZYQ_1.numpy() @ points_nerf).T
@@ -100,15 +121,18 @@ def hello(hparams: Namespace) -> None:
 
 
 
+    print(f"{points_nerf.shape}")
+
+
+
 
     points_nerf = torch.from_numpy(points_nerf).to(device)
     points_nerf = points_nerf.float()
 
-    hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
-    runner = Runner(hparams)
-    train_items = runner.train_items[::5]
-    print(f"len train_items: {len(train_items)}")
+    
 
+    train_items = runner.train_items
+    print(f"len train_items: {len(train_items)}")
     split_list=[]
     point_label_dict = {}
     point_label_list = []
@@ -160,12 +184,13 @@ def hello(hparams: Namespace) -> None:
 
         meshMask = metadata_item.load_depth_dji().float().to(device)
         
+        
         x = projected_points[:, 0].long()
         y = projected_points[:, 1].long()
         x[~mask] = 0
         y[~mask] = 0
         mesh_depths = meshMask[y, x]
-        mesh_depths[~mask] = 1e6
+        mesh_depths[~mask] = -1e6
 
         depth_z = pt_3d_trans[2]
         mask_z = depth_z < (mesh_depths[:, 0] + threshold)
@@ -182,14 +207,14 @@ def hello(hparams: Namespace) -> None:
         
         Image.fromarray(image_color.astype(np.uint8)).save(os.path.join(output_path, 'vis_gy', f"{metadata_item.image_path.stem}.png"))
         
-        image_flatten = image.flatten()
-        gt_label_flatten = gt_label.flatten()
-        for idx, label in zip(image_flatten, gt_label_flatten):
-            point_label_list[idx].append(label)
+        # image_flatten = image.flatten()
+        # gt_label_flatten = gt_label.flatten()
+        # for idx, label in zip(image_flatten, gt_label_flatten):
+        #     point_label_list[idx].append(label)
 
-        #for h in range(H):
-        #    for w in range(W):
-        #        point_label_list[int(image[h, w])].append(int(gt_label[h, w]))
+        for h in range(H):
+           for w in range(W):
+               point_label_list[int(image[h, w])].append(int(gt_label[h, w]))
         
     print('write pickle')
     # 将列表保存为二进制文件
@@ -202,24 +227,28 @@ def hello(hparams: Namespace) -> None:
 
 
     # loaded_data = point_label_list
-    # # with open(f'{output_path}/point_label_list_gy.pkl', 'rb') as file:
-    # #     # 使用 pickle.load() 读取数据
-    # #     loaded_data = pickle.load(file)
+    with open(f'{output_path}/point_label_list_gy.pkl', 'rb') as file:
+        # 使用 pickle.load() 读取数据
+        loaded_data = pickle.load(file)
 
 
-    # ## 1. entropy
-    # #######################  计算entropy
-    # print('calculate entropy')
-    # entropies = [calculate_entropy(point) for point in tqdm(loaded_data)]
-    # entropies_intensity = np.array(entropies)
-    # np.save(f"{output_path}/entropies.npy", entropies_intensity)
+    ###3 . label_num
+    label_counts = np.array([len(point) for point in loaded_data])
+    print(f"label_counts max :{max(label_counts)}, min :{(min(label_counts))}")
 
-    # ######## 保存
-    # # entropies_intensity = np.load(f"{output_path}/entropies.npy")
 
-    # min_entropy = min(entropies_intensity)
-    # max_entropy = max(entropies_intensity)
-    # normalized_intensities = (entropies_intensity - min_entropy) / (max_entropy - min_entropy) * 255
+    ## 1. entropy
+    #######################  计算entropy
+    print('calculate entropy')
+    entropies = [calculate_entropy(point) for point in tqdm(loaded_data)]
+    entropies_intensity = np.array(entropies)
+    np.save(f"{output_path}/entropies.npy", entropies_intensity)
+
+    # entropies_intensity = np.load(f"{output_path}/entropies.npy")
+
+    min_entropy = min(entropies_intensity)
+    max_entropy = max(entropies_intensity)
+    normalized_intensities = (entropies_intensity - min_entropy) / (max_entropy - min_entropy) * 255
 
 
     # cloud = PyntCloud(pd.DataFrame(
@@ -228,28 +257,30 @@ def hello(hparams: Namespace) -> None:
     #     columns=["x", "y", "z", "intensity"]))
     # cloud.to_file(f"{output_path}/entropy_pc.ply")
 
-    # ### 2. 投票峰值
-    # print('calculate max label')
+    ### 2. 投票峰值
+    print('calculate max label')
 
-    # most_common_labels = []
-    # for point in loaded_data:
-    #     if not point:
-    #         # 处理空列表的情况
-    #         most_common_labels.append(-1)
-    #     else:
-    #         most_common_labels.append(Counter(point).most_common(1)[0][0])
-    # most_common_labels = np.array(most_common_labels)
-    # max_label = remapping(most_common_labels)
-    # max_label_color = custom2rgb_1(max_label)
-    # cloud = PyntCloud(pd.DataFrame(
-    #     # same arguments that you are passing to visualize_pcl
-    #     data=np.hstack((points_nerf[:, :3], np.uint8(max_label_color))),
-    #     columns=["x", "y", "z", "red", "green", "blue"]))
-    # cloud.to_file(f"{output_path}/most_label_pc.ply")
+    most_common_labels = []
+    for point in loaded_data:
+        if not point:
+            # 处理空列表的情况
+            most_common_labels.append(-1)
+        else:
+            most_common_labels.append(Counter(point).most_common(1)[0][0])
+    most_common_labels = np.array(most_common_labels)
+    max_label = remapping(most_common_labels)
+    max_label_color = custom2rgb_1(max_label)
+
+    
+
+    cloud = PyntCloud(pd.DataFrame(
+        # same arguments that you are passing to visualize_pcl
+        data=np.hstack((points_nerf[:, :3], np.uint8(max_label_color), normalized_intensities[:, np.newaxis], label_counts[:, np.newaxis])),
+        columns=["x", "y", "z", "red", "green", "blue", 'entropy', 'label_num']))
+    cloud.to_file(f"{output_path}/results.ply")
 
 
-
-    # print('done')
+    print('done')
 
 
 if __name__ == '__main__':

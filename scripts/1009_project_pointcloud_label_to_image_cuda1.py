@@ -35,7 +35,7 @@ def hello(hparams: Namespace) -> None:
     hparams.ray_altitude_range = [-95, 54]
     hparams.dataset_type='memory_depth_dji'
     
-    device = 'cuda'
+    device = 'cpu' #'cuda'
     threshold=0.015
     print('read point cloud')
     point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f_no_depth_filter/point_cloud_10.ply")
@@ -100,31 +100,38 @@ def hello(hparams: Namespace) -> None:
         # mask[::10]=False
 
 
-        depth_z = pt_3d_trans[2]
-        
-        projected_points_mask = projected_points[mask, :]
-        depth_z_mask = depth_z[mask]
-
-        
-
-
-        step = 2
-        points_color_mask = points_color[mask]
+        step = 1
         expand=True
-        meshMask = metadata_item.load_depth_dji().to(device)
-        for x, y, depth, color in tqdm(zip(projected_points_mask[:, 0], projected_points_mask[:, 1], depth_z_mask, points_color_mask)):
+        meshMask = metadata_item.load_depth_dji()
+
+        x = projected_points[:, 0].long()
+        y = projected_points[:, 1].long()
+        x[~mask] = 0
+        y[~mask] = 0
+        mesh_depths = meshMask[y, x]
+        mesh_depths[~mask] = -10
+
+        depth_z = pt_3d_trans[2]
+        mask_z = depth_z < (mesh_depths[:, 0] + threshold)
+        mask_xyz = mask & mask_z
+
+        projected_points_mask = projected_points[mask_xyz, :]
+        points_color_mask = points_color[mask_xyz]
+
+
+        for x, y, depth, color in tqdm(zip(projected_points_mask[:, 0], projected_points_mask[:, 1], depth_z[mask_xyz], points_color_mask)):
             x, y = int(x), int(y)
-            
+
             # if depth < depth_map[y, x]:
             thresh = meshMask[y, x] + threshold
             if depth < thresh:
                 depth_map[y, x] = depth
                 image[y, x] = torch.flip(color, [0])
                 image_expand[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = torch.flip(color, [0])
-
             if expand and depth < depth_map_expand[y, x] and depth < thresh:
                 depth_map_expand[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = depth
                 image_expand_depth[y, x] = torch.flip(color, [0])
+
 
         image = image.cpu().numpy()[:, :, ::-1]
         image_label = rgb2custom(image)
@@ -147,7 +154,6 @@ def hello(hparams: Namespace) -> None:
             Path(os.path.join(output_path, 'expand_depth_vis')).mkdir(parents=True)
             Path(os.path.join(output_path, 'expand_depth_labels_pc')).mkdir(parents=True)
 
-            
 
 
         Image.fromarray(image_label.astype(np.uint16)).save(os.path.join(output_path, 'labels_pc', f"{metadata_item.image_path.stem}.png"))
