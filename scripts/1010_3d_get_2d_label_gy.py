@@ -199,52 +199,57 @@ def hello(hparams: Namespace) -> None:
 
     print("done")
 
-    loaded_data = point_label_list
-    # with open(f'{output_path}/point_label_list_gy.pkl', 'rb') as file:
-    #     # 使用 pickle.load() 读取数据
-    #     loaded_data = pickle.load(file)
 
 
-    ## 1. entropy
-    #######################  计算entropy
-    entropies = [calculate_entropy(point) for point in tqdm(loaded_data)]
-    entropies_intensity = np.array(entropies)
-    np.save(f"{output_path}/entropies.npy", entropies_intensity)
-
-    ######## 保存
-    # entropies_intensity = np.load(f"{output_path}/entropies.npy")
-
-    min_entropy = min(entropies_intensity)
-    max_entropy = max(entropies_intensity)
-    normalized_intensities = (entropies_intensity - min_entropy) / (max_entropy - min_entropy) * 255
+    # loaded_data = point_label_list
+    # # with open(f'{output_path}/point_label_list_gy.pkl', 'rb') as file:
+    # #     # 使用 pickle.load() 读取数据
+    # #     loaded_data = pickle.load(file)
 
 
-    cloud = PyntCloud(pd.DataFrame(
-        # same arguments that you are passing to visualize_pcl
-        data=np.hstack((points_nerf[:, :3], normalized_intensities[:, np.newaxis])),
-        columns=["x", "y", "z", "intensity"]))
-    cloud.to_file(f"{output_path}/entropy_pc.ply")
+    # ## 1. entropy
+    # #######################  计算entropy
+    # print('calculate entropy')
+    # entropies = [calculate_entropy(point) for point in tqdm(loaded_data)]
+    # entropies_intensity = np.array(entropies)
+    # np.save(f"{output_path}/entropies.npy", entropies_intensity)
 
-    ### 2. 投票峰值
-    most_common_labels = []
-    for point in loaded_data:
-        if not point:
-            # 处理空列表的情况
-            most_common_labels.append(-1)
-        else:
-            most_common_labels.append(Counter(point).most_common(1)[0][0])
-    most_common_labels = np.array(most_common_labels)
-    max_label = remapping(most_common_labels)
-    max_label_color = custom2rgb_1(max_label)
-    cloud = PyntCloud(pd.DataFrame(
-        # same arguments that you are passing to visualize_pcl
-        data=np.hstack((points_nerf[:, :3], np.uint8(max_label_color))),
-        columns=["x", "y", "z", "red", "green", "blue"]))
-    cloud.to_file(f"{output_path}/most_label_pc.ply")
+    # ######## 保存
+    # # entropies_intensity = np.load(f"{output_path}/entropies.npy")
+
+    # min_entropy = min(entropies_intensity)
+    # max_entropy = max(entropies_intensity)
+    # normalized_intensities = (entropies_intensity - min_entropy) / (max_entropy - min_entropy) * 255
 
 
+    # cloud = PyntCloud(pd.DataFrame(
+    #     # same arguments that you are passing to visualize_pcl
+    #     data=np.hstack((points_nerf[:, :3], normalized_intensities[:, np.newaxis])),
+    #     columns=["x", "y", "z", "intensity"]))
+    # cloud.to_file(f"{output_path}/entropy_pc.ply")
 
-    print('done')
+    # ### 2. 投票峰值
+    # print('calculate max label')
+
+    # most_common_labels = []
+    # for point in loaded_data:
+    #     if not point:
+    #         # 处理空列表的情况
+    #         most_common_labels.append(-1)
+    #     else:
+    #         most_common_labels.append(Counter(point).most_common(1)[0][0])
+    # most_common_labels = np.array(most_common_labels)
+    # max_label = remapping(most_common_labels)
+    # max_label_color = custom2rgb_1(max_label)
+    # cloud = PyntCloud(pd.DataFrame(
+    #     # same arguments that you are passing to visualize_pcl
+    #     data=np.hstack((points_nerf[:, :3], np.uint8(max_label_color))),
+    #     columns=["x", "y", "z", "red", "green", "blue"]))
+    # cloud.to_file(f"{output_path}/most_label_pc.ply")
+
+
+
+    # print('done')
 
 
 if __name__ == '__main__':
