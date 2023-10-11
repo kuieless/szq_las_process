@@ -20,15 +20,12 @@ from PIL import Image
 from pathlib import Path
 import open3d as o3d
 import pickle
-import math
-from dji.process_dji_v8_color import euler2rotation, rad
-
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_few',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel',required=False, help='experiment name')
 
     
     return parser.parse_args()
@@ -37,48 +34,28 @@ def _get_train_opts() -> Namespace:
 def hello(hparams: Namespace) -> None:
     hparams.ray_altitude_range = [-95, 54]
     hparams.dataset_type='memory_depth_dji'
-    device = 'cuda'
+    device = 'cpu'
     threshold=0.015
 
     output_path = hparams.output_path
     if not os.path.exists(output_path):
         Path(output_path).mkdir(parents=True)
-    if not os.path.exists(os.path.join(output_path, 'vis')):
-        Path(os.path.join(output_path, 'vis')).mkdir(parents=True)
+    if not os.path.exists(os.path.join(output_path, 'vis_gy')):
+        Path(os.path.join(output_path, 'vis_gy')).mkdir(parents=True)
 
 
 
-
-    # # #1. txt文件
-    # points_nerf = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(0, 1, 2))
-    # print(points_nerf.shape)
-    # points_nerf = points_nerf[::10]
-    # print(f"down-sampling {points_nerf.shape}")
-
-    # coordinate_info = torch.load(hparams.dataset_path + '/coordinates.pt')
-    # origin_drb = coordinate_info['origin_drb'].numpy()
-    # pose_scale_factor = coordinate_info['pose_scale_factor']
-
-    # ZYQ = torch.DoubleTensor([[0, 0, -1],
-    #                         [0, 1, 0],
-    #                         [1, 0, 0]])
-    # ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
-    #                         [0, math.cos(rad(135)), math.sin(rad(135))],
-    #                         [0, -math.sin(rad(135)), math.cos(rad(135))]])      
-
-    # points_nerf = np.array(points_nerf)
-    # points_nerf = ZYQ.numpy() @ points_nerf.T
-    # points_nerf = (ZYQ_1.numpy() @ points_nerf).T
-
-    # points_nerf = (points_nerf - origin_drb) / pose_scale_factor
+    #points_nerf = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered_small.txt', usecols=(0, 1, 2))
+    #points_nerf = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(0, 1, 2))
+    #print(points_nerf.shape)
+    #points_nerf = points_nerf[::10]
+    #print(f"down-sampling {points_nerf.shape}")
 
 
-    # #2. ply 文件
+
+    # # ply 文件
     point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_50.ply")
-    # point_cloud = o3d.io.read_point_cloud("/data/jxchen/dataset/dji/Yingrenshi/dji_labeled_segmented_ply.ply")
-    
     points_nerf = np.asarray(point_cloud.points)
-    points_nerf = points_nerf[::10]
     # points_colors = np.asarray(point_cloud.colors)
 
 
@@ -88,7 +65,7 @@ def hello(hparams: Namespace) -> None:
     hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
 
     runner = Runner(hparams)
-    train_items = runner.train_items[::40]
+    train_items = runner.train_items[::20]
     print(f"len train_items: {len(train_items)}")
 
     split_list=[]
@@ -128,7 +105,7 @@ def hello(hparams: Namespace) -> None:
 
 
         # 将 NumPy 数组转换为 PyTorch 张量，并移动到 GPU 上
-        image = torch.zeros((image_height, image_width)).to(device)
+        image = torch.zeros((image_height, image_width)).long().to(device)
         image_color = torch.zeros((image_height, image_width), dtype=torch.uint8).to(device)
 
         depth_map = large_int * torch.ones((image_height, image_width, 1), dtype=torch.uint8).to(device)
@@ -139,63 +116,37 @@ def hello(hparams: Namespace) -> None:
         mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
         mask = mask_x & mask_y
 
-        meshMask = metadata_item.load_depth_dji().to(device)
+        meshMask = metadata_item.load_depth_dji().float().to(device)
+        
+        x = projected_points[:, 0].long()
+        y = projected_points[:, 1].long()
+        x[~mask] = 0
+        y[~mask] = 0
+        mesh_depths = meshMask[y, x]
+        mesh_depths[~mask] = 1e6
 
+        depth_z = pt_3d_trans[2]
+        mask_z = depth_z < (mesh_depths[:, 0] + threshold)
+        mask_xyz = mask & mask_z
 
-
-
-        projected_points_mask = projected_points[mask, :]
-        pro_z = pt_3d_trans[2][mask]
-
-        filter_depth_mask = (pro_z <= ((meshMask[projected_points_mask[:, 1].to(torch.long), projected_points_mask[:, 0].to(torch.long)]).squeeze(-1) + threshold))
-
-        projected_points_mask = projected_points_mask[filter_depth_mask]
-
-
-        depth_z_mask = pt_3d_trans[2][mask][filter_depth_mask]
-
-
-
-        step = 2
-        expand=True
-
-
-        print(f"size: {filter_depth_mask.shape}")
-        for x, y, depth, idx in tqdm(zip(projected_points_mask[:, 0], projected_points_mask[:, 1], depth_z_mask, mask.nonzero().squeeze(-1)[filter_depth_mask])):
-            x, y = int(x), int(y)
-            thresh = meshMask[y, x] + threshold
-            # depth = depth_map[y, x]
-            if depth < thresh:
-                depth_map[y, x] = depth
-                image[y, x] = idx
-                image_color[y, x] = gt_label[y, x]
-
-
-            # if expand and depth < depth_map_expand[y, x]:
-            #     depth_map_expand[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = depth
-            #     image[y, x] = idx
-            #     image_color[y, x] = gt_label[y, x]
+        x, y = x[mask_xyz], y[mask_xyz]
+        depth = depth_z[mask_xyz]
+        idx = mask_xyz.nonzero().squeeze(-1)
+        depth_map[y, x] = depth[:, None]
+        image[y, x] = idx
+        image_color[y, x] = gt_label[y, x]
 
         image_color = custom2rgb(image_color.cpu().numpy())
         
-        Image.fromarray(image_color.astype(np.uint8)).save(os.path.join(output_path, 'vis', f"{metadata_item.image_path.stem}.png"))
+        Image.fromarray(image_color.astype(np.uint8)).save(os.path.join(output_path, 'vis_gy', f"{metadata_item.image_path.stem}.png"))
         
         for h in range(H):
             for w in range(W):
                 point_label_list[int(image[h, w])].append(int(gt_label[h, w]))
 
-
-        # for h in range(H):
-        #     for w in range(W):
-        #         point_label_dict[int(image[h, w])].append(gt_label[h, w])
-
-
-    
-
-
     print('write pickle')
     # 将列表保存为二进制文件
-    with open(f'{output_path}/point_label_list.pkl', 'wb') as file:
+    with open(f'{output_path}/point_label_list_gy.pkl', 'wb') as file:
         pickle.dump(point_label_list, file)
         
 
@@ -205,4 +156,13 @@ def hello(hparams: Namespace) -> None:
 
 
 if __name__ == '__main__':
+    #meshMask = torch.zeros(912, 1368, 1)
+    #projected_points = torch.rand(2222058, 2) * 500
+
+    #x = projected_points[:, 0].long()
+    #y = projected_points[:, 1].long()
+    #mesh_depths = meshMask[x, y]
+    #print(mesh_depths.shape)
+    #import pdb; pdb.set_trace()
+
     hello(_get_train_opts())

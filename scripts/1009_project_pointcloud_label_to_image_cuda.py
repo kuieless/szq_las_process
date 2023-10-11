@@ -38,7 +38,7 @@ def hello(hparams: Namespace) -> None:
     device = 'cuda'
     threshold=0.015
     print('read point cloud')
-    point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_full.ply")
+    point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_10.ply")
 
     points_nerf = np.asarray(point_cloud.points)
     points_color = np.asarray(point_cloud.colors)*255
@@ -94,8 +94,8 @@ def hello(hparams: Namespace) -> None:
 
 
          # 获得落在图像上的点
-        mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] <= image_width)
-        mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] <= image_height)
+        mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] < image_width)
+        mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
         mask = mask_x & mask_y
         # mask[::10]=False
 
@@ -143,6 +143,10 @@ def hello(hparams: Namespace) -> None:
             Path(os.path.join(output_path, 'labels_pc')).mkdir(parents=True)
             Path(os.path.join(output_path, 'expand_vis')).mkdir(parents=True)
             Path(os.path.join(output_path, 'expand_labels_pc')).mkdir(parents=True)
+            Path(os.path.join(output_path, 'expand_depth_vis')).mkdir(parents=True)
+            Path(os.path.join(output_path, 'expand_depth_labels_pc')).mkdir(parents=True)
+
+            
 
 
         Image.fromarray(image_label.astype(np.uint16)).save(os.path.join(output_path, 'labels_pc', f"{metadata_item.image_path.stem}.png"))

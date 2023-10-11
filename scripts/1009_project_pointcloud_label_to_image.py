@@ -18,6 +18,7 @@ import cv2
 from tools.unetformer.uavid2rgb import rgb2custom, custom2rgb
 from PIL import Image
 from pathlib import Path
+import open3d as o3d
 
 
 def _get_train_opts() -> Namespace:
@@ -34,7 +35,8 @@ def hello(hparams: Namespace) -> None:
     hparams.ray_altitude_range = [-95, 54]
     hparams.dataset_type='memory_depth_dji'
 
-    import open3d as o3d
+
+    threshold=0.015
 
     point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_full.ply")
 
@@ -78,25 +80,33 @@ def hello(hparams: Namespace) -> None:
 
         image = np.zeros((image_height, image_width, 3), dtype=np.uint8)
         image_expand = np.zeros((image_height, image_width, 3), dtype=np.uint8)
+        image_expand_depth = np.zeros((image_height, image_width, 3), dtype=np.uint8)
+
 
         large_int = 1e6
         depth_map = large_int * np.ones((image_height, image_width, 1), dtype=np.uint8)
         depth_map_expand = large_int * np.ones((image_height, image_width, 1), dtype=np.uint8)
 
         # 获得落在图像上的点
-        mask_x = np.logical_and(projected_points[0, :] >= 0, projected_points[0, :] <= image_width)
-        mask_y = np.logical_and(projected_points[1, :] >= 0, projected_points[1, :] <= image_height)
+        mask_x = np.logical_and(projected_points[0, :] >= 0, projected_points[0, :] < image_width)
+        mask_y = np.logical_and(projected_points[1, :] >= 0, projected_points[1, :] < image_height)
         mask = np.logical_and(mask_x, mask_y)
 
-        projected_points = projected_points[:, mask]
-        pt_3d_trans_z = pt_3d_trans[2, mask]
-        depth_z = pt_3d_trans_z
+
+
+        depth_z = pt_3d_trans[2, mask]
+
+        projected_points_mask = projected_points[:, mask]
+        depth_z_mask = depth_z[mask]
+
 
 
         step = 3
         points_color_mask = points_color[mask]
         expand=True
-        for x, y, depth, color in tqdm(zip(projected_points[0], projected_points[1], depth_z, points_color_mask)):
+        meshMask = metadata_item.load_depth_dji().cpu().numpy()
+
+        for x, y, depth, color in tqdm(zip(projected_points_mask[0], projected_points_mask[1], depth_z, points_color_mask)):
             x, y = int(x), int(y)
             if depth < depth_map[y, x]:
                 depth_map[y, x] = depth

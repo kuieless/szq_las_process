@@ -23,7 +23,7 @@ import open3d as o3d
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--rgbs_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231009/train/rgbs',required=False, help='')
+    parser.add_argument('--rgbs_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231009/val/rgbs',required=False, help='')
     parser.add_argument('--save_path', type=str, default='output/longhua_block1_resize_rgbs',required=False, help='experiment name')
 
     
@@ -40,18 +40,21 @@ def hello(hparams: Namespace) -> None:
     for ext in ('*.png', '*.jpg'):
         used_files.extend(glob(os.path.join(rgbs_path, ext)))
     used_files.sort()
-    used_files=used_files[380:381]
-    # H, W = 854, 1280
+    # used_files=used_files[383:384]
+    # H, W = 910, 1365
     H, W = 1024, 1536
 
     
     for image_path in tqdm(used_files):
         rgbs = Image.open(image_path).convert('RGB')
-        W, H = rgbs.size
+        # W, H = rgbs.size
         # W, H = int(W/4), int(H/4) 
-        rgbs = rgbs.resize((W, H), Image.BILINEAR)
+        rgbs = rgbs.resize((W, H), Image.LANCZOS)
+        # rgbs = rgbs.resize((W, H), Image.BILINEAR)
+        # rgbs = rgbs.resize((W, H), Image.INTER_AREA)
+
         
-        rgbs.save(os.path.join(save_path, f'{Path(image_path).stem}.jpg'))
+        rgbs.save(os.path.join(save_path, f'{Path(image_path).name}'))
         
     
     print("done")

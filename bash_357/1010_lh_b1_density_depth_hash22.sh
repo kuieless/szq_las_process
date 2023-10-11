@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 
 
 dataset_path=/data/yuqi/Datasets/DJI/Longhua_block1_20231009
@@ -29,6 +29,7 @@ exp_name=logs_dji/1010_lh_b1_density_depth_hash22
 
 log2_hashmap_size=22
 desired_resolution=8192
+lr=0.0005
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
     --network_type   $network_type   --config_file  $config_file   \
@@ -38,4 +39,4 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --sampling_mesh_guidance   $sampling_mesh_guidance   --sdf_as_gpnerf  True  \
     --geo_init_method=idr   \
     --depth_dji_loss   $depth_dji_loss   --wgt_depth_mse_loss  $wgt_depth_mse_loss  --wgt_sigma_loss  0  \
-    --log2_hashmap_size=$log2_hashmap_size   --desired_resolution=$desired_resolution
+    --log2_hashmap_size=$log2_hashmap_size   --desired_resolution=$desired_resolution  --lr=$lr
