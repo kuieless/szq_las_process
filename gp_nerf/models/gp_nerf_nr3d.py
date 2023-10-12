@@ -341,7 +341,6 @@ class NeRF(nn.Module):
                         sem_logits = self.semantic_linear(semantic_hash)  
                     
                 else:
-                    print('add the semantic head to nerf')
                     if self.stop_semantic_grad:
                         h_stop = h.detach()
                         sem_logits = self.semantic_linear(torch.cat([h_stop, input_xyz], dim=-1))

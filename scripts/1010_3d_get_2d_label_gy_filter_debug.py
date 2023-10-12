@@ -68,8 +68,7 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_10121215',required=False, help='experiment name')
-    # parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_test',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_test',required=False, help='experiment name')
     parser.add_argument('--metaXml_path', default='/data/yuqi/Datasets/DJI/origin/Yingrenshi_20230926_origin/terra_point_ply/metadata.xml', type=str)
 
     
@@ -93,44 +92,42 @@ def hello(hparams: Namespace) -> None:
         Path(os.path.join(output_path, 'vis_gy')).mkdir(parents=True)
 
 
-
-    # #1. txt文件
-    load_ply_path = '/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt'
-    points_nerf = np.genfromtxt(load_ply_path, usecols=(0, 1, 2))
-    print(points_nerf.shape)
-    root = ET.parse(hparams.metaXml_path).getroot()
-    translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float64) 
-    coordinate_info = torch.load(hparams.dataset_path + '/coordinates.pt')
-    origin_drb = coordinate_info['origin_drb'].numpy()
-    pose_scale_factor = coordinate_info['pose_scale_factor']
-    ZYQ = torch.DoubleTensor([[0, 0, -1],
-                            [0, 1, 0],
-                            [1, 0, 0]])
-    ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
-                            [0, math.cos(rad(135)), math.sin(rad(135))],
-                            [0, -math.sin(rad(135)), math.cos(rad(135))]])      
-    points_nerf = np.array(points_nerf)
+    print('load point cloud data...')
+    # # #1. txt文件
+    # points_nerf = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(0, 1, 2))
+    # print(points_nerf.shape)
+    # root = ET.parse(hparams.metaXml_path).getroot()
+    # translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float64) 
+    # coordinate_info = torch.load(hparams.dataset_path + '/coordinates.pt')
+    # origin_drb = coordinate_info['origin_drb'].numpy()
+    # pose_scale_factor = coordinate_info['pose_scale_factor']
+    # ZYQ = torch.DoubleTensor([[0, 0, -1],
+    #                         [0, 1, 0],
+    #                         [1, 0, 0]])
+    # ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
+    #                         [0, math.cos(rad(135)), math.sin(rad(135))],
+    #                         [0, -math.sin(rad(135)), math.cos(rad(135))]])      
+    # points_nerf = np.array(points_nerf)
     # points_nerf = points_nerf[::100]
-    print(points_nerf.shape)
-    points_nerf += translation
-    points_nerf = ZYQ.numpy() @ points_nerf.T
-    points_nerf = (ZYQ_1.numpy() @ points_nerf).T
-    points_nerf = (points_nerf - origin_drb) / pose_scale_factor
+    # print(points_nerf.shape)
+    # points_nerf += translation
+    # points_nerf = ZYQ.numpy() @ points_nerf.T
+    # points_nerf = (ZYQ_1.numpy() @ points_nerf).T
+    # points_nerf = (points_nerf - origin_drb) / pose_scale_factor
 
-    if not os.path.exists(f"{output_path}/ori_color_nerfcoor.ply"):   
-        points_color = np.genfromtxt(load_ply_path, usecols=(3, 4, 5, 6))
-        points_color = np.array(points_color)
-        print(f"color: {points_color.shape}")
+    # if not os.path.exists(f"{output_path}/ori_color_nerfcoor.ply"):   
+    #     points_color = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(2, 3, 4, 5))
+    #     points_color = np.array(points_color)
 
-        cloud = PyntCloud(pd.DataFrame(
-            # same arguments that you are passing to visualize_pcl
-            data=np.hstack((points_nerf[:, :3], np.uint8(points_color))),
-            columns=["x", "y", "z", "red", "green", "blue", "label"]))
-        cloud.to_file(f"{output_path}/ori_color_nerfcoor.ply")
+    #     cloud = PyntCloud(pd.DataFrame(
+    #         # same arguments that you are passing to visualize_pcl
+    #         data=np.hstack((points_nerf[:, :3], np.uint8(points_color))),
+    #         columns=["x", "y", "z", "red", "green", "blue", "label"]))
+    #     cloud.to_file(f"{output_path}/ori_color_nerfcoor.ply")
 
-    # # 2. ply 文件
-    # point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_50.ply")
-    # points_nerf = np.asarray(point_cloud.points)
+    # 2. ply 文件
+    point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_gt/point_cloud_50.ply")
+    points_nerf = np.asarray(point_cloud.points)
 
 
 
@@ -144,7 +141,7 @@ def hello(hparams: Namespace) -> None:
 
     
 
-    train_items = runner.train_items
+    train_items = runner.train_items[:5]
     print(f"len train_items: {len(train_items)}")
     split_list=[]
     point_label_dict = {}
@@ -224,10 +221,6 @@ def hello(hparams: Namespace) -> None:
         # gt_label_flatten = gt_label.flatten()
         # for idx, label in zip(image_flatten, gt_label_flatten):
         #     point_label_list[idx].append(label)
-
-        # for h in range(H):
-        #    for w in range(W):
-        #        point_label_list[int(image[h, w])].append(int(gt_label[h, w]))
         
         image_flatten = image.flatten()
         gt_label_flatten = gt_label.flatten()

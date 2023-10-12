@@ -83,7 +83,7 @@ def hello(hparams: Namespace) -> None:
 
     # metadata_paths = sorted(list((Path(hparams.dataset_path) / 'train' / 'metadata').iterdir()))
 
-    for metadata_item in tqdm(train_items):
+    for metadata_item in tqdm(train_items[200:240]):
         pose = metadata_item.c2w
         distance = torch.norm(pose[1:3,3] - position_center)
         if distance > position_radius or metadata_item.is_val:
@@ -106,7 +106,7 @@ def hello(hparams: Namespace) -> None:
         gt_depths_valid = gt_depths[valid_depth_mask]
 
         # z_vals_inbound = gt_depths_valid.min() * 1.5
-        z_vals_inbound = 0.3
+        z_vals_inbound = 0.5
         new_o = ray_o - ray_d * z_vals_inbound
 
         new_pose = pose
@@ -120,7 +120,7 @@ def hello(hparams: Namespace) -> None:
         if not os.path.exists(os.path.join('Output_subset', f'render_{z_vals_inbound}', 'metadata')):
             Path(os.path.join('Output_subset', f'render_{z_vals_inbound}', 'metadata')).mkdir(parents=True, exist_ok=True)
 
-        torch.save(metadata_old, os.path.join('Output_subset', f'render_{z_vals_inbound}', 'metadata', f"{metadata_item.image_path.stem}.pt"))
+        torch.save(metadata_old, os.path.join('Output_subset', f'render_far{z_vals_inbound}', 'metadata', f"{metadata_item.image_path.stem}.pt"))
 
 
 

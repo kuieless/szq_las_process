@@ -105,15 +105,15 @@ def hello(hparams: Namespace) -> None:
     points_nerf = (ZYQ_1.numpy() @ points_nerf).T
     points_nerf = (points_nerf - origin_drb) / pose_scale_factor
 
-    if not os.path.exists(f"{output_path}/ori_color_nerfcoor.ply"):   
-        points_color = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(2, 3, 4, 5))
-        points_color = np.array(points_color)
+    # if not os.path.exists(f"{output_path}/ori_color_nerfcoor.ply"):   
+    #     points_color = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(2, 3, 4, 5))
+    #     points_color = np.array(points_color)
 
-        cloud = PyntCloud(pd.DataFrame(
-            # same arguments that you are passing to visualize_pcl
-            data=np.hstack((points_nerf[:, :3], np.uint8(points_color))),
-            columns=["x", "y", "z", "red", "green", "blue", "label"]))
-        cloud.to_file(f"{output_path}/ori_color_nerfcoor.ply")
+    #     cloud = PyntCloud(pd.DataFrame(
+    #         # same arguments that you are passing to visualize_pcl
+    #         data=np.hstack((points_nerf[:, :3], np.uint8(points_color))),
+    #         columns=["x", "y", "z", "red", "green", "blue", "label"]))
+    #     cloud.to_file(f"{output_path}/ori_color_nerfcoor.ply")
 
     # # # ply 文件
     # point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_50.ply")
@@ -174,12 +174,16 @@ def hello(hparams: Namespace) -> None:
     max_label_color = custom2rgb_1(max_label)
 
 
-    
     cloud = PyntCloud(pd.DataFrame(
-        # same arguments that you are passing to visualize_pcl
         data=np.hstack((points_nerf[:, :3], np.uint8(max_label_color), normalized_intensities[:, np.newaxis], label_counts[:, np.newaxis])),
         columns=["x", "y", "z", "red", "green", "blue", 'entropy', 'label_num']))
     cloud.to_file(f"{output_path}/results.ply")
+
+    # cloud = PyntCloud(pd.DataFrame(
+    #     # same arguments that you are passing to visualize_pcl
+    #     data=np.hstack((points_nerf[1:, :3], np.uint8(max_label_color[1:]), normalized_intensities[1:, np.newaxis], label_counts[1:, np.newaxis])),
+    #     columns=["x", "y", "z", "red", "green", "blue", 'entropy', 'label_num']))
+    # cloud.to_file(f"{output_path}/results.ply")
 
 
     print('done')

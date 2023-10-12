@@ -141,12 +141,13 @@ def render_rays(nerf: nn.Module,
         # 更改穿透box的near为box的交点
         # near[rays_with_fg] = box_near.unsqueeze(-1)
     else: #use mega's points-segmentation method with ellipsoid
-        fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius)
+        fg_far = _intersect_sphere(rays_o, rays_d, sphere_center, sphere_radius, hparams.render_zyq)
         fg_far = torch.maximum(fg_far, near.squeeze())
         # 划分bg ray
         rays_with_bg = torch.arange(N_rays, device=device)[far.squeeze() > fg_far]
         rays_with_fg = torch.arange(N_rays, device=device)[far.squeeze() <= fg_far]
-    assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
+    if not hparams.render_zyq:
+        assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
     rays_o = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
     rays_d = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
     if rays_with_bg.shape[0] > 0:
@@ -635,7 +636,7 @@ def _inference(point_type,
                     axis=-1)
 
 def _intersect_sphere(rays_o: torch.Tensor, rays_d: torch.Tensor, sphere_center: torch.Tensor,
-                      sphere_radius: torch.Tensor) -> torch.Tensor:
+                      sphere_radius: torch.Tensor, render_zyq: bool) -> torch.Tensor:
     if sphere_radius is not None:
         rays_o = (rays_o - sphere_center) / sphere_radius
         rays_d = rays_d / sphere_radius
@@ -650,7 +651,7 @@ def _intersect_sphere(rays_o: torch.Tensor, rays_d: torch.Tensor, sphere_center:
     # consider the case where the ray does not intersect the sphere
     ray_d_cos = 1. / torch.norm(rays_d, dim=-1)
     p_norm_sq = torch.sum(p * p, dim=-1)
-    if (p_norm_sq >= 1.).any():
+    if (p_norm_sq >= 1.).any() and render_zyq == False:
         raise Exception(
             'Not all your cameras are bounded by the unit sphere; please make sure the cameras are normalized properly!')
     d2 = torch.sqrt(1. - p_norm_sq) * ray_d_cos
