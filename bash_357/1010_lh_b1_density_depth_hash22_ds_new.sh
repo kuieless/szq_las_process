@@ -1,9 +1,9 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=2
 
 
-dataset_path=/data/jxchen/dataset/dji/longhua_ds_regen_from_stratch_zyq
+dataset_path=/data/jxchen/dataset/dji/longhua_ds_1011_copy
 config_file=configs/longhua_1.yaml
 
 
@@ -29,7 +29,7 @@ exp_name=logs_dji/1010_lh_b1_density_depth_hash22_ds_new
 
 log2_hashmap_size=22
 desired_resolution=8192
-# lr=0.0005
+lr=0.0005
 
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
@@ -41,4 +41,4 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --geo_init_method=idr   \
     --depth_dji_loss   $depth_dji_loss   --wgt_depth_mse_loss  $wgt_depth_mse_loss  --wgt_sigma_loss  0  \
     --log2_hashmap_size=$log2_hashmap_size   --desired_resolution=$desired_resolution  \
-    --train_scale_factor=1  --val_scale_factor=1   # --lr=$lr
+    --train_scale_factor=1  --val_scale_factor=1    --lr=$lr

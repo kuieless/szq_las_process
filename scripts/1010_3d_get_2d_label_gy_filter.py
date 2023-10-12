@@ -115,6 +115,16 @@ def hello(hparams: Namespace) -> None:
     points_nerf = (ZYQ_1.numpy() @ points_nerf).T
     points_nerf = (points_nerf - origin_drb) / pose_scale_factor
 
+    if not os.path.exists(f"{output_path}/ori_color_nerfcoor.ply"):   
+        points_color = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(2, 3, 4, 5))
+        points_color = np.array(points_color)
+
+        cloud = PyntCloud(pd.DataFrame(
+            # same arguments that you are passing to visualize_pcl
+            data=np.hstack((points_nerf[:, :3], np.uint8(points_color))),
+            columns=["x", "y", "z", "red", "green", "blue", "label"]))
+        cloud.to_file(f"{output_path}/ori_color_nerfcoor.ply")
+
     # # 2. ply 文件
     # point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_50.ply")
     # points_nerf = np.asarray(point_cloud.points)
@@ -230,6 +240,8 @@ def hello(hparams: Namespace) -> None:
     with open(f'{output_path}/point_label_list_gy.pkl', 'rb') as file:
         # 使用 pickle.load() 读取数据
         loaded_data = pickle.load(file)
+
+    loaded_data = [[label for label in point if label != 0] for point in loaded_data]
 
 
     ###3 . label_num

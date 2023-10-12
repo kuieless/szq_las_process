@@ -42,6 +42,13 @@ def _get_train_opts() -> Namespace:
 
 
 def calculate_entropy(labels):
+    # labels = np.array(labels)
+    # filtered_labels = labels[labels != 0]
+    # unique_labels, label_counts = np.unique(filtered_labels, return_counts=True)
+    # total_labels = len(filtered_labels)
+    # total_labels = int(filtered_labels.size)
+
+
     unique_labels, label_counts = np.unique(labels, return_counts=True)
     total_labels = len(labels)
 
@@ -78,31 +85,39 @@ def hello(hparams: Namespace) -> None:
     output_path = hparams.output_path
     
     
-    # # #1. txt文件
-    # points_nerf = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(0, 1, 2))
-    # print(points_nerf.shape)
-    # root = ET.parse(hparams.metaXml_path).getroot()
-    # translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float) 
-    # coordinate_info = torch.load(hparams.dataset_path + '/coordinates.pt')
-    # origin_drb = coordinate_info['origin_drb'].numpy()
-    # pose_scale_factor = coordinate_info['pose_scale_factor']
-    # ZYQ = torch.DoubleTensor([[0, 0, -1],
-    #                         [0, 1, 0],
-    #                         [1, 0, 0]])
-    # ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
-    #                         [0, math.cos(rad(135)), math.sin(rad(135))],
-    #                         [0, -math.sin(rad(135)), math.cos(rad(135))]])      
-    # points_nerf = np.array(points_nerf)
-    # points_nerf += translation
-    # points_nerf = ZYQ.numpy() @ points_nerf.T
-    # points_nerf = (ZYQ_1.numpy() @ points_nerf).T
-    # points_nerf = (points_nerf - origin_drb) / pose_scale_factor
+    # #1. txt文件
+    points_nerf = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(0, 1, 2))
+    print(points_nerf.shape)
+    root = ET.parse(hparams.metaXml_path).getroot()
+    translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float) 
+    coordinate_info = torch.load(hparams.dataset_path + '/coordinates.pt')
+    origin_drb = coordinate_info['origin_drb'].numpy()
+    pose_scale_factor = coordinate_info['pose_scale_factor']
+    ZYQ = torch.DoubleTensor([[0, 0, -1],
+                            [0, 1, 0],
+                            [1, 0, 0]])
+    ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
+                            [0, math.cos(rad(135)), math.sin(rad(135))],
+                            [0, -math.sin(rad(135)), math.cos(rad(135))]])      
+    points_nerf = np.array(points_nerf)
+    points_nerf += translation
+    points_nerf = ZYQ.numpy() @ points_nerf.T
+    points_nerf = (ZYQ_1.numpy() @ points_nerf).T
+    points_nerf = (points_nerf - origin_drb) / pose_scale_factor
 
+    if not os.path.exists(f"{output_path}/ori_color_nerfcoor.ply"):   
+        points_color = np.genfromtxt('/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt', usecols=(2, 3, 4, 5))
+        points_color = np.array(points_color)
 
+        cloud = PyntCloud(pd.DataFrame(
+            # same arguments that you are passing to visualize_pcl
+            data=np.hstack((points_nerf[:, :3], np.uint8(points_color))),
+            columns=["x", "y", "z", "red", "green", "blue", "label"]))
+        cloud.to_file(f"{output_path}/ori_color_nerfcoor.ply")
 
     # # # ply 文件
-    point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_50.ply")
-    points_nerf = np.asarray(point_cloud.points)
+    # point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_50.ply")
+    # points_nerf = np.asarray(point_cloud.points)
 
 
 
@@ -110,7 +125,7 @@ def hello(hparams: Namespace) -> None:
         # 使用 pickle.load() 读取数据
         loaded_data = pickle.load(file)
 
-    
+    loaded_data = [[label for label in point if label != 0] for point in loaded_data]
 
     ###3 . label_num
     print('calculate label_num')
@@ -119,13 +134,13 @@ def hello(hparams: Namespace) -> None:
 
 
 
-    # ### 1. entropy
-    # print('calculate entropy')
-    # entropies = [calculate_entropy(point) for point in tqdm(loaded_data)]
-    # entropies_intensity = np.array(entropies)
-    # np.save(f"{output_path}/entropies.npy", entropies_intensity)
+    ### 1. entropy
+    print('calculate entropy')
+    entropies = [calculate_entropy(point) for point in tqdm(loaded_data)]
+    entropies_intensity = np.array(entropies)
+    np.save(f"{output_path}/entropies_fliter.npy", entropies_intensity)
     ######## 保存
-    entropies_intensity = np.load(f"{output_path}/entropies.npy")
+    # entropies_intensity = np.load(f"{output_path}/entropies_fliter.npy")
     min_entropy = min(entropies_intensity)
     max_entropy = max(entropies_intensity)
     normalized_intensities = (entropies_intensity - min_entropy) / (max_entropy - min_entropy) * 255
@@ -141,6 +156,18 @@ def hello(hparams: Namespace) -> None:
             most_common_labels.append(-1)
         else:
             most_common_labels.append(Counter(point).most_common(1)[0][0])
+
+            # # 将 point 转换为 NumPy 数组
+            # point_array = np.array(point)
+            # # 找出不等于0的标签
+            # non_zero_labels = point_array[point_array != 0]
+            # if non_zero_labels.size > 0:
+            #     # 计算标签峰值
+            #     most_common = Counter(non_zero_labels).most_common(1)
+            #     most_common_labels.append(most_common[0][0])
+            # else:
+            #     most_common_labels.append(-1)
+
     
     most_common_labels = np.array(most_common_labels)
     max_label = remapping(most_common_labels)
@@ -152,7 +179,7 @@ def hello(hparams: Namespace) -> None:
         # same arguments that you are passing to visualize_pcl
         data=np.hstack((points_nerf[:, :3], np.uint8(max_label_color), normalized_intensities[:, np.newaxis], label_counts[:, np.newaxis])),
         columns=["x", "y", "z", "red", "green", "blue", 'entropy', 'label_num']))
-    cloud.to_file(f"{output_path}/most_label_pc.ply")
+    cloud.to_file(f"{output_path}/results.ply")
 
 
     print('done')
