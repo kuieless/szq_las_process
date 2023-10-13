@@ -1086,6 +1086,7 @@ class Runner:
             experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
             Path(str(experiment_path_current)).mkdir()
             Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+            Path(str(experiment_path_current / 'val_rgbs'/'all')).mkdir()
             with (experiment_path_current / 'psnr.txt').open('w') as f:
                 
                 samantic_each_value = {}
@@ -1131,7 +1132,7 @@ class Runner:
                     img_list = torch.stack(img_list).permute(0,3,1,2)
                     img = make_grid(img_list, nrow=3)
                     img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / 'all'/ ("%06d_all.jpg" % i)))
 
                     del results
             

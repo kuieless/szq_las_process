@@ -1,5 +1,6 @@
 
 # Byte-compiled / optimized / DLL files
+tools/segment_anything/output_merge/
 m2f_eval/
 tools/segment_anything/save_merge/
 tools/segment_anything/log/

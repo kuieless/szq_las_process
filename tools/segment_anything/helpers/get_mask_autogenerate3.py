@@ -10,8 +10,13 @@ import os
 import tqdm
 from pathlib import Path
 
+from argparse import Namespace
+import configargparse
 
-torch.cuda.set_device(6)
+
+# torch.cuda.set_device(6)
+
+
 
 # #sam在demo中的版本
 def show_anns1(anns):
@@ -31,7 +36,7 @@ def show_anns1(anns):
     ax.imshow(img)
 
 
-def show_anns2(colors, anns):
+def show_anns2(colors, anns, img_name, hparams):
     
     if len(anns) == 0:
         return
@@ -72,13 +77,17 @@ def show_anns2(colors, anns):
 
         # cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/"+"visual_%04d.png" % i, visual*255)
 
+    Path(os.path.join(hparams.output_path,'viz_no_filter')).mkdir(exist_ok=True)
+    Path(os.path.join(hparams.output_path,'viz_overlap_filter')).mkdir(exist_ok=True)
 
-    cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/visual_final.png", visual*255)
-    cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/mask_final.png", mask_visual*255)
+    cv2.imwrite(os.path.join(hparams.output_path, 'viz_no_filter', f"{img_name}.png"), visual*255)
+    cv2.imwrite(os.path.join(hparams.output_path, 'viz_overlap_filter', f"{img_name}.png"), mask_visual*255)
     
+
     
     # temp_mask_list=torch.cat(temp_mask_list, dim=-1)
-    # np.save(f"./tools/segment_anything/000027_sam.npy", temp_mask_list.numpy())
+    # np.save(os.path.join(hparams.output_path, 'sam_features_filter', f"{img_name}.npy"), temp_mask_list.numpy())
+
     # labels = np.load('/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/000027_sam.npy')
 
 
@@ -89,7 +98,18 @@ def show_anns2(colors, anns):
     return visual
 
 
-if __name__ == "__main__":
+
+def _get_train_opts() -> Namespace:
+    parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
+
+    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
+    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train//sam_features',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='./tools/segment_anything/SAM_mask_autogenerate_yingrenshi_train',required=False, help='')
+    
+    return parser.parse_args()
+
+
+def hello(hparams: Namespace) -> None:
     file_name='DJi'
 
     sam_checkpoint = "tools/segment_anything/sam_vit_h_4b8939.pth"
@@ -99,19 +119,18 @@ if __name__ == "__main__":
 
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
-
     mask_generator = SamAutomaticMaskGenerator(sam, points_per_side=32)
 
     imgs = []
     for ext in ('*.png'):
-        imgs.extend(glob.glob(os.path.join("/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/val/rgbs/", ext)))
+        imgs.extend(glob.glob(os.path.join(hparams.image_path, ext)))
     imgs.sort()
     imgs = imgs[1:]
 
 
     features = []
     for ext in ('*.npy'):
-        features.extend(glob.glob(os.path.join("/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan/val/sam_features/", ext)))
+        features.extend(glob.glob(os.path.join(hparams.sam_feat_path, ext)))
     features.sort()
     features = features[1:]
 
@@ -122,22 +141,26 @@ if __name__ == "__main__":
         colors.append(np.random.random((1,3)).tolist()[0])
     colors = np.clip(colors, 0, 0.95)
 
-    Path(f'./tools/segment_anything/SAM_mask_autogenerate_{file_name}').mkdir(exist_ok=True)
+    Path(hparams.output_path).mkdir(exist_ok=True)
+    Path(os.path.join(hparams.output_path,'image_cat')).mkdir(exist_ok=True)
+
+    
     for i in tqdm.tqdm(range(len(imgs))):
-
-
+        img_name = imgs[i].split('/')[-1][:6]
         image = cv2.imread(imgs[i])
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
+        # print(features[i])
         feature = np.load(features[i])
-            
-        masks = mask_generator.generate(image1, feature)
+        masks = mask_generator.generate(image1, feature[0])
         
         # mask = show_anns1(masks)
-        mask = show_anns2(colors, masks)
+        mask = show_anns2(colors, masks, img_name, hparams)
         
         image_cat = np.concatenate([image, mask*255], axis=1)
-
-        cv2.imwrite(f"./tools/segment_anything/SAM_mask_autogenerate_{file_name}/"+imgs[i].split('/')[-1][:6]+".png", image_cat)
+        cv2.imwrite(os.path.join(hparams.output_path,'image_cat', f"{img_name}.png"), image_cat)
                     
     print('done')
+
+
+if __name__ == '__main__':
+    hello(_get_train_opts())

@@ -8,7 +8,11 @@ import argparse
 import cv2
 from tqdm import tqdm
 import numpy as np
+import sys
+sys.path.append(os.path.abspath(os.path.join(__file__, "..", "..", "..")))
+
 from tools.segment_anything import sam_model_registry, SamPredictor
+
 
 def main(checkpoint_path, model_type, device, images_folder, embeddings_folder):
     sam = sam_model_registry[model_type](checkpoint=checkpoint_path)
@@ -33,16 +37,16 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint-path", type=str, default="/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/sam_vit_h_4b8939.pth")
     parser.add_argument("--model_type", type=str, default="default")
     parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--dataset-path", type=str, default="./example_dataset")
+    parser.add_argument("--rgbs_path", type=str, default="./example_dataset")
     args = parser.parse_args()
 
     checkpoint_path = args.checkpoint_path
     model_type = args.model_type
     device = args.device
-    dataset_path = args.dataset_path
+    images_folder = args.rgbs_path
 
-    images_folder = os.path.join(dataset_path, "rgbs")
-    embeddings_folder = os.path.join(dataset_path, "sam_features")
+
+    embeddings_folder = os.path.join(images_folder, "../sam_features")
     if not os.path.exists(embeddings_folder):
         os.makedirs(embeddings_folder)
 

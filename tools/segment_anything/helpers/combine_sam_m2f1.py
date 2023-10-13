@@ -12,6 +12,8 @@ from tqdm import tqdm
 import cv2
 from tools.segment_anything import sam_model_registry, SamAutomaticMaskGenerator, SamPredictor
 
+from argparse import Namespace
+import configargparse
 
 # torch.cuda.set_device(6)
 
@@ -83,15 +85,31 @@ def custom2rgb(mask):
     # mask_rgb = cv2.cvtColor(mask_rgb, cv2.COLOR_RGB2BGR)
     return mask_rgb
 
-if __name__ == "__main__":
+def _get_train_opts() -> Namespace:
+    parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
+
+    parser.add_argument('--sam_features_path', type=str, default='',required=False, help='')
+    parser.add_argument('--labels_m2f_path', type=str, default='',required=False, help='')
+    parser.add_argument('--rgbs_path', type=str, default='',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='',required=False, help='')
+    
+    return parser.parse_args()
+
+
+
+def hello(hparams: Namespace) -> None:
     if len(sys.argv) != 3:
         print("zyq: wrong input argv number")
         sys.exit(1)
 
+    
     root_path = sys.argv[1]
     SAM_path = os.path.join(root_path, 'sam_features')
     m2f_path = os.path.join(root_path, 'labels_m2f')
     img_path = os.path.join(root_path, 'rgbs')
+    
+    
+    
     save_path_o = sys.argv[2]
     save_path = os.path.join(save_path_o, 'labels_merge')
     save_path_vis = os.path.join(save_path_o, 'labels_merge_vis')
@@ -127,22 +145,18 @@ if __name__ == "__main__":
     m2fs.sort()
     m2fs = m2fs[1:]
 
-    # for i in range(len(sams)):
     for i in tqdm(range(len(sams))):
-        # print(i)
-        # start = time.time()
         # load_dict = np.load(sams[i],allow_pickle=True)
         image = cv2.imread(imgs[i])
         image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
 
         feature = np.load(sams[i])
 
         m2f = Image.open(m2fs[i])
         semantics = torch.from_numpy(np.array(m2f)).long().to(device)
 
-        load_dict = mask_generator.generate(image1, feature)
+        load_dict = mask_generator.generate(image1, feature[0])
 
         # load_dict = torch.tensor(mask.decode(list(load_dict))).to(device)
 
@@ -167,3 +181,7 @@ if __name__ == "__main__":
         # end = time.time()
         # print(end-start)
         
+
+
+if __name__ == '__main__':
+    hello(_get_train_opts())
