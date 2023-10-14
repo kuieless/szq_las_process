@@ -68,240 +68,133 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_10121215',required=False, help='experiment name')
+    parser.add_argument('--far_paths', type=str, default='logs_dji/1003_yingrenshi_density_depth_hash22_semantic/18/eval_200000_far0.5/yingrenshi_panoptic_car_augment_far_0.5/labels_m2f',required=False, help='experiment name')
+    
+    parser.add_argument('--output_path', type=str, default='zyq/1014_3d_get2dlabel_test',required=False, help='experiment name')
     # parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_test',required=False, help='experiment name')
-    parser.add_argument('--metaXml_path', default='/data/yuqi/Datasets/DJI/origin/Yingrenshi_20230926_origin/terra_point_ply/metadata.xml', type=str)
 
     
     return parser.parse_args()
 
 
 def hello(hparams: Namespace) -> None:
-    hparams.ray_altitude_range = [-95, 54]
-    hparams.dataset_type='memory_depth_dji'
-    device = 'cpu'
-    threshold=0.015
-
-    hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
-    runner = Runner(hparams)
 
 
+    far_paths = hparams.far_paths
     output_path = hparams.output_path
     if not os.path.exists(output_path):
         Path(output_path).mkdir(parents=True)
-    if not os.path.exists(os.path.join(output_path, 'vis_gy')):
-        Path(os.path.join(output_path, 'vis_gy')).mkdir(parents=True)
+    if not os.path.exists(os.path.join(output_path, 'project_far_to_ori')):
+        Path(os.path.join(output_path, 'project_far_to_ori')).mkdir(parents=True)
+    if not os.path.exists(os.path.join(output_path, 'vis')):
+        Path(os.path.join(output_path, 'vis')).mkdir(parents=True)
+    if not os.path.exists(os.path.join(output_path, 'alpha')):
+        Path(os.path.join(output_path, 'alpha')).mkdir(parents=True)
 
 
-
-    # #1. txt文件
-    load_ply_path = '/data/yuqi/Datasets/DJI/origin/Yingrenshi_fine-registered.txt'
-    points_nerf = np.genfromtxt(load_ply_path, usecols=(0, 1, 2))
-    print(points_nerf.shape)
-    root = ET.parse(hparams.metaXml_path).getroot()
-    translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float64) 
-    coordinate_info = torch.load(hparams.dataset_path + '/coordinates.pt')
-    origin_drb = coordinate_info['origin_drb'].numpy()
-    pose_scale_factor = coordinate_info['pose_scale_factor']
-    ZYQ = torch.DoubleTensor([[0, 0, -1],
-                            [0, 1, 0],
-                            [1, 0, 0]])
-    ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
-                            [0, math.cos(rad(135)), math.sin(rad(135))],
-                            [0, -math.sin(rad(135)), math.cos(rad(135))]])      
-    points_nerf = np.array(points_nerf)
-    # points_nerf = points_nerf[::100]
-    print(points_nerf.shape)
-    points_nerf += translation
-    points_nerf = ZYQ.numpy() @ points_nerf.T
-    points_nerf = (ZYQ_1.numpy() @ points_nerf).T
-    points_nerf = (points_nerf - origin_drb) / pose_scale_factor
-
-    if not os.path.exists(f"{output_path}/ori_color_nerfcoor.ply"):   
-        points_color = np.genfromtxt(load_ply_path, usecols=(3, 4, 5, 6))
-        points_color = np.array(points_color)
-        print(f"color: {points_color.shape}")
-
-        cloud = PyntCloud(pd.DataFrame(
-            # same arguments that you are passing to visualize_pcl
-            data=np.hstack((points_nerf[:, :3], np.uint8(points_color))),
-            columns=["x", "y", "z", "red", "green", "blue", "label"]))
-        cloud.to_file(f"{output_path}/ori_color_nerfcoor.ply")
-
-    # # 2. ply 文件
-    # point_cloud = o3d.io.read_point_cloud("zyq/2d-3d-2d_yingrenshi_m2f/point_cloud_50.ply")
-    # points_nerf = np.asarray(point_cloud.points)
-
-
-
-    print(f"{points_nerf.shape}")
-
-
-
-
-    points_nerf = torch.from_numpy(points_nerf).to(device)
-    points_nerf = points_nerf.float()
-
-    
-
+    hparams.ray_altitude_range = [-95, 54]
+    hparams.dataset_type='memory_depth_dji'
+    device = 'cpu'
+    hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
+    runner = Runner(hparams)
     train_items = runner.train_items
-    print(f"len train_items: {len(train_items)}")
-    split_list=[]
-    point_label_dict = {}
-    point_label_list = []
-    for i in range(points_nerf.shape[0]):
-        point_label_list.append([])
-    for metadata_item in tqdm(train_items):
 
-        if hparams.label_name == 'gt':
-            gt_label = metadata_item.load_gt()
-        else:
-            gt_label = metadata_item.load_label().to(device)
 
-        gt_label = remapping(gt_label)
-        
-        H, W = metadata_item.H, metadata_item.W
-        camera_rotation = metadata_item.c2w[:3,:3].to(device)
-        camera_position = metadata_item.c2w[:3, 3].to(device)
-        
+
+    used_files = []
+    for ext in ('*.png', '*.jpg'):
+        used_files.extend(glob(os.path.join(far_paths, ext)))
+    used_files.sort()
+    process_item = [Path(far_p).stem for far_p in used_files]
+    
+    for metadata_item in tqdm(train_items, desc="Processing project 2d to 3d point"):
+        file_name = Path(metadata_item.image_path).stem
+        if file_name not in process_item:
+            continue
+
+        # 读取ori的标签文件
+        ori_m2f = metadata_item.load_label()
+
+        # 读取深度
+        depth_map = metadata_item.load_depth_dji().squeeze(-1)
+        H, W = depth_map.shape
+
+        ## 1. 用2d和depth转换成点云
+        x_grid, y_grid = torch.meshgrid(torch.arange(W), torch.arange(H))
+        # x_grid, y_grid = torch.meshgrid(torch.arange(H), torch.arange(W))
+        pixel_coordinates = torch.stack([x_grid, y_grid, torch.ones_like(x_grid)], dim=-1)
+        K1 = metadata_item.intrinsics
+        K1 = torch.tensor([[K1[0], 0, K1[2]], [0, K1[1], K1[3]], [0, 0, 1]])
+        pt_3d = depth_map[:, :, None] * (torch.linalg.inv(K1) @ pixel_coordinates[:, :, :, None].float()).squeeze()
+        arr2 = torch.ones((pt_3d.shape[0], pt_3d.shape[1], 1))
+        pt_3d = torch.cat([pt_3d, arr2], dim=-1)
+        # pt_3d = pt_3d[valid_depth_mask]
+        pt_3d = pt_3d.view(-1, 4)
+        E1 = torch.tensor(metadata_item.c2w)
+        E1 = torch.stack([E1[:, 0], -E1[:, 1], -E1[:, 2], E1[:, 3]], dim=1)
+        world_point = torch.mm(torch.cat([E1, torch.tensor([[0, 0, 0, 1]])], dim=0), pt_3d.t()).t()
+        world_point = world_point[:, :3] / world_point[:, 3:4]
+
+
+
+        # 点云投影到far
+        metadata_far = torch.load(os.path.join(hparams.dataset_path, 'render_far', 'metadata', file_name+'.pt'), map_location='cpu')
+
+
+        camera_rotation = metadata_far['c2w'][:3,:3].to(device)
+        camera_position = metadata_far['c2w'][:3, 3].to(device)
         camera_matrix = torch.tensor([[metadata_item.intrinsics[0], 0, metadata_item.intrinsics[2]],
                               [0, metadata_item.intrinsics[1], metadata_item.intrinsics[3]],
                               [0, 0, 1]]).to(device)
 
-        # NOTE: 2. 自己写，正确
+        
+        # NOTE: 2. 自己写，正确  
         E2 = torch.hstack((camera_rotation, camera_position.unsqueeze(-1)))
         E2 = torch.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1).to(device)
         w2c = torch.inverse(torch.cat((E2, torch.tensor([[0, 0, 0, 1]]).to(device)), dim=0))
-        points_homogeneous = torch.cat((points_nerf, torch.ones((points_nerf.shape[0], 1), dtype=torch.float32).to(device)), dim=1)
+        points_homogeneous = torch.cat((world_point, torch.ones((world_point.shape[0], 1), dtype=torch.float32).to(device)), dim=1)
         pt_3d_trans = torch.mm(w2c, points_homogeneous.t())
         
         pt_2d_trans = torch.mm(camera_matrix, pt_3d_trans[:3])
         pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
         projected_points = pt_2d_trans[:2].t()
-
-        large_int = 1e6
-        image_width, image_height = int(W), int(H)
-
-
-        # 将 NumPy 数组转换为 PyTorch 张量，并移动到 GPU 上
-        image = torch.zeros((image_height, image_width)).long().to(device)
-        image_color = torch.zeros((image_height, image_width), dtype=torch.uint8).to(device)
-
-        depth_map = large_int * torch.ones((image_height, image_width, 1), dtype=torch.uint8).to(device)
-        depth_map_expand = large_int * torch.ones((image_height, image_width, 1), dtype=torch.uint8).to(device)
-
-        # 获得落在图像上的点
-        mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] < image_width)
-        mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
-        mask = mask_x & mask_y
-
-        meshMask = metadata_item.load_depth_dji().float().to(device)
         
-        
-        x = projected_points[:, 0].long()
-        y = projected_points[:, 1].long()
-        x[~mask] = 0
-        y[~mask] = 0
-        mesh_depths = meshMask[y, x]
-        mesh_depths[~mask] = -1e6
+        x = projected_points[:, 0]
+        y = projected_points[:, 1]
 
-        depth_z = pt_3d_trans[2]
-        mask_z = depth_z < (mesh_depths[:, 0] + threshold)
-        mask_xyz = mask & mask_z
+        nan_indices = torch.isnan(x)
+        prev_indices = torch.arange(len(x) - 1)
+        next_indices = torch.arange(1, len(x))
+        x[torch.where(nan_indices)] = (x[prev_indices][nan_indices[1:]] + x[next_indices][nan_indices[:-1]]) / 2
 
-        x, y = x[mask_xyz], y[mask_xyz]
-        depth = depth_z[mask_xyz]
-        idx = mask_xyz.nonzero().squeeze(-1)
-        depth_map[y, x] = depth[:, None]
-        image[y, x] = idx
-        image_color[y, x] = gt_label[y, x]
+        nan_indices = torch.isnan(y)
+        prev_indices = torch.arange(len(y) - 1)
+        next_indices = torch.arange(1, len(y))
+        y[torch.where(nan_indices)] = (y[prev_indices][nan_indices[1:]] + y[next_indices][nan_indices[:-1]]) / 2
 
-        image_color = custom2rgb(image_color.cpu().numpy())
-        
-        Image.fromarray(image_color.astype(np.uint8)).save(os.path.join(output_path, 'vis_gy', f"{metadata_item.image_path.stem}.png"))
-        
-        # image_flatten = image.flatten()
-        # gt_label_flatten = gt_label.flatten()
-        # for idx, label in zip(image_flatten, gt_label_flatten):
-        #     point_label_list[idx].append(label)
 
-        # for h in range(H):
-        #    for w in range(W):
-        #        point_label_list[int(image[h, w])].append(int(gt_label[h, w]))
+        x = x.long()
+        y = y.long()
+
+
+        # 读取far的标签文件
+        far_m2f = Image.open(os.path.join(far_paths, file_name+'.png'))    #.convert('RGB')
+        far_m2f = torch.ByteTensor(np.asarray(far_m2f))
+
+        project_m2f = far_m2f[y, x].view(H,W)
         
-        image_flatten = image.flatten()
-        gt_label_flatten = gt_label.flatten()
-        image_flatten_non_zero = image_flatten[image_flatten.nonzero()]
-        gt_label_flatten_non_zero = gt_label_flatten[image_flatten.nonzero()]
-        
-        for vote_idx, label_vote in zip(image_flatten_non_zero, gt_label_flatten_non_zero):
-               point_label_list[vote_idx].append(label_vote)
-        
-    print('write pickle')
-    # 将列表保存为二进制文件
-    with open(f'{output_path}/point_label_list_gy.pkl', 'wb') as file:
-        pickle.dump(point_label_list, file)
+        Image.fromarray(project_m2f.numpy().astype(np.uint16)).save(os.path.join(output_path, 'project_far_to_ori', f"{file_name}.png"))
         
 
-    print("done")
+        color_label = custom2rgb(project_m2f.numpy())
+        color_label = color_label.reshape(H, W,3)
+        Image.fromarray(color_label.astype(np.uint8)).save(os.path.join(output_path, 'vis',f"{file_name}.jpg"))
 
+        img = metadata_item.load_image()
 
-
-    # loaded_data = point_label_list
-    with open(f'{output_path}/point_label_list_gy.pkl', 'rb') as file:
-        # 使用 pickle.load() 读取数据
-        loaded_data = pickle.load(file)
-
-    loaded_data = [[label for label in point if label != 0] for point in loaded_data]
-
-
-    ###3 . label_num
-    label_counts = np.array([len(point) for point in loaded_data])
-    print(f"label_counts max :{max(label_counts)}, min :{(min(label_counts))}")
-
-
-    ## 1. entropy
-    #######################  计算entropy
-    print('calculate entropy')
-    entropies = [calculate_entropy(point) for point in tqdm(loaded_data)]
-    entropies_intensity = np.array(entropies)
-    np.save(f"{output_path}/entropies.npy", entropies_intensity)
-
-    # entropies_intensity = np.load(f"{output_path}/entropies.npy")
-
-    min_entropy = min(entropies_intensity)
-    max_entropy = max(entropies_intensity)
-    normalized_intensities = (entropies_intensity - min_entropy) / (max_entropy - min_entropy) * 255
-
-
-    # cloud = PyntCloud(pd.DataFrame(
-    #     # same arguments that you are passing to visualize_pcl
-    #     data=np.hstack((points_nerf[:, :3], normalized_intensities[:, np.newaxis])),
-    #     columns=["x", "y", "z", "intensity"]))
-    # cloud.to_file(f"{output_path}/entropy_pc.ply")
-
-    ### 2. 投票峰值
-    print('calculate max label')
-
-    most_common_labels = []
-    for point in loaded_data:
-        if not point:
-            # 处理空列表的情况
-            most_common_labels.append(-1)
-        else:
-            most_common_labels.append(Counter(point).most_common(1)[0][0])
-    most_common_labels = np.array(most_common_labels)
-    max_label = remapping(most_common_labels)
-    max_label_color = custom2rgb_1(max_label)
-
-    
-
-    cloud = PyntCloud(pd.DataFrame(
-        # same arguments that you are passing to visualize_pcl
-        data=np.hstack((points_nerf[:, :3], np.uint8(max_label_color), normalized_intensities[:, np.newaxis], label_counts[:, np.newaxis])),
-        columns=["x", "y", "z", "red", "green", "blue", 'entropy', 'label_num']))
-    cloud.to_file(f"{output_path}/results.ply")
-
+        merge = 0.7 * img.numpy() + 0.3 * color_label
+        Image.fromarray(merge.astype(np.uint8)).save(os.path.join(output_path, 'alpha',f"{file_name}.jpg"))
+        
 
     print('done')
 

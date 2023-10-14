@@ -1081,7 +1081,7 @@ class Runner:
             H = render_items[0].H
             W = render_items[0].W
 
-            indices_to_eval = np.arange(len(render_items))
+            indices_to_eval = np.arange(len(render_items)) #[:165]
             
             experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
             Path(str(experiment_path_current)).mkdir()

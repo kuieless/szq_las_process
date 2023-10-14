@@ -83,7 +83,8 @@ def hello(hparams: Namespace) -> None:
 
     # metadata_paths = sorted(list((Path(hparams.dataset_path) / 'train' / 'metadata').iterdir()))
 
-    for metadata_item in tqdm(train_items[200:240]):
+    # for metadata_item in tqdm(train_items[200:240]):
+    for metadata_item in tqdm(train_items):
         pose = metadata_item.c2w
         distance = torch.norm(pose[1:3,3] - position_center)
         if distance > position_radius or metadata_item.is_val:

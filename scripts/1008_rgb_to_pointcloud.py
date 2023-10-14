@@ -50,7 +50,7 @@ def hello(hparams: Namespace) -> None:
         
         
         depth_map = metadata_item.load_depth_dji().squeeze(-1)
-        H, W, = depth_map.shape
+        H, W = depth_map.shape
         valid_depth_mask = ~torch.isinf(depth_map)
 
         
