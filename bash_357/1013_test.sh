@@ -1,6 +1,7 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=5
+
 
 
 dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926

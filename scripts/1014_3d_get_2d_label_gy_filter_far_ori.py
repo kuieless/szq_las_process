@@ -27,8 +27,11 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pyntcloud import PyntCloud
 import pandas as pd
+from torch.nn.functional import interpolate
+from mega_nerf.ray_utils import get_ray_directions
 
 
+# torch.cuda.set_device(6)
 
 
 def calculate_entropy(labels):
@@ -68,9 +71,11 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--far_paths', type=str, default='logs_dji/1003_yingrenshi_density_depth_hash22_semantic/18/eval_200000_far0.5/yingrenshi_panoptic_car_augment_far_0.5/labels_m2f',required=False, help='experiment name')
+    parser.add_argument('--far_paths', type=str, default='logs_dji/1003_yingrenshi_density_depth_hash22_semantic/14/eval_200000_far0.3/yingrenshi_panoptic_car_augment_far0.3_all300/labels_m2f',required=False, help='')
     
-    parser.add_argument('--output_path', type=str, default='zyq/1014_3d_get2dlabel_test',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='zyq/1015_far0.3_all',required=False, help='experiment name')
+    parser.add_argument('--render_type', type=str, default='render_far0.3',required=False, help='experiment name')
+    
     # parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_test',required=False, help='experiment name')
 
     
@@ -90,6 +95,8 @@ def hello(hparams: Namespace) -> None:
         Path(os.path.join(output_path, 'vis')).mkdir(parents=True)
     if not os.path.exists(os.path.join(output_path, 'alpha')):
         Path(os.path.join(output_path, 'alpha')).mkdir(parents=True)
+    if not os.path.exists(os.path.join(output_path, 'project_before_after')):
+        Path(os.path.join(output_path, 'project_before_after')).mkdir(parents=True)
 
 
     hparams.ray_altitude_range = [-95, 54]
@@ -107,21 +114,42 @@ def hello(hparams: Namespace) -> None:
     used_files.sort()
     process_item = [Path(far_p).stem for far_p in used_files]
     
-    for metadata_item in tqdm(train_items, desc="Processing project 2d to 3d point"):
+    for metadata_item in tqdm(train_items, desc="extract the far m2f label"):
         file_name = Path(metadata_item.image_path).stem
         if file_name not in process_item:
             continue
+        
+        directions = get_ray_directions(metadata_item.W,
+                                        metadata_item.H,
+                                        metadata_item.intrinsics[0],
+                                        metadata_item.intrinsics[1],
+                                        metadata_item.intrinsics[2],
+                                        metadata_item.intrinsics[3],
+                                        False,
+                                        'cpu')
+        depth_scale = torch.abs(directions[:, :, 2]) # z-axis's values
+        
+        # 读取far的标签文件
+        far_m2f = Image.open(os.path.join(far_paths, file_name+'.png'))    #.convert('RGB')
+        far_m2f = torch.ByteTensor(np.asarray(far_m2f))
+
 
         # 读取ori的标签文件
         ori_m2f = metadata_item.load_label()
 
         # 读取深度
-        depth_map = metadata_item.load_depth_dji().squeeze(-1)
+        depth_map = metadata_item.load_depth_dji().squeeze(-1).float()
         H, W = depth_map.shape
+
+        # nan_mask = torch.isnan(depth_map)
+        inf_mask = torch.isinf(depth_map)
+        depth_map[inf_mask] = depth_map[~inf_mask].max()
+        # depth_map[nan_mask] = interpolate(depth_map[None, None, ...], size=(H,W),mode='bilinear', align_corners=False)[0, 0, nan_mask]
 
         ## 1. 用2d和depth转换成点云
         x_grid, y_grid = torch.meshgrid(torch.arange(W), torch.arange(H))
-        # x_grid, y_grid = torch.meshgrid(torch.arange(H), torch.arange(W))
+        x_grid, y_grid = x_grid.T, y_grid.T
+
         pixel_coordinates = torch.stack([x_grid, y_grid, torch.ones_like(x_grid)], dim=-1)
         K1 = metadata_item.intrinsics
         K1 = torch.tensor([[K1[0], 0, K1[2]], [0, K1[1], K1[3]], [0, 0, 1]])
@@ -138,11 +166,15 @@ def hello(hparams: Namespace) -> None:
 
 
         # 点云投影到far
-        metadata_far = torch.load(os.path.join(hparams.dataset_path, 'render_far', 'metadata', file_name+'.pt'), map_location='cpu')
+        metadata_far = torch.load(os.path.join(hparams.dataset_path, hparams.render_type, 'metadata', file_name+'.pt'), map_location='cpu')
 
 
         camera_rotation = metadata_far['c2w'][:3,:3].to(device)
         camera_position = metadata_far['c2w'][:3, 3].to(device)
+
+        # camera_rotation = metadata_item.c2w[:3,:3].to(device)
+        # camera_position = metadata_item.c2w[:3, 3].to(device)
+
         camera_matrix = torch.tensor([[metadata_item.intrinsics[0], 0, metadata_item.intrinsics[2]],
                               [0, metadata_item.intrinsics[1], metadata_item.intrinsics[3]],
                               [0, 0, 1]]).to(device)
@@ -159,54 +191,69 @@ def hello(hparams: Namespace) -> None:
         pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
         projected_points = pt_2d_trans[:2].t()
         
-        x = projected_points[:, 0]
-        y = projected_points[:, 1]
-
-        nan_indices = torch.isnan(x)
-        prev_indices = torch.arange(len(x) - 1)
-        next_indices = torch.arange(1, len(x))
-        x[torch.where(nan_indices)] = (x[prev_indices][nan_indices[1:]] + x[next_indices][nan_indices[:-1]]) / 2
-
-        nan_indices = torch.isnan(y)
-        prev_indices = torch.arange(len(y) - 1)
-        next_indices = torch.arange(1, len(y))
-        y[torch.where(nan_indices)] = (y[prev_indices][nan_indices[1:]] + y[next_indices][nan_indices[:-1]]) / 2
 
 
-        x = x.long()
-        y = y.long()
+        ########### 考虑遮挡
+        threshold= 0.02
+        large_int = 1e6
+        image_width, image_height = int(W), int(H)
+        project_m2f = torch.zeros((image_height, image_width)).long().to(device)
+
+        mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] < image_width)
+        mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
+        mask = mask_x & mask_y
+        # meshMask = metadata_item.load_depth_dji().float().to(device)
+        farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent), "depth_save", f"{file_name}.npy")))
+        farMask = (farMask) * depth_scale
+
+        x = projected_points[:, 0].long()
+        y = projected_points[:, 1].long()
+        x[~mask] = 0
+        y[~mask] = 0
+        far_depths = farMask[y, x]
+        far_depths[~mask] = -1e6
+
+        depth_z = pt_3d_trans[2]
+        # mask_z = depth_z < (far_depths + threshold)
+        mask_z = depth_z < (far_depths + threshold)
+        mask_xyz = mask & mask_z
+
+        project_m2f=far_m2f[y, x].view(H,W)
+        project_m2f[~(mask_xyz.view(H,W))]= 0
+        ##########
 
 
-        # 读取far的标签文件
-        far_m2f = Image.open(os.path.join(far_paths, file_name+'.png'))    #.convert('RGB')
-        far_m2f = torch.ByteTensor(np.asarray(far_m2f))
+        #  不做遮挡的考虑
+        # x = projected_points[:, 0]
+        # y = projected_points[:, 1]
+        # x = x.long()
+        # y = y.long()
+        # # far_m2f = ori_m2f
+        # project_m2f = far_m2f[y, x].view(H,W)
 
-        project_m2f = far_m2f[y, x].view(H,W)
-        
         Image.fromarray(project_m2f.numpy().astype(np.uint16)).save(os.path.join(output_path, 'project_far_to_ori', f"{file_name}.png"))
         
 
         color_label = custom2rgb(project_m2f.numpy())
-        color_label = color_label.reshape(H, W,3)
+        color_label = color_label.reshape(H, W, 3)
         Image.fromarray(color_label.astype(np.uint8)).save(os.path.join(output_path, 'vis',f"{file_name}.jpg"))
 
-        img = metadata_item.load_image()
 
+        img = metadata_item.load_image()
         merge = 0.7 * img.numpy() + 0.3 * color_label
         Image.fromarray(merge.astype(np.uint8)).save(os.path.join(output_path, 'alpha',f"{file_name}.jpg"))
         
+
+        
+        cat = torch.hstack([project_m2f, far_m2f])
+        cat = custom2rgb(cat.numpy())
+        cat = cat.reshape(H, 2*W, 3)
+        Image.fromarray(cat.astype(np.uint8)).save(os.path.join(output_path, 'project_before_after', f"{file_name}.png"))
+        a=1
 
     print('done')
 
 
 if __name__ == '__main__':
-    #meshMask = torch.zeros(912, 1368, 1)
-    #projected_points = torch.rand(2222058, 2) * 500
-
-    #x = projected_points[:, 0].long()
-    #y = projected_points[:, 1].long()
-    #mesh_depths = meshMask[x, y]
-    #print(mesh_depths.shape)
-    #import pdb; pdb.set_trace()
 
     hello(_get_train_opts())

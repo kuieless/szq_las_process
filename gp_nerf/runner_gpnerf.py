@@ -1065,7 +1065,7 @@ class Runner:
             
             dataset_path = Path(self.hparams.dataset_path)
 
-            val_paths = sorted(list((dataset_path / 'render_far' / 'metadata').iterdir()))
+            val_paths = sorted(list((dataset_path / 'render_far0.5_all' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_line' / 'metadata').iterdir()))
 
             train_paths = val_paths
@@ -1081,7 +1081,7 @@ class Runner:
             H = render_items[0].H
             W = render_items[0].W
 
-            indices_to_eval = np.arange(len(render_items)) #[:165]
+            indices_to_eval = np.arange(len(render_items))[165:]
             
             experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
             Path(str(experiment_path_current)).mkdir()
@@ -1108,6 +1108,13 @@ class Runner:
                     viz_result_rgbs = results[f'rgb_{typ}'].view(H, W, 3).cpu()
                     viz_result_rgbs = viz_result_rgbs.clamp(0,1)
                     
+
+                    save_depth_dir = os.path.join(str(experiment_path_current), 'val_rgbs', "depth_save")
+                    if not os.path.exists(save_depth_dir):
+                        os.makedirs(save_depth_dir)
+                    depth_map = results[f'depth_{typ}'].view(viz_result_rgbs.shape[0], viz_result_rgbs.shape[1]).numpy().astype(np.float16)
+                    np.save(os.path.join(save_depth_dir, ("%06d.npy" % i)), depth_map)
+
 
                     if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
                         Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
@@ -1431,7 +1438,7 @@ class Runner:
                                 viz_result_rgbs = viz_result_rgbs.clamp(0,1)
                                 if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
                                     val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
-                                    
+                                
                                 viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
                                 
                                 # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
