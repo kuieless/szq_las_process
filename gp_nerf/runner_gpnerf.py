@@ -1704,7 +1704,7 @@ class Runner:
                     # 这里读取点云投影的图片，或者进行点云投影
                     # sem_label
 
-                    sem_label_path = os.path.join(self.hparams.dataset_path, 'val', 'labels_pc', f"{metadata_item.label_path.stem}.png")
+                    sem_label_path = os.path.join(self.hparams.dataset_path, 'val', self.hparams.label_name_3d_to_2d,f"{metadata_item.label_path.stem}.png")
                     sem_label = Image.open(sem_label_path)    #.convert('RGB')
                     sem_label =  torch.ByteTensor(np.asarray(sem_label)).view(-1)
                     

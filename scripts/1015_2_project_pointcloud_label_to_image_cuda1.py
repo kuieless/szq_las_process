@@ -137,8 +137,8 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--output_path', type=str, default='zyq/1015_100image_pc2label',required=False, help='experiment name')
-    parser.add_argument('--load_ply_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/zyq/1015_3d_get2dlabel_far0.3_project/results.ply',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='zyq/1015_300image_pc2label',required=False, help='experiment name')
+    parser.add_argument('--load_ply_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/zyq/1015_3d_get2dlabel_far0.3_project_300_image/results.ply',required=False, help='experiment name')
 
 
     return parser.parse_args()
