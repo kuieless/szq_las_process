@@ -10,17 +10,17 @@
 
 
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=4
 
 
 
 #需要修改的值
 # far_project_m2f_paths   新的标签路径
-far_project_m2f_paths=logs_dji/augument/1015_far0.5/project_to_ori_gt/project_far_to_ori
+far_project_m2f_paths=logs_dji/augument/1015_far0.3/project_to_ori_gt/project_far_to_ori
 
-label_name_3d_to_2d=labels_pc_1015_farproject_0.5
+label_name_3d_to_2d=labels_pc_1015_farproject_0.3
 
-output_path=logs_dji/augument/1015_far0.5/3d_get2dlabel
+output_path=logs_dji/augument/1015_far0.3/3d_get2dlabel
 
 dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
 
@@ -35,9 +35,10 @@ echo '1 start'
     --far_project_m2f_paths=$far_project_m2f_paths  \
     --metaXml_path='/data/yuqi/Datasets/DJI/origin/Yingrenshi_20230926_origin/terra_point_ply/metadata.xml'
 
-
-
 echo '1 end, 2 start'
+
+
+
 # # 2. 上述代码在 output_path 下生成results.ply, 由下面代码处理得到  label_pc
 
 # /home/yuqi/anaconda3/envs/gpnerf/bin/python  /data/yuqi/code/GP-NeRF-semantic/scripts/1015_2_project_pointcloud_label_to_image_cuda1.py   \

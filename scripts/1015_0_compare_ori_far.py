@@ -68,9 +68,7 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    
     parser.add_argument('--project_path', type=str, default='logs_dji/1003_yingrenshi_density_depth_hash22_semantic/14/eval_200000_far0.3/1015_3d_get2dlabel_test_far0.3/project_far_to_ori',required=False, help='')
-
     parser.add_argument('--output_path', type=str, default='logs_dji/1003_yingrenshi_density_depth_hash22_semantic/14/eval_200000_far0.3/1015_3d_get2dlabel_test_far0.3/compare_vis',required=False, help='experiment name')
     # parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_test',required=False, help='experiment name')
 

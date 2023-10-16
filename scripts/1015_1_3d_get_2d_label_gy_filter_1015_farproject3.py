@@ -78,6 +78,20 @@ def _get_train_opts() -> Namespace:
     return parser.parse_args()
 
 
+
+def process_point(point):
+    if not point:
+        return -1
+    else:
+        most_common_label = Counter(point).most_common(1)[0][0]
+        entropy = calculate_entropy(point)
+        point = np.array([label for label in point if label != 0])
+        label_count = len(point)
+        return most_common_label, entropy, label_count
+
+
+
+
 def hello(hparams: Namespace) -> None:
     hparams.ray_altitude_range = [-95, 54]
     hparams.dataset_type='memory_depth_dji'
@@ -156,6 +170,7 @@ def hello(hparams: Namespace) -> None:
     
 
     train_items = runner.train_items
+    # train_items = train_items[:10]
     print(f"len train_items: {len(train_items)}")
     split_list=[]
     point_label_dict = {}
@@ -269,22 +284,21 @@ def hello(hparams: Namespace) -> None:
 
 
     loaded_data = point_label_list
-    # with open(f'{output_path}/point_label_list_gy.pkl', 'rb') as file:
-    #     # 使用 pickle.load() 读取数据
-    #     loaded_data = pickle.load(file)
+    # # with open(f'{output_path}/point_label_list_gy.pkl', 'rb') as file:
+    # #     # 使用 pickle.load() 读取数据
+    # #     loaded_data = pickle.load(file)
 
-    loaded_data = [[label for label in point if label != 0] for point in tqdm(loaded_data)]
-
-
-    ###1. label_num
-    label_counts = np.array([len(point) for point in loaded_data])
-    print(f"label_counts max :{max(label_counts)}, min :{(min(label_counts))}")
+    # loaded_data = [[label for label in point if label != 0] for point in tqdm(loaded_data)]
+    # ###1. label_num
+    # label_counts = np.array([len(point) for point in loaded_data])
 
 
 
     ### 2. entropy and  3. 投票峰值
     most_common_labels = []
     entropies = []
+    label_counts = []
+    
     for point in tqdm(loaded_data, desc='calculate max_voting and entropy'):
         if not point:
             # 处理空列表的情况
@@ -292,7 +306,12 @@ def hello(hparams: Namespace) -> None:
         else:
             most_common_labels.append(Counter(point).most_common(1)[0][0])
         entropies.append(calculate_entropy(point))
-    
+        point = np.array([label for label in point if label != 0] )
+        label_counts.append(len(point))
+
+
+    label_counts = np.array(label_counts)
+    print(f"label_counts max :{max(label_counts)}, min :{(min(label_counts))}")
     most_common_labels = np.array(most_common_labels)
     max_label = remapping(most_common_labels)
     max_label_color = custom2rgb_1(max_label)
