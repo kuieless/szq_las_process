@@ -12,17 +12,30 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=5
 
+
+
+#需要修改的值
+# far_project_m2f_paths   新的标签路径
+far_project_m2f_paths=/data/yuqi/code/GP-NeRF-semantic/zyq/1015_far0.3_all/project_far_to_ori
+
+label_name_3d_to_2d=labels_pc_m2f_1015_300_farproject
+
 output_path=zyq/1015_3d_get2dlabel_far0.3_project_3
+
 dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
-#  1. far_project_m2f_paths   新的标签路径
+
+#  1.  3d get 2d label
+
+echo '1 start'
 
 /home/yuqi/anaconda3/envs/gpnerf/bin/python /data/yuqi/code/GP-NeRF-semantic/scripts/1015_1_3d_get_2d_label_gy_filter_1015_farproject2.py  \
     --dataset_path=$dataset_path  \
     --exp_name='logs_357/test' \
     --output_path=$output_path  \
-    --far_project_m2f_paths='/data/yuqi/code/GP-NeRF-semantic/zyq/1015_far0.3_all/project_far_to_ori'  \
+    --far_project_m2f_paths=$far_project_m2f_paths  \
     --metaXml_path='/data/yuqi/Datasets/DJI/origin/Yingrenshi_20230926_origin/terra_point_ply/metadata.xml'
 
+echo '1 end, 2 start'
 
 # 2. 上述代码在 output_path 下生成results.ply, 由下面代码处理得到  label_pc
 
@@ -32,11 +45,19 @@ dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
     --output_path=$output_path   \
     --load_ply_path=$output_path/results.ply
 
+echo '2 end, move and copy ' $output_path/$label_name_3d_to_2d
+
+
+mv $output_path/label_pc   $output_path/$label_name_3d_to_2d    
+cp -r  $output_path/$label_name_3d_to_2d    $dataset_path/val/$label_name_3d_to_2d
+
+echo 'eval the label'
+
 # 3. 将 label_pc  挪至 /data/yuqi/Datasets/DJI/Yingrenshi_20230926/val 并改名 (label_name_3d_to_2d)， 进行指标计算
 /home/yuqi/anaconda3/envs/gpnerf/bin/python   gp_nerf/eval_val_3d_to_2d.py  \
     --dataset_path=$dataset_path \
-    --config_file=configs/yingrenshi.yaml    \
+    --config_file=configs/yingrenshi.yaml    
     --exp_name=m2f_eval/test  \
-    --label_name_3d_to_2d=labels_pc_m2f_1015_300_farproject
+    --label_name_3d_to_2d=$label_name_3d_to_2d
 
 

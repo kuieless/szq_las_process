@@ -71,12 +71,11 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--far_paths', type=str, default='logs_dji/1003_yingrenshi_density_depth_hash22_semantic/14/eval_200000_far0.3/yingrenshi_panoptic_car_augment_far0.3_all300/labels_m2f',required=False, help='')
+    parser.add_argument('--far_paths', type=str, default='logs_dji/augument/1015_far0.3/mask2former_output/labels_m2f',required=False, help='')
     
-    parser.add_argument('--output_path', type=str, default='zyq/1015_far0.3_all',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='experiment name')
     parser.add_argument('--render_type', type=str, default='render_far0.3',required=False, help='experiment name')
     
-    # parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_test',required=False, help='experiment name')
 
     
     return parser.parse_args()
@@ -139,6 +138,8 @@ def hello(hparams: Namespace) -> None:
 
         # 读取深度
         depth_map = metadata_item.load_depth_dji().squeeze(-1).float()
+        # depth_map = torch.from_numpy(np.load(os.path.join('/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1015_ori_nerf', "pred_depth_save", f"{file_name}.npy")))
+
         H, W = depth_map.shape
 
         # nan_mask = torch.isnan(depth_map)
@@ -203,7 +204,7 @@ def hello(hparams: Namespace) -> None:
         mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
         mask = mask_x & mask_y
         # meshMask = metadata_item.load_depth_dji().float().to(device)
-        farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent), "depth_save", f"{file_name}.npy")))
+        farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent), "pred_depth_save", f"{file_name}.npy")))
         farMask = (farMask) * depth_scale
 
         x = projected_points[:, 0].long()

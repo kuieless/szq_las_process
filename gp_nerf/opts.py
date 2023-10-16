@@ -31,6 +31,8 @@ def get_opts_base():
     parser.add_argument('--only_car_label', default=False, type=eval, choices=[True, False], help='only train dense car labels with other sparse label')
     parser.add_argument('--semantic_net_type', type=str, default='mlp', choices=['mlp', 'hashgrid_mlp'],help='')
     parser.add_argument('--label_name_3d_to_2d', type=str, default='label_pc',help='')
+    parser.add_argument('--start', type=int,default=-1, help='')
+    parser.add_argument('--end', type=int, default=-1,help='')
 
 
 

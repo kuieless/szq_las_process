@@ -1065,7 +1065,9 @@ class Runner:
             
             dataset_path = Path(self.hparams.dataset_path)
 
-            val_paths = sorted(list((dataset_path / 'render_far0.5_all' / 'metadata').iterdir()))
+            val_paths = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
+
+            # val_paths = sorted(list((dataset_path / 'render_far0.5' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_line' / 'metadata').iterdir()))
 
             train_paths = val_paths
@@ -1081,12 +1083,23 @@ class Runner:
             H = render_items[0].H
             W = render_items[0].W
 
-            indices_to_eval = np.arange(len(render_items))[165:]
+            if self.hparams.start == -1 and self.hparams.end == -1:
+                indices_to_eval = np.arange(len(render_items))
+            else:
+                indices_to_eval = np.arange(len(render_items))[self.hparams.start:self.hparams.end]
             
+
+            # used_files = []
+            # for ext in ('*.png', '*.jpg'):
+            #     used_files.extend(glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs', ext)))
+            # used_files.sort()
+            # process_item = [Path(far_p).stem for far_p in used_files]
+
+
             experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
             Path(str(experiment_path_current)).mkdir()
             Path(str(experiment_path_current / 'val_rgbs')).mkdir()
-            Path(str(experiment_path_current / 'val_rgbs'/'all')).mkdir()
+            Path(str(experiment_path_current / 'val_rgbs'/'pred_all')).mkdir()
             with (experiment_path_current / 'psnr.txt').open('w') as f:
                 
                 samantic_each_value = {}
@@ -1099,6 +1112,11 @@ class Runner:
                 for i in main_tqdm(indices_to_eval):
                     self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                     metadata_item = render_items[i]
+
+                    # file_name = Path(metadata_item.image_path).stem
+                    # if file_name not in process_item:
+                    #     continue
+
                     i = int(Path(metadata_item.depth_dji_path).stem)
                     self.hparams.sampling_mesh_guidance = False
                     results, _ = self.render_image(metadata_item, train_index)
@@ -1109,7 +1127,7 @@ class Runner:
                     viz_result_rgbs = viz_result_rgbs.clamp(0,1)
                     
 
-                    save_depth_dir = os.path.join(str(experiment_path_current), 'val_rgbs', "depth_save")
+                    save_depth_dir = os.path.join(str(experiment_path_current), 'val_rgbs', "pred_depth_save")
                     if not os.path.exists(save_depth_dir):
                         os.makedirs(save_depth_dir)
                     depth_map = results[f'depth_{typ}'].view(viz_result_rgbs.shape[0], viz_result_rgbs.shape[1]).numpy().astype(np.float16)
@@ -1139,7 +1157,7 @@ class Runner:
                     img_list = torch.stack(img_list).permute(0,3,1,2)
                     img = make_grid(img_list, nrow=3)
                     img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / 'all'/ ("%06d_all.jpg" % i)))
+                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / 'pred_all'/ ("%06d_all.jpg" % i)))
 
                     del results
             
