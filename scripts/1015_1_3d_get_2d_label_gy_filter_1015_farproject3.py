@@ -309,7 +309,7 @@ def hello(hparams: Namespace) -> None:
         point = np.array([label for label in point if label != 0] )
         label_counts.append(len(point))
 
-
+    print('convert to numpy array...')
     label_counts = np.array(label_counts)
     print(f"label_counts max :{max(label_counts)}, min :{(min(label_counts))}")
     most_common_labels = np.array(most_common_labels)
@@ -317,12 +317,12 @@ def hello(hparams: Namespace) -> None:
     max_label_color = custom2rgb_1(max_label)
 
     entropies_intensity = np.array(entropies)
-    np.save(f"{output_path}/entropies.npy", entropies_intensity)
+    # np.save(f"{output_path}/entropies.npy", entropies_intensity)
     min_entropy = min(entropies_intensity)
     max_entropy = max(entropies_intensity)
     normalized_intensities = (entropies_intensity - min_entropy) / (max_entropy - min_entropy) * 255
     
-
+    print('save pc...')
     cloud = PyntCloud(pd.DataFrame(
         # same arguments that you are passing to visualize_pcl
         data=np.hstack((points_nerf[:, :3], np.uint8(max_label_color), normalized_intensities[:, np.newaxis], label_counts[:, np.newaxis])),
