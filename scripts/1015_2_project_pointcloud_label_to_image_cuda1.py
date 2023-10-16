@@ -70,7 +70,7 @@ def process_sample(args):
     # mask[::10]=False
 
 
-    step = 1
+    step = 2
     expand=True
     meshMask = metadata_item.load_depth_dji()
 
@@ -97,6 +97,7 @@ def process_sample(args):
         if depth < thresh:
             depth_map[y, x] = depth
             image[y, x] = torch.flip(color, [0])
+            # image[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = torch.flip(color, [0])
             image_expand[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = torch.flip(color, [0])
         if expand and depth < depth_map_expand[y, x] and depth < thresh:
             depth_map_expand[max(0, y - step):min(image_height, y + step), max(0, x - step):min(image_width, x + step)] = depth
@@ -150,13 +151,13 @@ def hello(hparams: Namespace) -> None:
 
     if not os.path.exists(hparams.output_path):
         Path(hparams.output_path).mkdir(parents=True)
-        Path(os.path.join(hparams.output_path, 'vis')).mkdir(parents=True)
-        Path(os.path.join(hparams.output_path, 'val_vis')).mkdir(parents=True)
-        Path(os.path.join(hparams.output_path, 'labels_pc')).mkdir(parents=True)
-        Path(os.path.join(hparams.output_path, 'expand_vis')).mkdir(parents=True)
-        Path(os.path.join(hparams.output_path, 'expand_labels_pc')).mkdir(parents=True)
-        Path(os.path.join(hparams.output_path, 'expand_depth_vis')).mkdir(parents=True)
-        Path(os.path.join(hparams.output_path, 'expand_depth_labels_pc')).mkdir(parents=True)
+    Path(os.path.join(hparams.output_path, 'vis')).mkdir(parents=True,exist_ok=True)
+    Path(os.path.join(hparams.output_path, 'val_vis')).mkdir(parents=True,exist_ok=True)
+    Path(os.path.join(hparams.output_path, 'labels_pc')).mkdir(parents=True,exist_ok=True)
+    Path(os.path.join(hparams.output_path, 'expand_vis')).mkdir(parents=True,exist_ok=True)
+    Path(os.path.join(hparams.output_path, 'expand_labels_pc')).mkdir(parents=True,exist_ok=True)
+    Path(os.path.join(hparams.output_path, 'expand_depth_vis')).mkdir(parents=True,exist_ok=True)
+    Path(os.path.join(hparams.output_path, 'expand_depth_labels_pc')).mkdir(parents=True,exist_ok=True)
         
 
     hparams.ray_altitude_range = [-95, 54]
