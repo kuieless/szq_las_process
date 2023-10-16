@@ -30,7 +30,7 @@ eval_output=$output_path/eval
 # #  1.  3d get 2d label
 
 # echo '1 start'
-# /home/yuqi/anaconda3/envs/gpnerf/bin/python /data/yuqi/code/GP-NeRF-semantic/scripts/1015_1_3d_get_2d_label_gy_filter_1015_farproject2.py  \
+# /home/yuqi/anaconda3/envs/gpnerf/bin/python /data/yuqi/code/GP-NeRF-semantic/scripts/1015_1_3d_get_2d_label_gy_filter_1015_farproject3.py  \
 #     --dataset_path=$dataset_path  \
 #     --exp_name='logs_357/test' \
 #     --output_path=$output_path  \

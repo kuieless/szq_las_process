@@ -15,7 +15,7 @@ import configargparse
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
-torch.cuda.set_device(6)
+# torch.cuda.set_device(6)
 device= 'cpu'
 
 

@@ -115,7 +115,7 @@ def hello(hparams: Namespace) -> None:
     
     for metadata_item in tqdm(train_items, desc="extract the far m2f label"):
         file_name = Path(metadata_item.image_path).stem
-        if file_name not in process_item:
+        if file_name not in process_item: # or int(file_name) != 182:
             continue
         
         directions = get_ray_directions(metadata_item.W,
@@ -196,6 +196,8 @@ def hello(hparams: Namespace) -> None:
 
         ########### 考虑遮挡
         threshold= 0.02
+        # threshold= 0.005
+
         large_int = 1e6
         image_width, image_height = int(W), int(H)
         project_m2f = torch.zeros((image_height, image_width)).long().to(device)
@@ -204,8 +206,18 @@ def hello(hparams: Namespace) -> None:
         mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
         mask = mask_x & mask_y
         # meshMask = metadata_item.load_depth_dji().float().to(device)
-        farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent), "pred_depth_save", f"{file_name}.npy")))
+
+        ### NOTE:  NeRF 渲染的depth
+        # farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent), "pred_depth_save", f"{file_name}.npy")))
+        farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent.parent), "pred_depth_save", f"{file_name}.npy")))
+
         farMask = (farMask) * depth_scale
+
+        ### NOTE:  gt mesh 得到的depth
+        # farMask = torch.from_numpy(np.load(os.path.join(hparams.dataset_path, hparams.render_type,"depth_mesh", f"{file_name}.npy"))).squeeze(-1).float()
+        # farMask = (farMask) * depth_scale
+
+
 
         x = projected_points[:, 0].long()
         y = projected_points[:, 1].long()
