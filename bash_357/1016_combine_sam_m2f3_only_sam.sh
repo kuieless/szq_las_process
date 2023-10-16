@@ -34,7 +34,7 @@ render_type=render_far0.3
     --project_path=$output_path/project_far_to_ori  \
     --output_path=$output_path/compare_vis
 
-/home/yuqi/anaconda3/envs/gpnerf/bin/python    /data/yuqi/code/GP-NeRF-semantic/scripts/1016_only_sam_building_label_replace.py  \
+/home/yuqi/anaconda3/envs/gpnerf/bin/python    /data/yuqi/code/GP-NeRF-semantic/scripts/1016_1_only_sam_building_label_replace.py  \
     --dataset_path=$dataset_path    \
     --exp_name=logs_357/test    \
     --only_sam_m2f_far_project_path=$output_path/project_far_to_ori    \

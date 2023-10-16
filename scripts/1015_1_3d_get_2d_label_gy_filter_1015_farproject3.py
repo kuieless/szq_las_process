@@ -311,16 +311,19 @@ def hello(hparams: Namespace) -> None:
 
     print('convert to numpy array...')
     label_counts = np.array(label_counts)
+    print(f'label_counts: {label_counts.shape}')
     print(f"label_counts max :{max(label_counts)}, min :{(min(label_counts))}")
     most_common_labels = np.array(most_common_labels)
     max_label = remapping(most_common_labels)
     max_label_color = custom2rgb_1(max_label)
+    print(f'max_label_color: {max_label_color.shape}')
 
     entropies_intensity = np.array(entropies)
     # np.save(f"{output_path}/entropies.npy", entropies_intensity)
     min_entropy = min(entropies_intensity)
     max_entropy = max(entropies_intensity)
     normalized_intensities = (entropies_intensity - min_entropy) / (max_entropy - min_entropy) * 255
+    print(f'normalized_intensities: {normalized_intensities.shape}')
     
     print('save pc...')
     cloud = PyntCloud(pd.DataFrame(
