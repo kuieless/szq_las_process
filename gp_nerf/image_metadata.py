@@ -67,8 +67,8 @@ class ImageMetadata:
         return torch.ByteTensor(np.asarray(labels))
     
     def load_gt(self) -> torch.Tensor:
-        label_path = self.label_path
-        gt_path = label_path.parent.parent / 'labels_gt' / f'{label_path.stem}.png'
+        # label_path = self.label_path
+        gt_path = self.image_path.parent.parent / 'labels_gt' / f'{self.image_path.stem}.png'
         labels = Image.open(gt_path)    #.convert('RGB')
         # labels = cv2.imread(str(self.label_path))
         size = labels.size

@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=4
 
 
 dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
@@ -21,14 +21,14 @@ sampling_mesh_guidance=True
 enable_semantic=True
 
 freeze_geo=True
-label_name=m2f
+label_name=1016_ml_fusion_0.3
 separate_semantic=True
 ckpt_path=logs_dji/1003_yingrenshi_density_depth_hash22/0/models/200000.pt
 
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 lr=0.01
-exp_name=logs_dji/1013_yingrenshi_density_depth_hash22_m2f
+exp_name=logs_dji/1017_yingrenshi_density_depth_hash22_far0.3
 
 log2_hashmap_size=22
 desired_resolution=8192

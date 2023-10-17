@@ -1,8 +1,8 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=5
 
-# 目的是看3层128的gt能不能达到5层128gt的效果
+
 dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
 config_file=configs/yingrenshi.yaml
 
@@ -18,18 +18,17 @@ dataset_type=memory_depth_dji
 use_scaling=False
 sampling_mesh_guidance=True
 
-
 enable_semantic=True
 
 freeze_geo=True
-label_name=gt
+label_name=1016_ml_fusion_0.5
 separate_semantic=True
 ckpt_path=logs_dji/1003_yingrenshi_density_depth_hash22/0/models/200000.pt
 
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 lr=0.01
-exp_name=logs_dji/1014_yingrenshi_density_depth_hash22_gt_3_128
+exp_name=logs_dji/1017_yingrenshi_density_depth_hash22_far0.5
 
 log2_hashmap_size=22
 desired_resolution=8192
@@ -42,5 +41,5 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --sampling_mesh_guidance   $sampling_mesh_guidance   --sdf_as_gpnerf  True  \
     --log2_hashmap_size=$log2_hashmap_size   --desired_resolution=$desired_resolution  \
     --freeze_geo=$freeze_geo  --ckpt_path=$ckpt_path  --wgt_sem_loss=1 \
-    --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=1    --semantic_layer_dim=128 \
+    --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=3    --semantic_layer_dim=128 \
     --use_subset=True      --lr=$lr    --balance_weight=False

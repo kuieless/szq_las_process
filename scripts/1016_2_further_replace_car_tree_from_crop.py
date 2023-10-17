@@ -39,10 +39,10 @@ def _get_train_opts() -> Namespace:
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
     
-    parser.add_argument('--only_sam_m2f_far_project_path', type=str, default='logs_dji/augument/1015_far0.5/project_to_ori_gt_only_sam/project_far_to_ori_replace_building/replace_building_label',required=False, help='experiment name')
+    parser.add_argument('--only_sam_m2f_far_project_path', type=str, default='logs_dji/augument/1015_far0.3/project_to_ori_gt_only_sam/project_far_to_ori_replace_building/replace_building_label',required=False, help='experiment name')
     parser.add_argument('--crop_m2f', type=str, default='/data/yuqi/code/Mask2Former_a/output_useful/1016_compare_ds2/labels_m2f_final_sam/labels_merge',required=False, help='experiment name')
     
-    parser.add_argument('--output_path', type=str, default='logs_dji/augument/1015_far0.5/project_to_ori_gt_only_sam/project_far_to_ori_replace_building_car_tree',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='logs_dji/augument/1015_far0.3/project_to_ori_gt_only_sam/project_far_to_ori_replace_building_car_tree',required=False, help='experiment name')
     # parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='experiment name')
     
     return parser.parse_args()
@@ -102,6 +102,9 @@ def hello(hparams: Namespace) -> None:
         tree_mask = (crop_m2f==4)
 
         replace_label = far_m2f.clone()
+        replace_label[replace_label==3]=0
+        replace_label[replace_label==4]=0
+
         replace_label[car_mask] = 3
         replace_label[tree_mask] = 4
 
@@ -115,7 +118,7 @@ def hello(hparams: Namespace) -> None:
 
 
         img = metadata_item.load_image()
-        merge = 0.7 * img.numpy() + 0.5 * color_label
+        merge = 0.7 * img.numpy() + 0.3 * color_label
         Image.fromarray(merge.astype(np.uint8)).save(os.path.join(output_path, 'alpha',f"{file_name}.jpg"))
         
 

@@ -179,10 +179,13 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         
         if val_type == 'val':
             gt_label_rgb = torch.from_numpy(gt_label_rgb)
-            pseudo_gt_label_rgb = metadata_item.load_label()
-            pseudo_gt_label_rgb = remapping(pseudo_gt_label_rgb)
-            pseudo_gt_label_rgb = custom2rgb(pseudo_gt_label_rgb.view(*viz_rgbs.shape[:-1]).cpu().numpy())
-            pseudo_gt_label_rgb = torch.from_numpy(pseudo_gt_label_rgb)
+            if hparams.label_name not in ['m2f', 'merge', 'gt']:
+                pseudo_gt_label_rgb = None
+            else:
+                pseudo_gt_label_rgb = metadata_item.load_label()
+                pseudo_gt_label_rgb = remapping(pseudo_gt_label_rgb)
+                pseudo_gt_label_rgb = custom2rgb(pseudo_gt_label_rgb.view(*viz_rgbs.shape[:-1]).cpu().numpy())
+                pseudo_gt_label_rgb = torch.from_numpy(pseudo_gt_label_rgb)
         elif val_type == 'train':
             pseudo_gt_label_rgb = torch.from_numpy(gt_label_rgb)
             gt_label_rgb = None
@@ -195,10 +198,6 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
             Path(str(experiment_path_current / 'val_rgbs' / 'pred_label')).mkdir()
         Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'pred_label' / ("%06d_pred_label.jpg" % i)))
 
-        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'm2f_label')):
-            Path(str(experiment_path_current / 'val_rgbs' / 'm2f_label')).mkdir()
-        Image.fromarray((pseudo_gt_label_rgb.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'm2f_label' / ("%06d_m2f_label.jpg" % i)))
-
         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_label')) and hparams.save_individual:
             Path(str(experiment_path_current / 'val_rgbs' / 'gt_label')).mkdir()
         if hparams.save_individual:
@@ -207,7 +206,17 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
 
         alpha = 0.7
         label_list = [viz_result_rgbs]
-        label_list.append(pseudo_gt_label_rgb * (1-alpha) + viz_result_rgbs * alpha)
+        if pseudo_gt_label_rgb is not None:
+            if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'm2f_label')):
+                Path(str(experiment_path_current / 'val_rgbs' / 'm2f_label')).mkdir()
+            Image.fromarray((pseudo_gt_label_rgb.cpu().numpy()).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'm2f_label' / ("%06d_m2f_label.jpg" % i)))
+            
+            if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label')):
+                Path(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label')).mkdir()
+            Image.fromarray((pseudo_gt_label_rgb.cpu().numpy() * (1-alpha) + viz_result_rgbs.cpu().numpy() * alpha).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label' / ("%06d_m2f_label.jpg" % i)))
+
+            label_list.append(pseudo_gt_label_rgb * (1-alpha) + viz_result_rgbs * alpha)
+        
         label_list.append(gt_label_rgb * (1-alpha) + viz_result_rgbs * alpha)
         label_list.append(torch.from_numpy(visualize_sem) * (1-alpha) + viz_result_rgbs * alpha)
         label_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in label_list]
@@ -222,10 +231,7 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
             Path(str(experiment_path_current / 'val_rgbs' / 'alpha_pred_label')).mkdir()
         Image.fromarray((visualize_sem * (1-alpha) + viz_result_rgbs.cpu().numpy() * alpha).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'alpha_pred_label' / ("%06d_pred_label.jpg" % i)))
 
-        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label')):
-            Path(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label')).mkdir()
-        Image.fromarray((pseudo_gt_label_rgb.cpu().numpy() * (1-alpha) + viz_result_rgbs.cpu().numpy() * alpha).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'alpha_m2f_label' / ("%06d_m2f_label.jpg" % i)))
-
+        
         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label')) and hparams.save_individual:
             Path(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label')).mkdir()
         if hparams.save_individual:

@@ -47,17 +47,22 @@ class MemoryDataset(Dataset):
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
+            if hparams.enable_semantic and metadata_item.is_val:  # 训练语义的时候要去掉val图像
+                continue
             if hparams.use_subset:
                 used_files = []
                 for ext in ('*.png', '*.jpg'):
                     used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs', ext)))
-                    used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/val/rgbs', ext)))
+                    # used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/val/rgbs', ext)))
                 used_files.sort()
                 file_names = [os.path.splitext(os.path.basename(file_path))[0] for file_path in used_files]
-                if Path(metadata_item.label_path).stem not in file_names:
+                if (metadata_item.label_path == None): #增强label集yingrenshi上只做了subset，所以可能会没有
                     continue
                 else:
-                    load_subset = load_subset+1
+                    if (Path(metadata_item.label_path).stem not in file_names):
+                        continue
+                    else:
+                        load_subset = load_subset+1
 
             image_data = get_rgb_index_mask_depth_dji(metadata_item)
 

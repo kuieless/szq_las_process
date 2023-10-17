@@ -300,13 +300,15 @@ def hello(hparams: Namespace) -> None:
     label_counts = []
     
     for point in tqdm(loaded_data, desc='calculate max_voting and entropy'):
+        # point = np.array([label for label in point if label != 0])
+        point = [label for label in point if label != 0]
+
         if not point:
             # 处理空列表的情况
             most_common_labels.append(-1)
         else:
             most_common_labels.append(Counter(point).most_common(1)[0][0])
         entropies.append(calculate_entropy(point))
-        point = np.array([label for label in point if label != 0] )
         label_counts.append(len(point))
 
     print('convert to numpy array...')
