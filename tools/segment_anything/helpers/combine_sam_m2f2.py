@@ -38,7 +38,8 @@ def get_id(sam, m2f):
         sam_mask_unique, sam_mask_counts = torch.unique(sam, return_counts=True)
         counts_total = sam_mask_counts[sam_mask_unique==1]
         couts_max_label = counts.max()
-        if couts_max_label / counts_total > 0.1:
+        # if couts_max_label / counts_total > 0.1:
+        if couts_max_label / counts_total > 0.7:    #20231018 改成>0.7, 避免
             id_max_label = unique[counts.argmax()]
         else:
             id_max_label = 0

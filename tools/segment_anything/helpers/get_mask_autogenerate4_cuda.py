@@ -188,8 +188,8 @@ def hello(hparams: Namespace) -> None:
     
     for i in tqdm.tqdm(range(len(imgs))):
         img_name = imgs[i].split('/')[-1][:6]
-        if int(img_name) < 203 or int(img_name) > 239:
-            continue
+        # if int(img_name) < 203 or int(img_name) > 239:
+        #     continue
         image = cv2.imread(imgs[i])
         # image_size = 
         w, h, _ = image.shape

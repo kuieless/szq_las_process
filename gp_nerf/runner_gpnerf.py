@@ -104,8 +104,12 @@ class Runner:
         faulthandler.register(signal.SIGUSR1)
         print(f"ignore_index: {hparams.ignore_index}")
         if hparams.balance_weight:
-            # cluster 1，  building 1， road 1， car 5， tree 5， vegetation 5
-            balance_weight = torch.FloatTensor([1, 1, 1, 5, 5, 5, 1, 1, 1, 1, 1]).cuda()
+            # 1017之前：cluster 1，  building 1， road 1， car 5， tree 5， vegetation 5   
+            # balance_weight = torch.FloatTensor([1, 1, 1, 5, 5, 5, 1, 1, 1, 1, 1]).cuda()
+            # 1017测试增大car的比例：cluster 1，  building 1， road 1， car 2， tree 1， vegetation 1
+            balance_weight = torch.FloatTensor([1, 1, 1, 2, 1]).cuda()
+            # balance_weight = torch.FloatTensor([1, 1, 2, 2, 1]).cuda()
+
             CrossEntropyLoss = nn.CrossEntropyLoss(weight=balance_weight, ignore_index=hparams.ignore_index)
         else:
             CrossEntropyLoss = nn.CrossEntropyLoss(ignore_index=hparams.ignore_index)
@@ -2058,6 +2062,60 @@ class Runner:
         depth_scale = torch.abs(directions[:, :, 2]).view(-1)
 
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
+            # rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+            # metadata.c2w[:3,:3]=torch.eye(3)
+            # metadata.c2w[:3,3]=self.sphere_center
+            # metadata.c2w[1:3,3]=self.sphere_center[1:3]
+            # metadata.c2w[0,3]=self.ray_altitude_range[0]
+            # camera = torch.load('/data/yuqi/Datasets/DJI/Longhua_block1_20231009_ds/train/metadata/000001.pt')
+            # metadata.c2w[:3,:3]=camera['c2w'][:3,:3]
+
+            # def rad(x):
+            #     return math.radians(x)
+            # angle=-20
+            # cosine = math.cos(rad(angle))
+            # sine = math.sin(rad(angle))
+            # rotation_matrix_x = torch.tensor([[1, 0, 0],
+            #                   [0, cosine, sine],
+            #                   [0, -sine, cosine]])
+            # angle=-40
+            # cosine = math.cos(rad(angle))
+            # sine = math.sin(rad(angle))
+            # rotation_matrix_y = torch.tensor([[cosine, 0, sine],
+            #                   [0, 1, 0],
+            #                   [-sine, 0, cosine]])
+            # metadata.c2w[:3,:3]=rotation_matrix_x@rotation_matrix_y @ metadata.c2w[:3,:3]
+            # metadata.c2w[1:3,3]=self.sphere_center[1:3]
+            # metadata.c2w[0,3]=self.ray_altitude_range[0]
+            image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+            ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
+            ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
+
+            z_vals_inbound = 1
+            new_o = ray_o - ray_d * z_vals_inbound
+            metadata.c2w[:,3]= new_o
+            metadata.c2w[1:3,3]=self.sphere_center[1:3]
+            def rad(x):
+                return math.radians(x)
+            angle=30
+            cosine = math.cos(rad(angle))
+            sine = math.sin(rad(angle))
+            rotation_matrix_x = torch.tensor([[1, 0, 0],
+                              [0, cosine, sine],
+                              [0, -sine, cosine]])
+            angle=-40
+            cosine = math.cos(rad(angle))
+            sine = math.sin(rad(angle))
+            rotation_matrix_y = torch.tensor([[cosine, 0, sine],
+                              [0, 1, 0],
+                              [-sine, 0, cosine]])
+            metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
+            metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
+            metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
+
+
+
+
             rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
 
             rays = rays.view(-1, 8).to(self.device, non_blocking=True).cuda()  # (H*W, 8)

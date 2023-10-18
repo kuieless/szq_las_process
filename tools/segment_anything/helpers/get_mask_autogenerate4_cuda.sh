@@ -17,9 +17,9 @@ export CUDA_VISIBLE_DEVICES=5
 
 #  visualize
 python tools/segment_anything/helpers/get_mask_autogenerate4_cuda.py   \
-    --image_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1015_far0.3/pred_rgb \
-    --sam_feat_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1015_far0.3/sam_features  \
-    --output_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1015_far0.3/sam_features_vis
+    --image_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/37/eval_200000/val_rgbs/pred_rgb \
+    --sam_feat_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/37/eval_200000/val_rgbs/sam_features  \
+    --output_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/37/eval_200000/val_rgbs/sam_features_vis
 
 
 
