@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from torchvision.utils import make_grid
 
+from tools.contrastive_lift.utils import create_instances_from_semantics
+
 
 ### https://github.com/nianticlabs/monodepth2/blob/b676244e5a1ca55564eb5d16ab521a48f823af31/evaluate_depth.py#L214
 def compute_errors(gt, pred):
@@ -132,8 +134,8 @@ def get_semantic_gt_pred_render_zyq(results, val_type, metadata_item, viz_rgbs, 
         # Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / ("%06d_pred_label.jpg" % i)))
     return
 
-def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, 
-                         metrics_val, metrics_val_each, img_list, experiment_path_current, i, writer, hparams, viz_result_rgbs):
+def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, img_list, 
+                        experiment_path_current, i, writer, hparams, viz_result_rgbs, metrics_val, metrics_val_each):
     if f'sem_map_{typ}' in results:
         sem_logits = results[f'sem_map_{typ}']
         
@@ -242,6 +244,33 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
 
     return
 
+def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, img_list, 
+                        experiment_path_current, i, writer, hparams, viz_result_rgbs, thing_classes,
+                        all_points_rgb, all_points_semantics):
+    if f'instance_map_{typ}' in results:
+        instances = results[f'instance_map_{typ}']
+        device = instances.device
+        # gt_semantic
+        gt_label = metadata_item.load_gt()
+        gt_label = remapping(gt_label)
+        
+        # 如果pred semantic存在，则使用
+        # 若不存在， 则创建一个全是things的semantic
+        if f'sem_map_{typ}' in results:
+            sem_logits = results[f'sem_map_{typ}']
+            sem_label = logits_2_label(sem_logits)
+            sem_label = remapping(sem_label)
+        else:
+            sem_label = torch.ones_like(instances)
+        
+        p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
+        
+        # pred_instances = cluster(padded_instances, device)
+        all_points_rgb.append(viz_result_rgbs.view(-1,3))
+        all_points_semantics.append(sem_label.view(-1))
+        return instances, p_instances, all_points_rgb, all_points_semantics
+    else:
+        return None, None
 
 def get_sdf_normal_map(metadata_item, results, typ, viz_rgbs):
     #  NSR  SDF ------------------------------------  save the normal_map

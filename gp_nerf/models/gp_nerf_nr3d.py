@@ -356,12 +356,6 @@ class NeRF(nn.Module):
                         sem_logits = self.semantic_linear(torch.cat([h, input_xyz], dim=-1))
                 if self.use_pano_lift:
                     sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
-        
-
-        # instance 
-        if self.enable_instance:
-            input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
-            instance_feature = self.instance_linear(input_xyz)  
                    
 
 
@@ -384,10 +378,11 @@ class NeRF(nn.Module):
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits, sem_feature
             else:
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
-        elif self.enable_instance:
-            return torch.cat([color, sigma.unsqueeze(1)], -1), instance_feature
         else:
             return torch.cat([color, sigma.unsqueeze(1)], -1)
+
+    
+
 
     def forward_bg(self, point_type, x: torch.Tensor, sigma_only: bool = False, sigma_noise: Optional[torch.Tensor] = None,train_iterations=-1) -> torch.Tensor:
         # with torch.no_grad():
@@ -434,13 +429,6 @@ class NeRF(nn.Module):
                         sem_logits = self.semantic_linear_bg(torch.cat([h, input_xyz], dim=-1))
                 if self.use_pano_lift:
                     sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
-        
-
-        # instance 
-        if self.enable_instance:
-            input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
-            instance_feature = self.instance_linear_bg(input_xyz)  
-
 
 
         # with torch.no_grad():
@@ -462,11 +450,27 @@ class NeRF(nn.Module):
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits, sem_feature
             else:
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
-        elif self.enable_instance:
-            return torch.cat([color, sigma.unsqueeze(1)], -1), instance_feature
         else:
             return torch.cat([color, sigma.unsqueeze(1)], -1)
+    
+    def forward_instance(self, point_type, x: torch.Tensor):
+        if point_type == 'fg':
+            instance_feature = self.forward_fg_instance(x)
+        elif point_type == 'bg':
+            instance_feature = self.forward_bg_instance(x)
+        else:
+            NotImplementedError('Unkonwn point type')
+        return instance_feature
 
+    def forward_fg_instance(self, x: torch.Tensor):
+        input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
+        instance_feature = self.instance_linear(input_xyz)  
+        return instance_feature
+
+    def forward_bg_instance(self, x: torch.Tensor):
+        input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
+        instance_feature = self.instance_linear_bg(input_xyz)  
+        return instance_feature
 
     def auto_gradient(self, x, tflag=True):
         with torch.set_grad_enabled(True):

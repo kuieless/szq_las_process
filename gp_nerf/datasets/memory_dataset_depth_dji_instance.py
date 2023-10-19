@@ -97,8 +97,14 @@ class MemoryDataset(Dataset):
         return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        total_pixels = self._rgbs[idx].shape[0]
-        sampling_idx = torch.randperm(total_pixels)[:self.hparams.batch_size]
+        # 找到非零值的索引
+        nonzero_indices = torch.nonzero(self._labels[idx]).squeeze()
+        # 从非零值的索引中随机采样
+        sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
+
+
+        # total_pixels = self._rgbs[idx].shape[0]
+        # sampling_idx = torch.randperm(total_pixels)[:self.hparams.batch_size]
 
         item = {
             'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,
@@ -106,7 +112,7 @@ class MemoryDataset(Dataset):
             'img_indices': self._img_indices[idx] * torch.ones(self.hparams.batch_size, dtype=torch.int32),
             'labels': self._labels[idx][sampling_idx].int(),
             'depth_dji': self._depth_djis[idx][sampling_idx],
-            'depth_scale': self._depth_scales[sampling_idx],
+            'depth_scale': self._depth_scale[sampling_idx],
         }
         
         return item

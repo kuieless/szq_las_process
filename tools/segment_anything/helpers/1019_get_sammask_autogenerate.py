@@ -34,7 +34,7 @@ def save_mask_anns_torch(colors, anns, img_name, hparams):
 
     id = 1
     for ann in sorted_anns:
-        if ann['area'] < 0.05*img_shape[0]*img_shape[1]:
+        if ann['area'] < 0.01*img_shape[0]*img_shape[1]:
             continue
         m = ann['segmentation']
 

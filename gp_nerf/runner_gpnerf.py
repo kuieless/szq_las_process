@@ -44,7 +44,8 @@ from tools.unetformer.metric import Evaluator
 
 import pandas as pd
 
-from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map, get_semantic_gt_pred_render_zyq
+from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map, get_semantic_gt_pred_render_zyq, get_instance_pred
+from tools.contrastive_lift.utils import cluster, visualize_panoptic_outputs
 from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folder_logger, save_semantic_metric
 from gp_nerf.eval_utils import prepare_depth_normal_visual
 
@@ -128,7 +129,7 @@ class Runner:
         faulthandler.register(signal.SIGUSR1)
         print(f"ignore_index: {hparams.ignore_index}")
         self.temperature = 100
-        
+        self.thing_classes=[1]
         if hparams.balance_weight:
             # 1017之前：cluster 1，  building 1， road 1， car 5， tree 5， vegetation 5   
             # balance_weight = torch.FloatTensor([1, 1, 1, 5, 5, 5, 1, 1, 1, 1, 1]).cuda()
@@ -369,7 +370,12 @@ class Runner:
             else:
                 for p_base in self.nerf.encoder.parameters():
                     p_base.requires_grad = False
-                
+            # 训练instance，冻结semantic
+            if self.hparams.freeze_semantic:
+                for p_base in self.nerf.semantic_linear.parameters():
+                    p_base.requires_grad = False
+                for p_base in self.nerf.semantic_linear_bg.parameters():
+                    p_base.requires_grad = False
                 
                 
             non_frozen_parameters = [p for p in self.nerf.parameters() if p.requires_grad]
@@ -448,6 +454,8 @@ class Runner:
             from gp_nerf.datasets.memory_dataset_depth_dji_instance import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
+            self.H = dataset.H
+            self.W = dataset.W
         elif self.hparams.dataset_type == 'sam':
             if self.hparams.add_random_rays:
                 from gp_nerf.datasets.memory_dataset_sam_random import MemoryDataset_SAM
@@ -586,11 +594,15 @@ class Runner:
                     # 调整shape
                     if self.hparams.enable_semantic or self.hparams.enable_instance:
                         for key in item.keys():
+                            if item[key].shape[0]==1:
+                                item[key] = item[key].squeeze(0)
                             if item[key].dim() != 1:
                                 if item[key].shape[-1] == 1:
                                     item[key] = item[key].reshape(-1)
                                 else:
                                     item[key] = item[key].reshape(-1, item[key].shape[-1])
+                                
+
 
                             # if item[key].dim() == 2:
                             #     item[key] = item[key].reshape(-1)
@@ -917,7 +929,7 @@ class Runner:
                 metrics['sigma_loss'] = results['sigma_loss']
                 metrics['loss'] += self.hparams.wgt_sigma_loss * sigma_loss
 
-
+        # instance loss
         if self.hparams.enable_instance:
             instance_features = results[f'instance_map_{typ}']
             instance_loss = contrastive_loss(instance_features, labels.type(torch.long), self.temperature)
@@ -925,7 +937,7 @@ class Runner:
             metrics['loss'] += self.hparams.wgt_instance_loss * instance_loss
 
         #semantic loss
-        if self.hparams.enable_semantic:
+        if self.hparams.enable_semantic and (not self.hparams.freeze_semantic):
             if 'sa3d' in self.hparams.dataset_type:
                 sem_logits = results[f'sem_map_{typ}']
                 if self.hparams.use_mask_type == 'hashgrid_mlp':
@@ -1207,6 +1219,7 @@ class Runner:
             
     
     def _run_validation(self, train_index=-1) -> Dict[str, float]:
+
         if 'llff' in self.hparams.dataset_type:
             from gp_nerf.rendering_gpnerf import render_rays
             with torch.inference_mode():
@@ -1431,6 +1444,7 @@ class Runner:
             else:
                 from tools.unetformer.uavid2rgb import remapping
 
+            
             if self.hparams.use_neus_gradient == False and self.hparams.nr3d_nablas == False:
                 with torch.inference_mode():
                     #semantic 
@@ -1451,10 +1465,6 @@ class Runner:
                             # self.val_items=self.val_items[:2]
                             indices_to_eval = np.arange(len(self.val_items))
                         elif val_type == 'train':
-                            # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
-                            # indices_to_eval = [0] #np.arange(len(self.train_items))  
-                            # indices_to_eval = np.arange(450,510)  
-                            # indices_to_eval = np.arange(370,800)  
                             indices_to_eval = np.arange(370,490)  
                             
                         
@@ -1471,7 +1481,10 @@ class Runner:
                             samantic_each_value['F1'] = []
                             # samantic_each_value['OA'] = []
 
-                            
+                            all_instance_features, all_thing_features = [], []
+                            all_points_rgb, all_points_semantics = [], []
+
+                            indices_to_eval = indices_to_eval[:2]
                             for i in main_tqdm(indices_to_eval):
                                 self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                                 # if i != 0:
@@ -1512,9 +1525,18 @@ class Runner:
                                 
                                 prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
                                 
-                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
-                                                    self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs * 255)
-                                    
+                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
+                                                    i, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each, )
+                                
+                                
+                                
+                                instances, p_instances, all_points_rgb, all_points_semantics = get_instance_pred(
+                                    results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
+                                    experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
+                                    all_points_rgb, all_points_semantics)
+                                
+                                all_instance_features.append(instances)
+                                all_thing_features.append(p_instances)
 
                                 # NOTE: 对需要可视化的list进行处理
                                 # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
@@ -1561,6 +1583,30 @@ class Runner:
                                     samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
                                     self.metrics_val_each.reset()
                                 del results
+                        
+                        if self.hparams.enable_instance:
+                            # instance clustering
+                            all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+                            all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                            all_points_instances = cluster(all_thing_features, bandwidth=0.15, device=self.device, num_images=len(indices_to_eval))
+                            save_i=0
+                            # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)
+                            for save_i in range(len(indices_to_eval)):
+                                p_rgb = all_points_rgb[save_i]
+                                p_semantics = all_points_semantics[save_i]
+                                p_instances = all_points_instances[save_i]
+
+                                stack = visualize_panoptic_outputs(
+                                    p_rgb, p_semantics, p_instances, None, None, None, None,
+                                    self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
+                                )
+                                grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=5).permute((1, 2, 0)).contiguous()
+                                grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                                if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'panoptic')) and self.hparams.save_individual:
+                                    Path(str(experiment_path_current / 'val_rgbs' / 'panoptic')).mkdir()
+                                Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
+                                
+
                         # logger
                         write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index, self.hparams)
                         self.metrics_val.reset()
@@ -1571,7 +1617,7 @@ class Runner:
                     finally:
                         if self.is_master and base_tmp_path is not None:
                             shutil.rmtree(base_tmp_path)
-
+                    
                     return val_metrics
             else:
                 # with torch.inference_mode():
@@ -1651,8 +1697,8 @@ class Runner:
                                 prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
                                 
 
-                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping,
-                                                    self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
+                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
+                                                    i, self.writer, self.hparams, self.metrics_val, self.metrics_val_each)
                                    
                                 # NOTE: 对需要可视化的list进行处理
                                 # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
@@ -1711,7 +1757,7 @@ class Runner:
                             shutil.rmtree(base_tmp_path)
 
                     return val_metrics
-    
+
     def val_3d_to_2d(self):
         self._setup_experiment_dir()
         val_metrics = self._run_validation_val_3d_to_2d(0)
@@ -2326,7 +2372,7 @@ class Runner:
 
         
         label_path = None
-        if not hparams.enable_instance:
+        if not self.hparams.enable_instance:
             for extension in ['.jpg', '.JPG', '.png', '.PNG']:
                 
                 candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_name}' / '{}{}'.format(metadata_path.stem, extension)

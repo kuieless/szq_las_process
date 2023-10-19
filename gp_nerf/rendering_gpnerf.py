@@ -436,6 +436,7 @@ def _inference(point_type,
     out_chunks = []
     out_semantic_chunk = [] 
     out_semantic_feature_chunk = []
+    out_instance_chunk = []
     rays_d_ = rays_d.repeat(1, N_samples_, 1).view(-1, rays_d.shape[-1])
 
     if image_indices is not None:
@@ -466,14 +467,12 @@ def _inference(point_type,
                 model_chunk, semantic_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
                 out_chunks += [model_chunk]
                 out_semantic_chunk += [semantic_chunk]
-        if hparams.enable_instance:
-            model_chunk, instance_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
-            out_chunks += [model_chunk]
-            out_instance_chunk += [instance_chunk]
-
         else:
             model_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
             out_chunks += [model_chunk]
+        if hparams.enable_instance:
+            instance_chunk= nerf.forward_instance(point_type, xyz_chunk)
+            out_instance_chunk += [instance_chunk]
 
 
     out = torch.cat(out_chunks, 0)
@@ -593,10 +592,10 @@ def _inference(point_type,
                 sem_map = torch.sum(weights[..., None] * sem_logits, -2)
             results[f'sem_map_{typ}'] = sem_map
         if hparams.enable_instance:
-            if hparams.stop_semantic_grad:
-                w = weights[..., None].detach()
-                instance_map = torch.sum(w * instance_logits, -2)
-
+            w = weights[..., None].detach()
+            instance_map = torch.sum(w * instance_logits, -2)
+            results[f'instance_map_{typ}'] = instance_map
+            
         if point_type == 'fg' and normals is not None:
             normal_map = (weights.unsqueeze(-1) * normals).sum(dim=1)
             # normal_map[:, 1:] = normal_map[:, 1:] * -1 # flip normal map

@@ -11,9 +11,9 @@ def get_opts_base():
     parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train'], help='')
     parser.add_argument('--logger_interval', type=int, default=10, help='training iterations')
     
-    parser.add_argument('--separate_semantic', type=eval, default=False, choices=[True, False], help='')
+    parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['memory_depth_dji','sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff', 'llff_sa3d', 'mega_sa3d'],
+    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['memory_depth_dji_instance','memory_depth_dji','sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff', 'llff_sa3d', 'mega_sa3d'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
    
@@ -112,6 +112,8 @@ def get_opts_base():
     parser.add_argument('--enable_instance', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_instance_classes', type=int, default=25, help='')
     parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')
+    parser.add_argument('--freeze_semantic', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
+
 
     # semantic
     parser.add_argument('--stop_semantic_grad', default=True, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
@@ -121,7 +123,7 @@ def get_opts_base():
     parser.add_argument('--label_name', type=str, default='m2f', choices=['1018_ml_fusion_0.3', '1016_ml_fusion_0.3', '1016_ml_fusion_0.5','m2f', 'merge', 'gt'], help='')
 
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
-    parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
+    parser.add_argument('--num_semantic_classes', type=int, default=5, help='')
     parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--wgt_sem_loss', default=1, type=float, help='')
