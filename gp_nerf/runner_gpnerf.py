@@ -99,10 +99,36 @@ def init_predictor(device):
     return predictor
 
 
+
+def contrastive_loss(features, instance_labels, temperature):
+    bsize = features.size(0)
+    masks = instance_labels.view(-1, 1).repeat(1, bsize).eq_(instance_labels.clone())
+    masks = masks.fill_diagonal_(0, wrap=False)
+
+    # compute similarity matrix based on Euclidean distance
+    distance_sq = torch.pow(features.unsqueeze(1) - features.unsqueeze(0), 2).sum(dim=-1)
+    # temperature = 1 for positive pairs and temperature for negative pairs
+    temperature = torch.ones_like(distance_sq) * temperature
+    temperature = torch.where(masks==1, temperature, torch.ones_like(temperature))
+
+    similarity_kernel = torch.exp(-distance_sq/temperature)
+    logits = torch.exp(similarity_kernel)
+
+    p = torch.mul(logits, masks).sum(dim=-1)
+    Z = logits.sum(dim=-1)
+
+    prob = torch.div(p, Z)
+    prob_masked = torch.masked_select(prob, prob.ne(0))
+    loss = -prob_masked.log().sum()/bsize
+    return loss
+
+
 class Runner:
     def __init__(self, hparams: Namespace, set_experiment_path: bool = True):
         faulthandler.register(signal.SIGUSR1)
         print(f"ignore_index: {hparams.ignore_index}")
+        self.temperature = 100
+        
         if hparams.balance_weight:
             # 1017之前：cluster 1，  building 1， road 1， car 5， tree 5， vegetation 5   
             # balance_weight = torch.FloatTensor([1, 1, 1, 5, 5, 5, 1, 1, 1, 1, 1]).cuda()
@@ -313,7 +339,7 @@ class Runner:
         self._setup_experiment_dir()
         scaler = torch.cuda.amp.GradScaler(enabled=self.hparams.amp)
 
-        if self.hparams.enable_semantic and self.hparams.freeze_geo and self.hparams.ckpt_path is not None:
+        if (self.hparams.enable_semantic or self.hparams.enable_instance) and self.hparams.freeze_geo and self.hparams.ckpt_path is not None:
             
             for p_base in self.nerf.encoder_bg.parameters():
                 p_base.requires_grad = False
@@ -343,7 +369,7 @@ class Runner:
             else:
                 for p_base in self.nerf.encoder.parameters():
                     p_base.requires_grad = False
-            
+                
                 
                 
             non_frozen_parameters = [p for p in self.nerf.parameters() if p.requires_grad]
@@ -362,7 +388,7 @@ class Runner:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             # # add by zyq : load the pretrain-gpnerf to train the semantic
             # if self.hparams.resume_ckpt_state:
-            if not self.hparams.enable_semantic:
+            if not (self.hparams.enable_semantic or self.hparams.enable_instance):
                 train_iterations = checkpoint['iteration']
                 for key, optimizer in optimizers.items():
                     optimizer_dict = optimizer.state_dict()
@@ -416,6 +442,10 @@ class Runner:
                                     self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'memory_depth_dji':
             from gp_nerf.datasets.memory_dataset_depth_dji import MemoryDataset
+            dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
+        elif self.hparams.dataset_type == 'memory_depth_dji_instance':
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'sam':
@@ -503,9 +533,13 @@ class Runner:
                 elif 'llff' in self.hparams.dataset_type or self.hparams.dataset_type =='mega_sa3d':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
+                elif self.hparams.dataset_type == 'memory_depth_dji_instance':
+                    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
+                                                pin_memory=False, collate_fn=custom_collate)
                 else:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=16,
                                                 pin_memory=False)
+
             if train_iterations == 0 and self.hparams.network_type == 'sdf_nr3d':
                 if self.hparams.geo_init_method == 'road_surface':
                     self.pretrain_sdf_road_surface_2d(floor_up_sign=-1, ego_height=0)
@@ -550,7 +584,7 @@ class Runner:
                     
 
                     # 调整shape
-                    if self.hparams.enable_semantic:
+                    if self.hparams.enable_semantic or self.hparams.enable_instance:
                         for key in item.keys():
                             if item[key].dim() != 1:
                                 if item[key].shape[-1] == 1:
@@ -568,7 +602,7 @@ class Runner:
                             elif 'random_'+key in item.keys():
                                 item[key] = torch.cat((item[key], item['random_'+key]))
 
-                    if self.hparams.enable_semantic and 'labels' in item.keys():
+                    if (self.hparams.enable_semantic or self.hparams.enable_instance) and 'labels' in item.keys():
                         labels = item['labels'].to(self.device, non_blocking=True)
                         # if self.hparams.dataset_type != 'sam_project':
                             # from tools.unetformer.uavid2rgb import remapping
@@ -884,7 +918,11 @@ class Runner:
                 metrics['loss'] += self.hparams.wgt_sigma_loss * sigma_loss
 
 
-
+        if self.hparams.enable_instance:
+            instance_features = results[f'instance_map_{typ}']
+            instance_loss = contrastive_loss(instance_features, labels.type(torch.long), self.temperature)
+            metrics['instance_loss'] = instance_loss
+            metrics['loss'] += self.hparams.wgt_instance_loss * instance_loss
 
         #semantic loss
         if self.hparams.enable_semantic:
@@ -1184,7 +1222,7 @@ class Runner:
                 Path(str(experiment_path_current / 'val_rgbs')).mkdir()
                 for dataset_index, item in enumerate(data_loader): #, start=10462):
                     #semantic 
-                    if self.hparams.enable_semantic:
+                    if self.hparams.enable_semantic or self.hparams.enable_instance:
                         for key in item.keys():
                             if item[key].dim() == 2:
                                 item[key] = item[key].reshape(-1)
@@ -2288,13 +2326,22 @@ class Runner:
 
         
         label_path = None
-        for extension in ['.jpg', '.JPG', '.png', '.PNG']:
-            
-            candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_name}' / '{}{}'.format(metadata_path.stem, extension)
+        if not hparams.enable_instance:
+            for extension in ['.jpg', '.JPG', '.png', '.PNG']:
+                
+                candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_name}' / '{}{}'.format(metadata_path.stem, extension)
 
-            if candidate.exists():
-                label_path = candidate
-                break
+                if candidate.exists():
+                    label_path = candidate
+                    break
+        else:
+            for extension in ['.jpg', '.JPG', '.png', '.PNG']:
+                
+                candidate = metadata_path.parent.parent / 'instances_mask' / '{}{}'.format(metadata_path.stem, extension)
+
+                if candidate.exists():
+                    label_path = candidate
+                    break
         if self.hparams.dataset_type == 'sam':
             sam_feature_path = None
             candidate = metadata_path.parent.parent / 'sam_features' / '{}.npy'.format(metadata_path.stem)
@@ -2321,7 +2368,7 @@ class Runner:
             depth_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_depth.npy' % metadata_path.stem) 
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                  intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_path=depth_path)
-        elif self.hparams.dataset_type=='memory_depth_dji':
+        elif 'memory_depth_dji' in self.hparams.dataset_type:
             if self.hparams.depth_dji_type=='las':
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
             elif self.hparams.depth_dji_type=='mesh':

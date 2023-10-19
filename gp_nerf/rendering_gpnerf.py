@@ -16,7 +16,7 @@ from scripts.visualize_points import visualize_points
 
 # TO_COMPOSITE = {'rgb', 'depth', 'sem_map'}
 TO_COMPOSITE = {'rgb', 'depth'}
-INTERMEDIATE_KEYS = {'zvals_coarse', 'raw_rgb_coarse', 'raw_sigma_coarse', 'depth_real_coarse', 'raw_sem_logits_coarse', 'raw_sem_feature_coarse'}
+INTERMEDIATE_KEYS = {'zvals_coarse', 'raw_rgb_coarse', 'raw_sigma_coarse', 'depth_real_coarse', 'raw_sem_logits_coarse', 'raw_sem_feature_coarse','raw_instance_logits_coarse'}
 
 def render_rays(nerf: nn.Module,
                 bg_nerf: Optional[nn.Module],
@@ -466,6 +466,11 @@ def _inference(point_type,
                 model_chunk, semantic_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
                 out_chunks += [model_chunk]
                 out_semantic_chunk += [semantic_chunk]
+        if hparams.enable_instance:
+            model_chunk, instance_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
+            out_chunks += [model_chunk]
+            out_instance_chunk += [instance_chunk]
+
         else:
             model_chunk= nerf(point_type, xyz_chunk, sigma_noise=sigma_noise, train_iterations=train_iterations)
             out_chunks += [model_chunk]
@@ -491,6 +496,11 @@ def _inference(point_type,
         if hparams.dataset_type == 'sam':
             out_semantic_fea = torch.cat(out_semantic_feature_chunk, 0)
             sem_feature = out_semantic_fea.view(N_rays_, N_samples_, out_semantic_fea.shape[-1])  
+    if hparams.enable_instance:
+        out_instance = torch.cat(out_instance_chunk, 0)
+        if len(out_instance.shape)== 1:
+            out_instance = out_instance.unsqueeze(-1)
+        instance_logits = out_instance.view(N_rays_, N_samples_, out_instance.shape[-1])
 
     # del out, out_chunks, out_semantic_chunk
     # gc.collect()
@@ -508,7 +518,10 @@ def _inference(point_type,
             if hparams.dataset_type == 'sam':
                 ordering_Cc = ordering.view(ordering.shape[0], ordering.shape[1], 1).repeat(1,1,sem_feature.shape[-1])
                 sem_feature = torch.gather(torch.cat((sem_feature, results['raw_sem_feature_coarse']), 1), 1, ordering_Cc)
-            
+        if hparams.enable_instance:
+            ordering_Kc = ordering.view(ordering.shape[0], ordering.shape[1], 1).repeat(1,1,instance_logits.shape[-1])
+            instance_logits = torch.gather(torch.cat((instance_logits, results['raw_instance_logits_coarse']), 1), 1, ordering_Kc)
+
         if point_type == 'fg' and normals is not None:
             normals = torch.gather(torch.cat((normals, results['raw_rgb_coarse']), 1), 1, ordering_3c)
 
@@ -572,27 +585,18 @@ def _inference(point_type,
         if hparams.enable_semantic:
             if hparams.stop_semantic_grad:
                 w = weights[..., None].detach()
-                sem_map = torch.sum(w * sem_logits, -2)
-                # ray_id = torch.arange(0, N_rays_)
-                # ray_id = ray_id.unsqueeze(-1).repeat(1, N_samples_*2).view(-1)
-                # # ray_id = ray_id.unsqueeze(-1).repeat(1, N_samples_).view(-1)
-                # sem_map = segment_coo(
-                #             src=(w.view(-1).unsqueeze(-1) * sem_logits.view(-1, sem_logits.shape[-1])),
-                #             index=ray_id.to(rgbs.device),
-                #             out=torch.zeros([N_rays_, sem_logits.shape[-1]]).to(rgbs.device),
-                #             reduce='sum')
-                
+                sem_map = torch.sum(w * sem_logits, -2)      
                 if hparams.dataset_type == 'sam':
                     semantic_feature = torch.sum(w * sem_feature, -2)
-                    # semantic_feature = segment_coo(
-                    #         src=(w.view(-1) * sem_feature.view(-1, 1)),
-                    #         index=ray_id.to(rgbs.device),
-                    #         out=torch.zeros([N_rays_, 1]).to(rgbs.device),
-                    #         reduce='sum')
                     results[f'semantic_feature_{typ}'] = semantic_feature
             else:
                 sem_map = torch.sum(weights[..., None] * sem_logits, -2)
             results[f'sem_map_{typ}'] = sem_map
+        if hparams.enable_instance:
+            if hparams.stop_semantic_grad:
+                w = weights[..., None].detach()
+                instance_map = torch.sum(w * instance_logits, -2)
+
         if point_type == 'fg' and normals is not None:
             normal_map = (weights.unsqueeze(-1) * normals).sum(dim=1)
             # normal_map[:, 1:] = normal_map[:, 1:] * -1 # flip normal map
@@ -607,6 +611,8 @@ def _inference(point_type,
             results[f'raw_sem_logits_{typ}'] = sem_logits
             if hparams.dataset_type == 'sam':
                 results[f'raw_sem_feature_{typ}'] = sem_feature
+        if hparams.enable_instance:
+            results[f'raw_instance_logits_{typ}'] = instance_logits
         
         if point_type == 'fg' and normals is not None:
             results[f'raw_normal_{typ}'] = normals

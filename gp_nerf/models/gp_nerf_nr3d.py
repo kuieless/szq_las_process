@@ -24,10 +24,9 @@ def fc_block(in_f, out_f):
         torch.nn.ReLU(out_f)
     )
 
-def semantic_mlp(in_f, out_f, dim_mlp, num_hidden):
+def get_semantic_instance_mlp(in_f, out_f, dim_mlp, num_hidden):
     semantic_linears = [torch.nn.Linear(in_f, dim_mlp)]
     
-
     for i in range(num_hidden):
         semantic_linears.append(torch.nn.ReLU(inplace=False))
         # semantic_linears.append(torch.nn.LeakyReLU())
@@ -213,22 +212,31 @@ class NeRF(nn.Module):
                     print('separate the semantic mlp from nerf')
                     print(f'semantic_net_type: {self.semantic_net_type}')
                     if self.semantic_net_type == 'mlp':
-                        self.semantic_linear = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
-                        self.semantic_linear_bg = semantic_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                        self.semantic_linear = get_semantic_instance_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                        self.semantic_linear_bg = get_semantic_instance_mlp(in_channels_xyz, hparams.num_semantic_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
                     elif self.semantic_net_type == 'hashgrid_mlp':
                         # # 这里semantic分支也用hash+mlp，但mlp的结构和color_net一样
                         self.semantic_hash_encoding = LoTDEncoding(3, **encoding_cfg, dtype=self.dtype, device=self.device)
                         semantic_mlp_in_dim = self.semantic_hash_encoding.out_features
-                        self.semantic_linear = semantic_mlp(semantic_mlp_in_dim, hparams.num_semantic_classes, self.layer_dim, self.num_layers_color)
+                        self.semantic_linear = get_semantic_instance_mlp(semantic_mlp_in_dim, hparams.num_semantic_classes, self.layer_dim, self.num_layers_color)
                         
                         self.semantic_hash_encoding_bg = LoTDEncoding(3, **encoding_cfg, dtype=self.dtype, device=self.device)
                         semantic_mlp_in_dim_bg = self.semantic_hash_encoding_bg.out_features
-                        self.semantic_linear_bg = semantic_mlp(semantic_mlp_in_dim_bg, hparams.num_semantic_classes, self.layer_dim, self.num_layers_color)
+                        self.semantic_linear_bg = get_semantic_instance_mlp(semantic_mlp_in_dim_bg, hparams.num_semantic_classes, self.layer_dim, self.num_layers_color)
                             
                 else:
                     print('add the semantic head to nerf')
                     self.semantic_linear = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
                     self.semantic_linear_bg = nn.Sequential(fc_block(1 + self.geo_feat_dim + in_channels_xyz, self.semantic_layer_dim), nn.Linear(self.semantic_layer_dim, hparams.num_semantic_classes))
+
+
+        # instance
+        self.enable_instance = hparams.enable_instance
+        if self.enable_instance:
+            self.num_instance_classes = hparams.num_instance_classes
+            print('separate the instance mlp from nerf')
+            self.instance_linear = get_semantic_instance_mlp(in_channels_xyz, hparams.num_instance_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+            self.instance_linear_bg = get_semantic_instance_mlp(in_channels_xyz, hparams.num_instance_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
 
 
     def get_nerf_mlp(self, nerf_type='fg'):
@@ -349,6 +357,14 @@ class NeRF(nn.Module):
                 if self.use_pano_lift:
                     sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
         
+
+        # instance 
+        if self.enable_instance:
+            input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
+            instance_feature = self.instance_linear(input_xyz)  
+                   
+
+
         # with torch.no_grad():
         # color
         d = x[:, self.xyz_dim:-1]
@@ -368,6 +384,8 @@ class NeRF(nn.Module):
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits, sem_feature
             else:
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
+        elif self.enable_instance:
+            return torch.cat([color, sigma.unsqueeze(1)], -1), instance_feature
         else:
             return torch.cat([color, sigma.unsqueeze(1)], -1)
 
@@ -418,6 +436,13 @@ class NeRF(nn.Module):
                     sem_logits = torch.nn.functional.softmax(sem_logits, dim=-1)
         
 
+        # instance 
+        if self.enable_instance:
+            input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
+            instance_feature = self.instance_linear_bg(input_xyz)  
+
+
+
         # with torch.no_grad():
 
         # color
@@ -437,6 +462,8 @@ class NeRF(nn.Module):
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits, sem_feature
             else:
                 return torch.cat([color, sigma.unsqueeze(1)], -1), sem_logits
+        elif self.enable_instance:
+            return torch.cat([color, sigma.unsqueeze(1)], -1), instance_feature
         else:
             return torch.cat([color, sigma.unsqueeze(1)], -1)
 

@@ -11,7 +11,6 @@ def get_opts_base():
     parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train'], help='')
     parser.add_argument('--logger_interval', type=int, default=10, help='training iterations')
     
-    parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--separate_semantic', type=eval, default=False, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
     parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['memory_depth_dji','sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff', 'llff_sa3d', 'mega_sa3d'],
@@ -85,7 +84,6 @@ def get_opts_base():
     parser.add_argument('--sampling_mode', type=str, default='per_mask_threshold', choices=['per_mask', 'per_mask_threshold', 'whole_image'])
 
 
-    parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
 
 
     #sdf 
@@ -109,6 +107,12 @@ def get_opts_base():
     parser.add_argument('--decay_min', default=0.1, type=float, help='')
     parser.add_argument('--save_depth', default=False, type=eval, choices=[True, False], help='supervise normal')
 
+
+    # instance
+    parser.add_argument('--enable_instance', default=False, type=eval, choices=[True, False], help='')
+    parser.add_argument('--num_instance_classes', type=int, default=25, help='')
+    parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')
+
     # semantic
     parser.add_argument('--stop_semantic_grad', default=True, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')
     parser.add_argument('--use_pano_lift', default=False, type=eval, choices=[True, False], help='activate the logits by sofrmax before volume rendering')
@@ -118,6 +122,8 @@ def get_opts_base():
 
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=11, help='')
+    parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
+    parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--wgt_sem_loss', default=1, type=float, help='')
     parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'gpnerf_nr3d', 'mlp', 'sdf', 'sdf_mlp', 'sdf_nr3d'], help='')
     # parser.add_argument('--label_type', type=str, default='m2f_custom', choices=['m2f_custom', 'unetformer'], help='')

@@ -155,7 +155,7 @@ def hello(hparams: Namespace) -> None:
             labels_max_idx = torch.argmax(counts_c)
 
             if overlap_area > 0.5:
-                instance_mask[masks_max] = unique_c[labels_max_idx]
+                instance_mask[masks_max] = unique_c[labels_max_idx.item()]
             else:
                 instance_mask[masks_max] = int(j)+1
 

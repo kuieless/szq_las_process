@@ -3,33 +3,17 @@ from typing import List, Dict
 import torch
 from torch.utils.data import Dataset
 
-from gp_nerf.datasets.dataset_utils import get_rgb_index_mask_depth_dji
+from gp_nerf.datasets.dataset_utils import get_rgb_index_mask_depth_dji_instance
 from gp_nerf.image_metadata import ImageMetadata
 from mega_nerf.misc_utils import main_tqdm, main_print
 from mega_nerf.ray_utils import get_rays, get_ray_directions
-from tools.segment_anything import sam_model_registry, SamPredictor
 
 import numpy as np
-import cv2
-import sys
 import glob
 import os
 from pathlib import Path
 import random
-import shutil
-
-from tools.unetformer.uavid2rgb import remapping, custom2rgb
 from PIL import Image
-
-def init(device):
-    sam_checkpoint = "tools/segment_anything/sam_vit_h_4b8939.pth"
-    
-    model_type = "vit_h"
-    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-    sam.to(device=device)
-    predictor = SamPredictor(sam)
-    return predictor
-
 
 class MemoryDataset(Dataset):
 
@@ -40,7 +24,7 @@ class MemoryDataset(Dataset):
         rgbs = []
         rays = []
         indices = []
-        labels = []
+        instances = []
         depth_djis = []
         depth_scales = []
         metadata_item = metadata_items[0]
@@ -56,6 +40,7 @@ class MemoryDataset(Dataset):
                                         metadata_item.intrinsics[3],
                                         center_pixels,
                                         device)
+        self._depth_scale = torch.abs(self._directions[:, :, 2]).view(-1).cpu()
         
         main_print('Loading data')
         if hparams.debug:
@@ -80,111 +65,49 @@ class MemoryDataset(Dataset):
                     else:
                         load_subset = load_subset+1
 
-            image_data = get_rgb_index_mask_depth_dji(metadata_item)
+            image_data = get_rgb_index_mask_depth_dji_instance(metadata_item)
 
             if image_data is None:
                 continue
+            #改成读取instance label
+            image_rgbs, image_indices, image_keep_mask, instance, depth_dji = image_data
             
-            #zyq : add labels
-            image_rgbs, image_indices, image_keep_mask, label, depth_dji = image_data
-
-            # print("image index: {}, fx: {}, fy: {}".format(metadata_item.image_index, metadata_item.intrinsics[0], metadata_item.intrinsics[1]))
-            
-            depth_scale = torch.abs(self._directions[:, :, 2]).view(-1).cpu()
             image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
-            
             
             if image_keep_mask is not None:
                 image_rays = image_rays[image_keep_mask == True]
-                depth_scale = depth_scale[image_keep_mask == True]
 
-            if hparams.only_car_label:
-                N = label.size(0)
-                M =256*256
-                visual_rgb = image_rgbs
-                visualize_mask = torch.zeros((N,3))
-                fliter_mask = torch.zeros((N), dtype=torch.bool)
-
-                label_car_indices = (label == 3).nonzero().squeeze()
-                fliter_mask[label_car_indices] = True
-                # visualize_mask[label_car_indices] = torch.FloatTensor([255,0,0])
-
-                label_not_car_indices = (label != 3).nonzero().squeeze()
-                random_indices = torch.randperm(len(label_not_car_indices))[:M]
-                fliter_mask[label_not_car_indices[random_indices]] = True
-                # visualize_mask[label_not_car_indices[random_indices]] = torch.FloatTensor([0,0,255])
-
-
-                image_rgbs = image_rgbs[fliter_mask]
-                image_rays = image_rays[fliter_mask]
-                image_indices = image_indices[fliter_mask]
-                if label is not None:
-                    label[label_not_car_indices] = 0
-                    label = label[fliter_mask]
-
-                    
-                depth_dji = depth_dji[fliter_mask]
-                depth_scale = depth_scale[fliter_mask]
-
-                # # 可视化
-                # fliter_mask = fliter_mask.view(912, N//912)
-                # binary_image = np.uint8(fliter_mask) * 255
-                # output_array = np.zeros((binary_image.shape[0], binary_image.shape[1], 3), dtype=binary_image.dtype)
-                # output_array[:, :, 0] = binary_image
-                # binary_image = output_array
-
-                
-                # image = Image.fromarray(binary_image)
-                # image.save(f'zyq/car_vis/binary_image_{metadata_item.image_index}.png')
-
-
-                # visualize_mask = visualize_mask.view(912, N//912,3)
-
-                # visualize_mask=np.uint8(visualize_mask)
-                # Image.fromarray(visualize_mask).save(f'zyq/car_vis/visualize_mask_{metadata_item.image_index}.png')
-
-
-
-                # visual_rgb = visual_rgb.view(912, N//912,3)
-                # visual_rgb = np.uint8(visual_rgb)
-                # visualize_mask = 0.6 * visualize_mask + 0.4 * visual_rgb
-                # image = Image.fromarray(np.uint8(visualize_mask))
-                # image.save(f'zyq/car_vis/rgb_{metadata_item.image_index}.png')
 
             rgbs.append(image_rgbs)
             rays.append(image_rays)
             indices.append(image_indices)
-            if label is not None:
-                labels.append(torch.tensor(label, dtype=torch.int))
+            instances.append(torch.tensor(instance, dtype=torch.int))
             depth_djis.append(depth_dji)
-            depth_scales.append(depth_scale)
 
         print(f"load_subset: {load_subset}")
         main_print('Finished loading data')
 
-        self._rgbs = torch.cat(rgbs)
-        self._rays = torch.cat(rays)
-        self._img_indices = torch.cat(indices)
-        if labels != []:
-            self._labels = torch.cat(labels)
-        else:
-            self._labels = []
-        self._depth_djis = torch.cat(depth_djis)
-        self._depth_scales = torch.cat(depth_scales)
+        self._rgbs = rgbs
+        self._rays = rays
+        self._img_indices = indices  #  这个代码只存了一个
+        self._labels = instances
+        self._depth_djis = depth_djis 
 
     def __len__(self) -> int:
-        return self._rgbs.shape[0]
+        return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        total_pixels = self._rgbs[idx].shape[0]
+        sampling_idx = torch.randperm(total_pixels)[:self.hparams.batch_size]
+
         item = {
-            'rgbs': self._rgbs[idx].float() / 255.,
-            'rays': self._rays[idx],
-            'img_indices': self._img_indices[idx],
-            'depth_dji': self._depth_djis[idx],
-            'depth_scale': self._depth_scales[idx],
+            'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,
+            'rays': self._rays[idx][sampling_idx],
+            'img_indices': self._img_indices[idx] * torch.ones(self.hparams.batch_size, dtype=torch.int32),
+            'labels': self._labels[idx][sampling_idx].int(),
+            'depth_dji': self._depth_djis[idx][sampling_idx],
+            'depth_scale': self._depth_scales[sampling_idx],
         }
-        if self._labels != []:
-            item['labels'] = self._labels[idx].int()
         
         return item
     
