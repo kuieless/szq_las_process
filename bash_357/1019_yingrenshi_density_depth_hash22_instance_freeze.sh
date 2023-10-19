@@ -8,8 +8,8 @@ config_file=configs/yingrenshi.yaml
 
 
 batch_size=8192
-train_iterations=100000
-val_interval=100000
+train_iterations=200000
+val_interval=10000
 ckpt_interval=10000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf
