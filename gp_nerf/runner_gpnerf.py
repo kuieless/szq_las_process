@@ -44,7 +44,7 @@ from tools.unetformer.metric import Evaluator
 
 import pandas as pd
 
-from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map, get_semantic_gt_pred_render_zyq, get_instance_pred
+from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map, get_semantic_gt_pred_render_zyq, get_instance_pred, calculate_panoptic_quality_folders
 from tools.contrastive_lift.utils import cluster, visualize_panoptic_outputs
 from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folder_logger, save_semantic_metric
 from gp_nerf.eval_utils import prepare_depth_normal_visual
@@ -736,6 +736,13 @@ class Runner:
         if self.is_master:
             experiment_path_current = self.experiment_path / "eval_{}".format(train_iterations)
             with (experiment_path_current /'metrics.txt').open('a') as f:
+                if 'pq' in val_metrics:
+                    pq, sq, rq = val_metrics['pq'],val_metrics['sq'],val_metrics['rq']
+                    print(f'psnr, ssim, rmse_actual, abs_rel: {pq:.5f}, {sq:.5f}, {rq:.5f}')
+
+                    f.write(f'\n psnr, ssim, rmse_actual, abs_rel: {pq:.5f}, {sq:.5f}, {rq:.5f}\n')  
+
+                    del val_metrics['pq'],val_metrics['sq'],val_metrics['rq']
                 for key in val_metrics:
                     avg_val = val_metrics[key] / len(self.val_items)
                     if key== 'val/psnr':
@@ -1484,7 +1491,7 @@ class Runner:
                             all_instance_features, all_thing_features = [], []
                             all_points_rgb, all_points_semantics = [], []
 
-                            # indices_to_eval = indices_to_eval[:2]
+                            indices_to_eval = indices_to_eval[:2]
                             for i in main_tqdm(indices_to_eval):
                                 self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                                 # if i != 0:
@@ -1593,17 +1600,30 @@ class Runner:
                             if not os.path.exists(output_dir):
                                 Path(output_dir).mkdir()
                             np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                            np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.cat(all_points_semantics, dim=0).cpu().numpy())
-                            np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.cat(all_points_rgb, dim=0).cpu().numpy())
+                            np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                            np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
                             
                             all_points_instances = cluster(all_thing_features, bandwidth=0.15, device=self.device, num_images=len(indices_to_eval))
                             save_i=0
                             # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)
+
+                            if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
+                                Path(str(experiment_path_current / 'pred_semantics')).mkdir()
+                            if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
+                                Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
+
                             for save_i in range(len(indices_to_eval)):
                                 p_rgb = all_points_rgb[save_i]
                                 p_semantics = all_points_semantics[save_i]
                                 p_instances = all_points_instances[save_i]
-
+                                
+                                output_semantics_with_invalid = p_semantics.detach()
+                                Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
+                                        str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                
+                                Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                                        str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                
                                 stack = visualize_panoptic_outputs(
                                     p_rgb, p_semantics, p_instances, None, None, None, None,
                                     self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
@@ -1612,7 +1632,21 @@ class Runner:
                                 grid = (grid * 255).cpu().numpy().astype(np.uint8)
                                 
                                 Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
-                                
+                            
+                            # calculate the panoptic quality
+                            
+                            path_target_sem = os.path.join(self.hparams.dataset_path, 'val', 'labels_gt')
+                            path_target_inst = os.path.join(self.hparams.dataset_path, 'val', 'instances_mask_test')
+                            path_pred_sem = str(experiment_path_current / 'pred_semantics')
+                            path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
+                            if Path(path_target_inst).exists():
+                                pq, sq, rq = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                                             path_target_sem, path_target_inst, image_size=[self.H, self.W])
+                                val_metrics['pq'] = pq
+                                val_metrics['sq'] = sq
+                                val_metrics['rq'] = rq
+
+                            
 
                         # logger
                         write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index, self.hparams)

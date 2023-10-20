@@ -69,9 +69,9 @@ def _get_train_opts() -> Namespace:
     # parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/sam_viz',required=False, help='')
     
 
-    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
-    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
-    parser.add_argument('--output_path', type=str, default='zyq/1019_get_instance_mask',required=False, help='')
+    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/val/rgbs',required=False, help='')
+    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/val/sam_features',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='zyq/1019_get_instance_mask_val',required=False, help='')
     
 
     return parser.parse_args()
@@ -123,7 +123,7 @@ def hello(hparams: Namespace) -> None:
     
     for i in tqdm.tqdm(range(len(imgs))):
         img_name = imgs[i].split('/')[-1][:6]
-        if img_name not in process_item:
+        if img_name not in process_item and 'val' not in hparams.image_path:
             continue
         # if int(img_name) < 203 or int(img_name) > 239:
         #     continue
@@ -135,7 +135,10 @@ def hello(hparams: Namespace) -> None:
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         # print(features[i])
         feature = torch.from_numpy(np.load(features[i]))
-        masks = mask_generator.generate(image1, feature[0])
+
+        ### NOTE: 有时候会报维度不匹配的错误，修改下面的代码
+        # masks = mask_generator.generate(image1, feature[0])
+        masks = mask_generator.generate(image1, feature)
         
         mask = save_mask_anns_torch(colors, masks, img_name, hparams)
         mask_vis = visualize_labels(mask)

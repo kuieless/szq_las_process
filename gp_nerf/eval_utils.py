@@ -10,6 +10,41 @@ from pathlib import Path
 from torchvision.utils import make_grid
 
 from tools.contrastive_lift.utils import create_instances_from_semantics
+from tqdm import tqdm
+from tools.contrastive_lift.util.panoptic_quality import panoptic_quality
+
+def read_and_resize_labels(path, size):
+    image = Image.open(path)
+    return np.array(image.resize(size, Image.NEAREST))
+
+def calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, path_target_sem, path_target_inst, image_size):
+    path_pred_sem = Path(path_pred_sem)
+    path_pred_inst = Path(path_pred_inst)
+    path_target_sem = Path(path_target_sem)
+    path_target_inst = Path(path_target_inst)
+
+
+    faulty_gt = [0]
+    things = set([1])
+    stuff = set([0,2,3,4])
+    val_paths = [y for y in sorted(list(path_pred_sem.iterdir()), key=lambda x: int(x.stem))]
+
+    pred, target = [], []
+    for p in tqdm(val_paths):
+        img_target_sem = read_and_resize_labels((path_target_sem / p.name), image_size)
+        valid_mask = ~np.isin(img_target_sem, faulty_gt)
+        img_pred_sem = torch.from_numpy(read_and_resize_labels(p, image_size)[valid_mask]).unsqueeze(-1)
+        img_target_sem = torch.from_numpy(img_target_sem[valid_mask]).unsqueeze(-1)
+        img_pred_inst = torch.from_numpy(read_and_resize_labels((path_pred_inst / p.name), image_size)[valid_mask]).unsqueeze(-1)
+        img_target_inst = torch.from_numpy(read_and_resize_labels((path_target_inst / p.name), image_size)[valid_mask]).unsqueeze(-1)
+        pred_ = torch.cat([img_pred_sem, img_pred_inst], dim=1).reshape(-1, 2)
+        target_ = torch.cat([img_target_sem, img_target_inst], dim=1).reshape(-1, 2)
+        pred.append(pred_)
+        target.append(target_)
+    pq, sq, rq = panoptic_quality(torch.cat(pred, dim=0).cuda(), torch.cat(target, dim=0).cuda(), things, stuff, allow_unknown_preds_category=True)
+    return pq.item(), sq.item(), rq.item()
+
+
 
 
 ### https://github.com/nianticlabs/monodepth2/blob/b676244e5a1ca55564eb5d16ab521a48f823af31/evaluate_depth.py#L214
@@ -270,7 +305,7 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
         all_points_semantics.append(sem_label.view(-1))
         return instances, p_instances, all_points_rgb, all_points_semantics
     else:
-        return None, None
+        return None, None, None, None
 
 def get_sdf_normal_map(metadata_item, results, typ, viz_rgbs):
     #  NSR  SDF ------------------------------------  save the normal_map
