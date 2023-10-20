@@ -11,7 +11,8 @@ import cv2
 class ImageMetadata:
     #zyq : add label_path for semantic 
     def __init__(self, image_path: Path, c2w: torch.Tensor, W: int, H: int, intrinsics: torch.Tensor, image_index: int,
-                 mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None, normal_path=None, depth_path=None, depth_dji_path=None):
+                 mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None, normal_path=None, 
+                 depth_path=None, depth_dji_path=None, left_or_right=None):
         self.image_path = image_path
         self.c2w = c2w
         self.W = W
@@ -25,6 +26,7 @@ class ImageMetadata:
         self.normal_path = normal_path
         self.depth_path = depth_path
         self.depth_dji_path = depth_dji_path
+        self.left_or_right = left_or_right
 
 
     def load_image(self) -> torch.Tensor:

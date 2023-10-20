@@ -1592,9 +1592,9 @@ class Runner:
                             output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
                             if not os.path.exists(output_dir):
                                 Path(output_dir).mkdir()
-                            np.save(output_dir / "all_thing_features.npy", all_thing_features)
-                            np.save(output_dir / "all_points_instances.npy", torch.cat(all_points_instances, dim=0).cpu().numpy())
-                            np.save(output_dir / "all_points_rgb.npy", torch.cat(all_points_rgb, dim=0).cpu().numpy())
+                            np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                            np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.cat(all_points_semantics, dim=0).cpu().numpy())
+                            np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.cat(all_points_rgb, dim=0).cpu().numpy())
                             
                             all_points_instances = cluster(all_thing_features, bandwidth=0.15, device=self.device, num_images=len(indices_to_eval))
                             save_i=0
@@ -2426,9 +2426,13 @@ class Runner:
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
             elif self.hparams.depth_dji_type=='mesh':
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_mesh', '%s.npy' % metadata_path.stem) 
-                
+            if 'lerf_or_right' in metadata:
+                lerf_or_right = metadata['lerf_or_right']
+            else:
+                lerf_or_right = None
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
-                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_dji_path=depth_dji_path)
+                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, 
+                                 depth_dji_path=depth_dji_path, left_or_right=lerf_or_right)
 
         else:
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,

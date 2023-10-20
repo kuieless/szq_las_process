@@ -69,6 +69,15 @@ def get_rgb_index_mask_depth_dji(metadata: ImageMetadata) -> Optional[
 
         keep_mask[:, metadata.W // 2:] = False
 
+    # # -----过滤黑影
+    if (metadata.left_or_right) != None:
+        if keep_mask is None:
+            keep_mask = torch.ones(metadata.H, metadata.W, dtype=torch.bool)
+        if metadata.left_or_right == 'left':
+            keep_mask[:, :int(metadata.W/5)] = False
+        elif metadata.left_or_right == 'right':
+            keep_mask[:, -int(metadata.W/5):] = False
+
     if keep_mask is not None:
         if keep_mask[keep_mask == True].shape[0] == 0:
             return None
@@ -114,6 +123,15 @@ def get_rgb_index_mask_depth_dji_instance(metadata: ImageMetadata) -> Optional[
             keep_mask.view(-1).scatter_(0, to_add, torch.ones_like(to_add, dtype=torch.bool))
 
         keep_mask[:, metadata.W // 2:] = False
+
+    # # -----过滤黑影
+    if (metadata.left_or_right) != None:
+        if keep_mask is None:
+            keep_mask = torch.ones(metadata.H, metadata.W, dtype=torch.bool)
+        if metadata.left_or_right == 'left':
+            keep_mask[:, :int(metadata.W/5)] = False
+        elif metadata.left_or_right == 'right':
+            keep_mask[:, -int(metadata.W/5):] = False
 
     if keep_mask is not None:
         if keep_mask[keep_mask == True].shape[0] == 0:
