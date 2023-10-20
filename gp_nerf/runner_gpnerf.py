@@ -1491,7 +1491,7 @@ class Runner:
                             all_instance_features, all_thing_features = [], []
                             all_points_rgb, all_points_semantics = [], []
 
-                            indices_to_eval = indices_to_eval[:2]
+                            # indices_to_eval = indices_to_eval[:2]
                             for i in main_tqdm(indices_to_eval):
                                 self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                                 # if i != 0:
