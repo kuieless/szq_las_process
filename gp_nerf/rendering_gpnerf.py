@@ -179,8 +179,10 @@ def render_rays(nerf: nn.Module,
         mesh_sample1 = near[valid_depth_mask] * (1 - z_1) + s_near * z_1
         mesh_sample2 = s_near * (1 - z_2) + s_far * z_2
         mesh_sample3 = s_far * (1 - z_3) + far_ellipsoid[valid_depth_mask] * z_3
-        z_vals_inbound[valid_depth_mask] = torch.cat([mesh_sample1, mesh_sample2, mesh_sample3], dim=1)
-        # z_vals_inbound[valid_depth_mask] = torch.cat([torch.zeros_like(mesh_sample1), mesh_sample2, torch.zeros_like(mesh_sample3)], dim=1)
+        if not hparams.check_depth:
+            z_vals_inbound[valid_depth_mask] = torch.cat([mesh_sample1, mesh_sample2, mesh_sample3], dim=1)
+        else:
+            z_vals_inbound[valid_depth_mask] = torch.cat([torch.zeros_like(mesh_sample1), mesh_sample2, torch.zeros_like(mesh_sample3)], dim=1)
 
         z_vals_inbound, _ = torch.sort(z_vals_inbound, -1)
 
@@ -192,9 +194,10 @@ def render_rays(nerf: nn.Module,
     # 随机扰动，并生成采样点
     z_vals_inbound = _expand_and_perturb_z_vals(z_vals_inbound, hparams.coarse_samples, perturb, N_rays)
     xyz_coarse_fg = rays_o + rays_d * z_vals_inbound.unsqueeze(-1)
-
-    # visualize_points_list = [xyz_coarse_fg.view(-1, 3).cpu().numpy()]
-    # visualize_points(visualize_points_list)
+    if hparams.check_depth:
+        visualize_points_list = [xyz_coarse_fg.view(-1, 3).cpu().numpy()]
+        visualize_points(visualize_points_list)
+        return
 
 
     if hparams.contract_new:

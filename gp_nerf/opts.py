@@ -33,6 +33,8 @@ def get_opts_base():
     parser.add_argument('--start', type=int,default=-1, help='')
     parser.add_argument('--end', type=int, default=-1,help='')
 
+    parser.add_argument('--check_depth', type=eval, default=False, help='shuffle=False and ignore the trained data')
+
 
 
 
