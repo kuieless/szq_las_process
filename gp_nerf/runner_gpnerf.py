@@ -1498,6 +1498,7 @@ class Runner:
                                 typ = 'fine' if 'rgb_fine' in results else 'coarse'
                                 
                                 viz_rgbs = metadata_item.load_image().float() / 255.
+                                self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
                                 if self.hparams.save_depth:
                                     save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
                                     if not os.path.exists(save_depth_dir):
@@ -1588,6 +1589,13 @@ class Runner:
                             # instance clustering
                             all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
                             all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                            output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
+                            if not os.path.exists(output_dir):
+                                Path(output_dir).mkdir()
+                            np.save(output_dir / "all_thing_features.npy", all_thing_features)
+                            np.save(output_dir / "all_points_instances.npy", torch.cat(all_points_instances, dim=0).cpu().numpy())
+                            np.save(output_dir / "all_points_rgb.npy", torch.cat(all_points_rgb, dim=0).cpu().numpy())
+                            
                             all_points_instances = cluster(all_thing_features, bandwidth=0.15, device=self.device, num_images=len(indices_to_eval))
                             save_i=0
                             # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)
@@ -1602,8 +1610,7 @@ class Runner:
                                 )
                                 grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=5).permute((1, 2, 0)).contiguous()
                                 grid = (grid * 255).cpu().numpy().astype(np.uint8)
-                                if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'panoptic')):
-                                    Path(str(experiment_path_current / 'val_rgbs' / 'panoptic')).mkdir()
+                                
                                 Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
                                 
 

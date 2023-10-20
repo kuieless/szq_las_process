@@ -141,5 +141,7 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
             img_instances_m2f[:, boundaries_img_instances_m2f > 0] = 0
             stack = torch.cat([stack[0:5], torch.stack([torch.zeros_like(img_gt), img_semantics_m2f, img_instances_m2f, torch.zeros_like(img_gt), torch.zeros_like(img_gt)]), stack[5:]], dim=0)
     else:
-        stack = torch.stack([img, img_semantics, img_instances, depth, img_sem_entropy])
+        # stack = torch.stack([img, img_semantics, img_instances, depth, img_sem_entropy])
+        stack = torch.stack([img, img_semantics, img_instances])
+
     return stack
