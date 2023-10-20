@@ -115,6 +115,7 @@ def get_opts_base():
     parser.add_argument('--num_instance_classes', type=int, default=25, help='')
     parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')
     parser.add_argument('--freeze_semantic', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
+    parser.add_argument('--instance_name', type=str, default='instances_gt', choices=['instances_gt', 'instances_mask'], help='')
 
 
     # semantic

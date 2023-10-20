@@ -1636,7 +1636,7 @@ class Runner:
                             # calculate the panoptic quality
                             
                             path_target_sem = os.path.join(self.hparams.dataset_path, 'val', 'labels_gt')
-                            path_target_inst = os.path.join(self.hparams.dataset_path, 'val', 'instances_mask_test')
+                            path_target_inst = os.path.join(self.hparams.dataset_path, 'val', 'instances_gt')
                             path_pred_sem = str(experiment_path_current / 'pred_semantics')
                             path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
                             if Path(path_target_inst).exists():
@@ -2424,7 +2424,7 @@ class Runner:
         else:
             for extension in ['.jpg', '.JPG', '.png', '.PNG']:
                 
-                candidate = metadata_path.parent.parent / 'instances_mask' / '{}{}'.format(metadata_path.stem, extension)
+                candidate = metadata_path.parent.parent / f'{self.hparams.instance_name}' / '{}{}'.format(metadata_path.stem, extension)
 
                 if candidate.exists():
                     label_path = candidate

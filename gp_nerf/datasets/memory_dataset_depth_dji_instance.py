@@ -99,6 +99,8 @@ class MemoryDataset(Dataset):
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         # 找到非零值的索引
         nonzero_indices = torch.nonzero(self._labels[idx]).squeeze()
+        if sum(nonzero_indices) ==0:
+            return None
         # 从非零值的索引中随机采样
         sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
 
