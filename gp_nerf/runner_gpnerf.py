@@ -738,9 +738,9 @@ class Runner:
             with (experiment_path_current /'metrics.txt').open('a') as f:
                 if 'pq' in val_metrics:
                     pq, sq, rq = val_metrics['pq'],val_metrics['sq'],val_metrics['rq']
-                    print(f'pq, sq, rq: {pq:.5f}, {sq:.5f}, {rq:.5f}')
+                    print(f'pq, sq, rq: {pq:.5f} {sq:.5f} {rq:.5f}')
 
-                    f.write(f'\n pq, sq, rq: {pq:.5f}, {sq:.5f}, {rq:.5f}\n')  
+                    f.write(f'\n pq, sq, rq: {pq:.5f} {sq:.5f} {rq:.5f}\n')  
 
                     del val_metrics['pq'],val_metrics['sq'],val_metrics['rq']
                 for key in val_metrics:
@@ -1490,7 +1490,7 @@ class Runner:
 
                             all_instance_features, all_thing_features = [], []
                             all_points_rgb, all_points_semantics = [], []
-
+                            gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
                             # indices_to_eval = indices_to_eval[:2]
                             for i in main_tqdm(indices_to_eval):
                                 self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -1500,6 +1500,9 @@ class Runner:
                                     metadata_item = self.val_items[i]
                                 elif val_type == 'train':
                                     metadata_item = self.train_items[i]
+
+                                gt_instance_label = metadata_item.load_instance()
+                                gt_points_instance.append(gt_instance_label.view(-1))
                                 
                                 results, _ = self.render_image(metadata_item, train_index)
                                 typ = 'fine' if 'rgb_fine' in results else 'coarse'
@@ -1534,17 +1537,20 @@ class Runner:
                                 prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
                                 
                                 get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
-                                                    i, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each, )
+                                                    i, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each)
                                 
                                 
                                 
-                                instances, p_instances, all_points_rgb, all_points_semantics = get_instance_pred(
+                                instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
                                     results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
                                     experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
-                                    all_points_rgb, all_points_semantics)
+                                    all_points_rgb, all_points_semantics, gt_points_semantic)
                                 
                                 all_instance_features.append(instances)
                                 all_thing_features.append(p_instances)
+                                gt_points_rgb.append(viz_rgbs.view(-1,3))
+
+
 
                                 # NOTE: 对需要可视化的list进行处理
                                 # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
@@ -1602,10 +1608,15 @@ class Runner:
                             np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
                             np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
                             np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
+
+
+                            
+                            
                             
                             all_points_instances = cluster(all_thing_features, bandwidth=0.15, device=self.device, num_images=len(indices_to_eval))
-                            save_i=0
-                            # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)
 
                             if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                                 Path(str(experiment_path_current / 'pred_semantics')).mkdir()
@@ -1616,6 +1627,10 @@ class Runner:
                                 p_rgb = all_points_rgb[save_i]
                                 p_semantics = all_points_semantics[save_i]
                                 p_instances = all_points_instances[save_i]
+                                gt_rgb = gt_points_rgb[save_i]
+                                gt_semantics = gt_points_semantic[save_i]
+                                gt_instances = gt_points_instance[save_i]
+
                                 
                                 output_semantics_with_invalid = p_semantics.detach()
                                 Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
@@ -1625,10 +1640,10 @@ class Runner:
                                         str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
                                 
                                 stack = visualize_panoptic_outputs(
-                                    p_rgb, p_semantics, p_instances, None, None, None, None,
+                                    p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
                                     self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
                                 )
-                                grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=5).permute((1, 2, 0)).contiguous()
+                                grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
                                 grid = (grid * 255).cpu().numpy().astype(np.uint8)
                                 
                                 Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))

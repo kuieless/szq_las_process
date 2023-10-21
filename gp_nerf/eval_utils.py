@@ -281,7 +281,7 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
 
 def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, img_list, 
                         experiment_path_current, i, writer, hparams, viz_result_rgbs, thing_classes,
-                        all_points_rgb, all_points_semantics):
+                        all_points_rgb, all_points_semantics, gt_points_semantic):
     if f'instance_map_{typ}' in results:
         instances = results[f'instance_map_{typ}']
         device = instances.device
@@ -303,9 +303,10 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
         # pred_instances = cluster(padded_instances, device)
         all_points_rgb.append(viz_result_rgbs.view(-1,3))
         all_points_semantics.append(sem_label.view(-1))
-        return instances, p_instances, all_points_rgb, all_points_semantics
+        gt_points_semantic.append(gt_label.view(-1))
+        return instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic
     else:
-        return None, None, None, None
+        return None, None, None, None, None
 
 def get_sdf_normal_map(metadata_item, results, typ, viz_rgbs):
     #  NSR  SDF ------------------------------------  save the normal_map
@@ -425,7 +426,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
     
     if f'depth_{typ}' in results:
         ma, mi = None, None 
-        if (hparams.depth_dji_loss or (hparams.dataset_type=='memory_depth_dji')) and not hparams.render_zyq:  # DJI Gt depth
+        if (hparams.depth_dji_loss or ('memory_depth_dji' in hparams.dataset_type)) and not hparams.render_zyq:  # DJI Gt depth
             depth_dji = metadata_item.load_depth_dji().float()
             invalid_mask = torch.isinf(depth_dji)
         

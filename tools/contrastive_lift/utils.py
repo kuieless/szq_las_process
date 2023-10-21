@@ -119,6 +119,9 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
     colored_img_instance[thing_mask, :] = p_rgb.cpu()[thing_mask, :]
     img_instances = colored_img_instance.view(H, W, 3).permute(2, 0, 1) * alpha + img * (1 - alpha)
     if rgb is not None and semantics is not None and instances is not None:
+        semantics = semantics.to(torch.int64)
+        instances = instances.to(torch.int64)
+
         img_gt = rgb.view(H, W, 3).permute(2, 0, 1).cpu()
         img_semantics_gt = distinct_colors.apply_colors_fast_torch(semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
         boundaries_img_semantics_gt = get_boundary_mask(semantics.cpu().view(H, W))
@@ -128,7 +131,8 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
         colored_img_instance_gt[instances.cpu() == 0, :] = rgb.cpu()[instances.cpu() == 0, :]
         img_instances_gt = colored_img_instance_gt.view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
         img_instances_gt[:, boundaries_img_instances_gt > 0] = 0
-        stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt, torch.zeros_like(img_gt), torch.zeros_like(img_gt)]), torch.stack([img, img_semantics, img_instances, depth, img_sem_entropy])], dim=0)
+        # stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt, torch.zeros_like(img_gt), torch.zeros_like(img_gt)]), torch.stack([img, img_semantics, img_instances, depth, img_sem_entropy])], dim=0)
+        stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt]), torch.stack([img, img_semantics, img_instances])], dim=0)
         if m2f_semantics is not None and m2f_instances is not None:
             img_semantics_m2f = distinct_colors.apply_colors_fast_torch(m2f_semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
             boundaries_img_semantics_m2f = get_boundary_mask(m2f_semantics.cpu().view(H, W))
