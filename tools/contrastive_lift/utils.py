@@ -26,7 +26,7 @@ def create_instances_from_semantics(instances, semantics, thing_classes, device)
 # copy from contrastive-lift
 
 def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=False,
-            use_silverman=False, cluster_size=500):
+            use_silverman=False, cluster_size=500, num_points=50000):
     thing_mask = all_thing_features[...,0] == -float('inf')
     features = all_thing_features[thing_mask]
     features = features[:,1:]
@@ -42,7 +42,6 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
     rescaling_factor = 1/(centers_filtered.max(axis=0) - centers_filtered.min(axis=0))
     centers_rescaled = (centers_filtered - rescaling_bias) * rescaling_factor
     # perform clustering
-    num_points = 500000
     fps_points_indices = np.random.choice(centers_rescaled.shape[0], num_points, replace=False)
 
     fps_points_rescaled = centers_rescaled[fps_points_indices]

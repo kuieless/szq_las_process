@@ -33,7 +33,7 @@ from tools.contrastive_lift.utils import cluster, visualize_panoptic_outputs
 from torchvision.utils import make_grid
 
 
-torch.cuda.set_device(5)
+# torch.cuda.set_device(5)
 
 
 
@@ -51,7 +51,7 @@ def hello() -> None:
 
     thing_classes = [1]
     
-    all_points_instances = cluster(all_thing_features, bandwidth=0.3, device=device, num_images=15)
+    all_points_instances = cluster(all_thing_features, bandwidth=0.1, device=device, num_images=15, num_points=50000)
     save_i=0
     # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)
     for save_i in range(15):
