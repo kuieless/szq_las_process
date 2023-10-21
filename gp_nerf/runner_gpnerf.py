@@ -738,9 +738,9 @@ class Runner:
             with (experiment_path_current /'metrics.txt').open('a') as f:
                 if 'pq' in val_metrics:
                     pq, sq, rq = val_metrics['pq'],val_metrics['sq'],val_metrics['rq']
-                    print(f'psnr, ssim, rmse_actual, abs_rel: {pq:.5f}, {sq:.5f}, {rq:.5f}')
+                    print(f'pq, sq, rq: {pq:.5f}, {sq:.5f}, {rq:.5f}')
 
-                    f.write(f'\n psnr, ssim, rmse_actual, abs_rel: {pq:.5f}, {sq:.5f}, {rq:.5f}\n')  
+                    f.write(f'\n pq, sq, rq: {pq:.5f}, {sq:.5f}, {rq:.5f}\n')  
 
                     del val_metrics['pq'],val_metrics['sq'],val_metrics['rq']
                 for key in val_metrics:

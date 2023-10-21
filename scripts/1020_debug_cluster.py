@@ -33,7 +33,7 @@ from tools.contrastive_lift.utils import cluster, visualize_panoptic_outputs
 from torchvision.utils import make_grid
 
 
-torch.cuda.set_device(6)
+torch.cuda.set_device(5)
 
 
 
@@ -42,7 +42,7 @@ torch.cuda.set_device(6)
 def hello() -> None:
     device='cuda'
     Path(os.path.join('zyq','1020_panoptic')).mkdir(exist_ok=True)
-    output_dir = '/data/yuqi/code/GP-NeRF-semantic/logs_dji/1019_yingrenshi_density_depth_hash22_instance_freeze/5/eval_100000/val_rgbs/panoptic'
+    output_dir = 'logs_dji/1020_yingrenshi_density_depth_hash22_instance_freeze_gt/0/eval_90000/val_rgbs/panoptic'
     all_thing_features = np.load(os.path.join(output_dir, "all_thing_features.npy"))
     all_points_semantics = np.load(os.path.join(output_dir, "all_points_semantics.npy"))
     all_points_rgb = np.load(os.path.join(output_dir, "all_points_rgb.npy"))
