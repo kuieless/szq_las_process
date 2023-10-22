@@ -54,7 +54,7 @@ from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds',required=False, help='')
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
     
     return parser.parse_args()
@@ -83,10 +83,9 @@ def hello(hparams: Namespace) -> None:
         file_name = Path(metadata_item.image_path).stem
         # if file_name not in process_item:
         #     continue
-
+        
         if metadata_item.is_val:
             continue
-        
         pose = metadata_item.c2w
         
 
@@ -107,7 +106,7 @@ def hello(hparams: Namespace) -> None:
         gt_depths_valid = gt_depths[valid_depth_mask]
 
         # z_vals_inbound = gt_depths_valid.min() * 1.5
-        z_vals_inbound = 0.5
+        z_vals_inbound = 0.3
         new_o = ray_o - ray_d * z_vals_inbound
 
         new_pose = pose

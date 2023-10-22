@@ -109,14 +109,18 @@ class MemoryDataset(Dataset):
         # total_pixels = self._rgbs[idx].shape[0]
         # sampling_idx = torch.randperm(total_pixels)[:self.hparams.batch_size]
 
+
         item = {
             'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,
             'rays': self._rays[idx][sampling_idx],
             'img_indices': self._img_indices[idx] * torch.ones(sampling_idx.shape[0], dtype=torch.int32),
             'labels': self._labels[idx][sampling_idx].int(),
-            'depth_dji': self._depth_djis[idx][sampling_idx],
-            'depth_scale': self._depth_scale[sampling_idx],
+            # 'depth_dji': self._depth_djis[idx][sampling_idx],
+            # 'depth_scale': self._depth_scale[sampling_idx],
         }
+        if self._depth_djis[idx] is not None:
+            item['depth_dji'] = self._depth_djis[idx][sampling_idx]
+            item['depth_scale'] = self._depth_scale[sampling_idx]
         
         return item
     

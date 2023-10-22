@@ -135,6 +135,13 @@ def hello(hparams: Namespace) -> None:
     # sams.sort()
     # sams = sams[1:]
 
+    used_files = []
+    for ext in ('*.npy', '*.jpg'):
+        used_files.extend(glob.glob(os.path.join(sam_path, ext)))
+    used_files.sort()
+    process_item = [Path(far_p).stem for far_p in used_files]
+
+
     m2fs = []
     for ext in ('*.png'):
         m2fs.extend(glob.glob(os.path.join(m2f_path, ext)))
@@ -145,11 +152,13 @@ def hello(hparams: Namespace) -> None:
     for i in tqdm(range(len(m2fs))):
 
         img_name = m2fs[i].split('/')[-1][:6]
+        if img_name not in process_item:
+            continue
 
         img_p = os.path.join(img_path, img_name+'.jpg')
 
         image = cv2.imread(img_p)
-        image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))
+        # image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         sam_p = os.path.join(sam_path, img_name+'.npy')

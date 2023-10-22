@@ -39,4 +39,6 @@ render_type=render_far0.3
     --exp_name=logs_357/test    \
     --only_sam_m2f_far_project_path=$output_path/project_far_to_ori    \
     --output_path=$output_path/project_far_to_ori_replace_building
+
+
     

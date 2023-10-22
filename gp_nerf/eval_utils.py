@@ -298,6 +298,11 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
         else:
             sem_label = torch.ones_like(instances)
         
+        if hparams.slow_fast_mode:
+            slow_features = instances[...,hparams.num_instance_classes:] 
+            # all_slow_features.append(slow_features)
+            instances = instances[...,0:hparams.num_instance_classes] # keep fast features only
+
         p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
         
         # pred_instances = cluster(padded_instances, device)

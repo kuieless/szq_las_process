@@ -231,13 +231,16 @@ class NeRF(nn.Module):
 
 
         # instance
+        self.slow_fast_mode = hparams.slow_fast_mode
         self.enable_instance = hparams.enable_instance
         if self.enable_instance:
             self.num_instance_classes = hparams.num_instance_classes
             print('separate the instance mlp from nerf')
             self.instance_linear = get_semantic_instance_mlp(in_channels_xyz, hparams.num_instance_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
             self.instance_linear_bg = get_semantic_instance_mlp(in_channels_xyz, hparams.num_instance_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
-
+            if self.slow_fast_mode:
+                self.instance_linear_slow = get_semantic_instance_mlp(in_channels_xyz, hparams.num_instance_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
+                self.instance_linear_slow_bg = get_semantic_instance_mlp(in_channels_xyz, hparams.num_instance_classes, self.semantic_layer_dim, self.num_layers_semantic_hidden)
 
     def get_nerf_mlp(self, nerf_type='fg'):
         encoding_dir = "sphere_harmonics"
@@ -465,11 +468,17 @@ class NeRF(nn.Module):
     def forward_fg_instance(self, x: torch.Tensor):
         input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
         instance_feature = self.instance_linear(input_xyz)  
+        if self.slow_fast_mode:
+            slow_out = self.instance_linear_slow(input_xyz)
+            instance_feature = torch.cat([instance_feature, slow_out], dim=-1) # concat slow and fast features
         return instance_feature
 
     def forward_bg_instance(self, x: torch.Tensor):
         input_xyz = self.embedding_xyz(x[:, :self.xyz_dim]) 
         instance_feature = self.instance_linear_bg(input_xyz)  
+        if self.slow_fast_mode:
+            slow_out = self.instance_linear_slow_bg(input_xyz)
+            instance_feature = torch.cat([instance_feature, slow_out], dim=-1) # concat slow and fast features
         return instance_feature
 
     def auto_gradient(self, x, tflag=True):

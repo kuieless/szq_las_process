@@ -116,7 +116,9 @@ def get_opts_base():
     parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')
     parser.add_argument('--freeze_semantic', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
     parser.add_argument('--instance_name', type=str, default='instances_gt', choices=['instances_gt', 'instances_mask'], help='')
-
+    parser.add_argument('--slow_fast_mode', default=False, type=eval, choices=[True, False], help='')
+    
+    
 
     # semantic
     parser.add_argument('--stop_semantic_grad', default=True, type=eval, choices=[True, False], help='stop the semantic grad toward the GPNeRF backbone')

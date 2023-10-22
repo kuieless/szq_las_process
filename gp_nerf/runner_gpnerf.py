@@ -394,7 +394,7 @@ class Runner:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             # # add by zyq : load the pretrain-gpnerf to train the semantic
             # if self.hparams.resume_ckpt_state:
-            if not (self.hparams.enable_semantic or self.hparams.enable_instance):
+            if not (self.hparams.enable_semantic or self.hparams.enable_instance) or True:
                 train_iterations = checkpoint['iteration']
                 for key, optimizer in optimizers.items():
                     optimizer_dict = optimizer.state_dict()
@@ -804,6 +804,11 @@ class Runner:
         else:
             self.wandb = wandb.init(project=self.hparams.wandb_id, entity="mega-ingp", name=self.hparams.wandb_run_name, dir=self.experiment_path)
             
+    def ema_update_slownet(self, slownet, fastnet, momentum):
+        # EMA update for the teacher
+        with torch.no_grad():
+            for param_q, param_k in zip(fastnet.parameters(), slownet.parameters()):
+                param_k.data.mul_(momentum).add_((1 - momentum) * param_q.detach().data)
 
     def _training_step(self, rgbs: torch.Tensor, rays: torch.Tensor, image_indices: Optional[torch.Tensor], labels: Optional[torch.Tensor], groups: Optional[torch.Tensor], train_iterations = -1, item=None) \
             -> Tuple[Dict[str, Union[torch.Tensor, float]], bool]:
@@ -935,13 +940,72 @@ class Runner:
 
                 metrics['sigma_loss'] = results['sigma_loss']
                 metrics['loss'] += self.hparams.wgt_sigma_loss * sigma_loss
-
+                
         # instance loss
         if self.hparams.enable_instance:
-            instance_features = results[f'instance_map_{typ}']
-            instance_loss = contrastive_loss(instance_features, labels.type(torch.long), self.temperature)
-            metrics['instance_loss'] = instance_loss
-            metrics['loss'] += self.hparams.wgt_instance_loss * instance_loss
+            if self.hparams.slow_fast_mode:  # slow and fast
+                instance_features = results[f'instance_map_{typ}']
+                labels_gt = labels.type(torch.long)
+                # EMA update of slow network; done before everything else
+                ema_momentum = 0.9 # CONSTANT MOMENTUM
+
+                
+                self.ema_update_slownet(self.nerf.instance_linear_slow, self.nerf.instance_linear, ema_momentum)
+                self.ema_update_slownet(self.nerf.instance_linear_slow_bg, self.nerf.instance_linear_bg, ema_momentum)
+
+
+                fast_features, slow_features = instance_features.split(
+                    [self.hparams.num_instance_classes, self.hparams.num_instance_classes], dim=-1)
+                
+                fast_projections, slow_projections = fast_features, slow_features # no projection layer
+                slow_projections = slow_projections.detach() # no gradient for slow projections
+
+                # sample two random batches from the current batch
+                fast_mask = torch.zeros_like(labels_gt).bool()
+                fast_mask[:labels_gt.shape[0] // 2] = True
+                slow_mask = ~fast_mask # non-overlapping masks for slow and fast models
+                
+                ## compute centroids
+                slow_centroids = []
+                fast_labels, slow_labels = torch.unique(labels_gt[fast_mask]), torch.unique(labels_gt[slow_mask])
+                for l in slow_labels:
+                    mask_ = torch.logical_and(slow_mask, labels_gt==l) #.unsqueeze(-1)
+                    slow_centroids.append(slow_projections[mask_].mean(dim=0))
+                slow_centroids = torch.stack(slow_centroids)
+                # DEBUG edge case:
+                if len(fast_labels) == 0 or len(slow_labels) == 0:
+                    print("Length of fast labels", len(fast_labels), "Length of slow labels", len(slow_labels))
+                    # This happens when labels_gt of shape 1
+                    return torch.tensor(0.0, device=instance_features.device)
+                # ### Concentration loss
+                # intersecting_labels = fast_labels[torch.where(torch.isin(fast_labels, slow_labels))] # [num_centroids]
+                # loss = 0
+                # for l in intersecting_labels:
+                #     mask_ = torch.logical_and(fast_mask, labels_gt==l)
+                #     centroid_ = slow_centroids[slow_labels==l] # [1, d]
+                #     # distance between fast features and slow centroid
+                #     dist_sq = torch.pow(fast_projections[mask_] - centroid_, 2).sum(dim=-1) # [num_points]
+                #     loss += -1.0 * (torch.exp(-dist_sq / 1.0) * confidences[mask_]).mean()
+                # if intersecting_labels.shape[0] > 0: 
+                #     loss /= intersecting_labels.shape[0]
+                
+                ### Contrastive loss
+                label_matrix = labels_gt[fast_mask].unsqueeze(1) == labels_gt[slow_mask].unsqueeze(0) # [num_points1, num_points2]
+                similarity_matrix = torch.exp(-torch.cdist(fast_projections[fast_mask], slow_projections[slow_mask], p=2) / 1.0) # [num_points1, num_points2]
+                logits = torch.exp(similarity_matrix)
+                # compute loss
+                prob = torch.mul(logits, label_matrix).sum(dim=-1) / logits.sum(dim=-1)
+                prob_masked = torch.masked_select(prob, prob.ne(0))
+
+                instance_loss = -torch.log(prob_masked).mean()
+
+                metrics['instance_loss'] = instance_loss
+                metrics['loss'] += self.hparams.wgt_instance_loss * instance_loss
+            else:   # vanilla contrastive loss
+                instance_features = results[f'instance_map_{typ}']
+                instance_loss = contrastive_loss(instance_features, labels.type(torch.long), self.temperature)
+                metrics['instance_loss'] = instance_loss
+                metrics['loss'] += self.hparams.wgt_instance_loss * instance_loss
 
         #semantic loss
         if self.hparams.enable_semantic and (not self.hparams.freeze_semantic):
@@ -1015,8 +1079,6 @@ class Runner:
                         sem_label = self.logits_2_label(sem_logits)
                         if self.writer is not None:
                             self.writer.add_scalar('1_train/accuracy', sum(labels == sem_label) / labels.shape[0], train_iterations)
-                            # self.writer.add_histogram("gt_labels", labels,train_iterations)
-                            # self.writer.add_histogram("pred_labels", sem_label,train_iterations)
                         if self.wandb is not None:
                             self.wandb.log({'train/accuracy': sum(labels == sem_label) / labels.shape[0], 'epoch': train_iterations})
 
@@ -1126,8 +1188,9 @@ class Runner:
             
             dataset_path = Path(self.hparams.dataset_path)
 
-            val_paths = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
+            # val_paths = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
 
+            val_paths = sorted(list((dataset_path / 'render_far0.3' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_far0.5' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_line' / 'metadata').iterdir()))
 
@@ -1616,7 +1679,7 @@ class Runner:
                             
                             
                             
-                            all_points_instances = cluster(all_thing_features, bandwidth=0.15, device=self.device, num_images=len(indices_to_eval))
+                            all_points_instances = cluster(all_thing_features, bandwidth=0.2, device=self.device, num_images=len(indices_to_eval))
 
                             if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                                 Path(str(experiment_path_current / 'pred_semantics')).mkdir()
@@ -2481,7 +2544,7 @@ class Runner:
                 lerf_or_right = None
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                  intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, 
-                                 depth_dji_path=depth_dji_path, left_or_right=lerf_or_right)
+                                 depth_dji_path=depth_dji_path, left_or_right=lerf_or_right, hparams=self.hparams)
 
         else:
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,

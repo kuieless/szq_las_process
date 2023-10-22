@@ -101,7 +101,11 @@ class MemoryDataset(Dataset):
             self._labels = torch.cat(labels)
         else:
             self._labels = []
-        self._depth_djis = torch.cat(depth_djis)
+        if depth_djis != []:
+            self._depth_djis = torch.cat(depth_djis)
+        else:
+            self._depth_djis = []
+
         self._depth_scales = torch.cat(depth_scales)
 
     def __len__(self) -> int:
@@ -112,11 +116,14 @@ class MemoryDataset(Dataset):
             'rgbs': self._rgbs[idx].float() / 255.,
             'rays': self._rays[idx],
             'img_indices': self._img_indices[idx],
-            'depth_dji': self._depth_djis[idx],
-            'depth_scale': self._depth_scales[idx],
+            
         }
         if self._labels != []:
             item['labels'] = self._labels[idx].int()
         
+        if self._depth_djis != []:
+            item['depth_dji'] = self._depth_djis[idx]
+            item['depth_scale'] = self._depth_scales[idx]
+
         return item
     

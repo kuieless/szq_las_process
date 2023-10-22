@@ -12,7 +12,7 @@ class ImageMetadata:
     #zyq : add label_path for semantic 
     def __init__(self, image_path: Path, c2w: torch.Tensor, W: int, H: int, intrinsics: torch.Tensor, image_index: int,
                  mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None, normal_path=None, 
-                 depth_path=None, depth_dji_path=None, left_or_right=None):
+                 depth_path=None, depth_dji_path=None, left_or_right=None, hparams=None):
         self.image_path = image_path
         self.c2w = c2w
         self.W = W
@@ -27,6 +27,7 @@ class ImageMetadata:
         self.depth_path = depth_path
         self.depth_dji_path = depth_dji_path
         self.left_or_right = left_or_right
+        self.hparams = hparams
 
 
     def load_image(self) -> torch.Tensor:
@@ -102,11 +103,15 @@ class ImageMetadata:
         return torch.HalfTensor(depth)
     
     def load_depth_dji(self):
-        depth = np.load(self.depth_dji_path)
-        depth = torch.HalfTensor(depth)
-        # depth = torch.Tensor(depth)
-        assert depth.shape[0] == self.H and depth.shape[1] == self.W
-        return depth
+        if self.hparams != None and (self.hparams.render_zyq == False):
+            depth = np.load(self.depth_dji_path)
+            depth = torch.HalfTensor(depth)
+            # depth = torch.Tensor(depth)
+            assert depth.shape[0] == self.H and depth.shape[1] == self.W
+            return depth
+        else:
+            return None
+
     
     
     def load_instance(self) -> torch.Tensor:

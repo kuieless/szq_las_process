@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=6
 
 
 dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
@@ -28,8 +28,9 @@ ckpt_path=logs_dji/1017_yingrenshi_density_depth_hash22_far0.3_car2/3/models/200
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 lr=0.01
-exp_name=logs_dji/1020_yingrenshi_density_depth_hash22_instance_freeze_gt
+exp_name=logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow
 instance_name=instances_gt
+slow_fast_mode=True
 
 log2_hashmap_size=22
 desired_resolution=8192
@@ -44,4 +45,5 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --freeze_geo=$freeze_geo  --ckpt_path=$ckpt_path  --wgt_sem_loss=1 \
     --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=3    --semantic_layer_dim=128 \
     --use_subset=True      --lr=$lr    --balance_weight=True   --num_semantic_classes=5   \
-    --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name  
+    --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name   \
+    --slow_fast_mode=$slow_fast_mode
