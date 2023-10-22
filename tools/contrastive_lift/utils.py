@@ -12,6 +12,8 @@ from scipy.stats import gaussian_kde
 # from hdbscan import HDBSCAN
 import time
 from tools.contrastive_lift.util.distinct_colors import DistinctColors
+from tools.contrastive_lift.util.distinct_colors_semantic import DistinctColors_semantic
+
 from tools.contrastive_lift.util.misc import visualize_depth, probability_to_normalized_entropy, get_boundary_mask
 
 
@@ -95,6 +97,8 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
                                m2f_semantics=None, m2f_instances=None):
     alpha = 0.65
     distinct_colors = DistinctColors()
+    distinct_colors_semantic = DistinctColors_semantic()
+
     img = p_rgb.view(H, W, 3).cpu()
     img = torch.clamp(img, 0, 1).permute(2, 0, 1)
     if visualize_entropy:
@@ -109,7 +113,7 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
         p_instances = p_instances.argmax(dim=1)
     if len(p_semantics.shape) > 1:
         p_semantics = p_semantics.argmax(dim=1)
-    img_semantics = distinct_colors.apply_colors_fast_torch(p_semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img * (1 - alpha)
+    img_semantics = distinct_colors_semantic.apply_colors_fast_torch(p_semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img * (1 - alpha)
     boundaries_img_semantics = get_boundary_mask(p_semantics.cpu().view(H, W))
     img_semantics[:, boundaries_img_semantics > 0] = 0
     colored_img_instance = distinct_colors.apply_colors_fast_torch(p_instances.cpu()).float()
@@ -123,7 +127,7 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
         instances = instances.to(torch.int64)
 
         img_gt = rgb.view(H, W, 3).permute(2, 0, 1).cpu()
-        img_semantics_gt = distinct_colors.apply_colors_fast_torch(semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
+        img_semantics_gt = distinct_colors_semantic.apply_colors_fast_torch(semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
         boundaries_img_semantics_gt = get_boundary_mask(semantics.cpu().view(H, W))
         img_semantics_gt[:, boundaries_img_semantics_gt > 0] = 0
         colored_img_instance_gt = distinct_colors.apply_colors_fast_torch(instances.cpu()).float()
@@ -134,7 +138,7 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
         # stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt, torch.zeros_like(img_gt), torch.zeros_like(img_gt)]), torch.stack([img, img_semantics, img_instances, depth, img_sem_entropy])], dim=0)
         stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt]), torch.stack([img, img_semantics, img_instances])], dim=0)
         if m2f_semantics is not None and m2f_instances is not None:
-            img_semantics_m2f = distinct_colors.apply_colors_fast_torch(m2f_semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
+            img_semantics_m2f = distinct_colors_semantic.apply_colors_fast_torch(m2f_semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
             boundaries_img_semantics_m2f = get_boundary_mask(m2f_semantics.cpu().view(H, W))
             img_semantics_m2f[:, boundaries_img_semantics_m2f > 0] = 0
             colored_img_instance_m2f = distinct_colors.apply_colors_fast_torch(m2f_instances.cpu()).float()

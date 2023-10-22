@@ -3,9 +3,12 @@ export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=7
 
 
+
 # 先对nerf渲染的far图像进行sam feature提取
 python /data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/extract_embeddings.py   \
     --rgbs_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1022_lh_block1_far0.3/pred_rgb
+
+##   2023.10.22 晚 23:16 正在跑
 
 #  接下来用 far的sam feature 和 m2f的building结果进行结合   
 python tools/segment_anything/helpers/combine_sam_m2f3_only_sam.py  \

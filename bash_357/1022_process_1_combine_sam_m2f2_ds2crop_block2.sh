@@ -3,6 +3,7 @@ export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=5
 
 
+##   2023.10.22 晚 23:16 已完成
 
 
 
