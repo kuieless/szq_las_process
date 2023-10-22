@@ -53,7 +53,8 @@ class MemoryDataset(Dataset):
             if hparams.use_subset:
                 used_files = []
                 for ext in ('*.png', '*.jpg'):
-                    used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs', ext)))
+                    used_files.extend(glob.glob(os.path.join(f'{hparams.dataset_path}/subset/rgbs', ext)))
+                    # used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs', ext)))
                     # used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/val/rgbs', ext)))
                 used_files.sort()
                 file_names = [os.path.splitext(os.path.basename(file_path))[0] for file_path in used_files]

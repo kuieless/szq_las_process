@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=5
 
 
 dataset_path=/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds
@@ -9,7 +9,7 @@ config_file=configs/longhua.yaml
 
 batch_size=10240
 train_iterations=200000
-val_interval=50000
+val_interval=200000
 ckpt_interval=50000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf

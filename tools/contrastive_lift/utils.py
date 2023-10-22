@@ -9,7 +9,7 @@ from torchvision.utils import make_grid
 # from contrastive-lift
 from sklearn.cluster import MeanShift
 from scipy.stats import gaussian_kde
-# from hdbscan import HDBSCAN
+from hdbscan import HDBSCAN
 import time
 from tools.contrastive_lift.util.distinct_colors import DistinctColors
 from tools.contrastive_lift.util.distinct_colors_semantic import DistinctColors_semantic

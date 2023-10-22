@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=5
 
 
 
-
+##   2023.10.22 晚 23:16 已完成
 
 # 如果还没计算过sam feature  先计算
 python /data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/extract_embeddings.py   \

@@ -57,13 +57,11 @@ class MemoryDataset(Dataset):
                     # used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/val/rgbs', ext)))
                 used_files.sort()
                 file_names = [os.path.splitext(os.path.basename(file_path))[0] for file_path in used_files]
-                if (metadata_item.label_path == None): #增强label集yingrenshi上只做了subset，所以可能会没有
+            
+                if (Path(metadata_item.label_path).stem not in file_names):
                     continue
                 else:
-                    if (Path(metadata_item.label_path).stem not in file_names):
-                        continue
-                    else:
-                        load_subset = load_subset+1
+                    load_subset = load_subset+1
 
             image_data = get_rgb_index_mask_depth_dji(metadata_item)
 

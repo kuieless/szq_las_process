@@ -394,7 +394,7 @@ class Runner:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             # # add by zyq : load the pretrain-gpnerf to train the semantic
             # if self.hparams.resume_ckpt_state:
-            if not (self.hparams.enable_semantic or self.hparams.enable_instance) or True:
+            if not (self.hparams.enable_semantic or self.hparams.enable_instance):
                 train_iterations = checkpoint['iteration']
                 for key, optimizer in optimizers.items():
                     optimizer_dict = optimizer.state_dict()
@@ -1564,8 +1564,9 @@ class Runner:
                                 elif val_type == 'train':
                                     metadata_item = self.train_items[i]
 
-                                gt_instance_label = metadata_item.load_instance()
-                                gt_points_instance.append(gt_instance_label.view(-1))
+                                if self.hparams.enable_instance:
+                                    gt_instance_label = metadata_item.load_instance()
+                                    gt_points_instance.append(gt_instance_label.view(-1))
                                 
                                 results, _ = self.render_image(metadata_item, train_index)
                                 typ = 'fine' if 'rgb_fine' in results else 'coarse'

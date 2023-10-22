@@ -52,6 +52,9 @@ def hello(hparams: Namespace) -> None:
     hparams.dataset_type='memory_depth_dji'
     device = 'cpu'
     hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
+    if 'Longhua' in hparams.dataset_path:
+        hparams.train_scale_factor =1
+        hparams.val_scale_factor =1
     runner = Runner(hparams)
     train_items = runner.train_items
 
@@ -70,15 +73,24 @@ def hello(hparams: Namespace) -> None:
         Path(os.path.join(output_path, 'project_before_after')).mkdir(parents=True)
         
 
-    used_files = []
-    for ext in ('*.png', '*.jpg'):
-        used_files.extend(glob(os.path.join(only_sam_m2f_far_project_path, ext)))
-    used_files.sort()
-    process_item = [Path(far_p).stem for far_p in used_files]
+    # used_files = []
+    # for ext in ('*.png', '*.jpg'):
+    #     used_files.extend(glob(os.path.join(only_sam_m2f_far_project_path, ext)))
+    # used_files.sort()
+    # process_item = [Path(far_p).stem for far_p in used_files]
+
+    process_item=[]
+    for metadata_item in tqdm(train_items):
+        gt_label = metadata_item.load_gt()
+        has_nonzero = (gt_label != 0).any()
+        non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
+        if has_nonzero and non_zero_ratio>0.1:
+            process_item.append(f"{metadata_item.image_path.stem}")
+    print(len(process_item))
     
-    for metadata_item in tqdm(train_items, desc="extract the far m2f label"):
+    for metadata_item in tqdm(train_items, desc="replace building"):
         file_name = Path(metadata_item.image_path).stem
-        if file_name not in process_item: # or int(file_name) != 182:
+        if file_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
             continue
         
         # 读取far的标签文件

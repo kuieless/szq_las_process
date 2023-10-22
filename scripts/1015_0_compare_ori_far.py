@@ -83,6 +83,10 @@ def hello(hparams: Namespace) -> None:
     output_path = hparams.output_path
     if not os.path.exists(output_path):
         Path(output_path).mkdir(parents=True)
+        
+    if 'Longhua' in hparams.dataset_path:
+        hparams.train_scale_factor =1
+        hparams.val_scale_factor =1
 
 
     hparams.ray_altitude_range = [-95, 54]
@@ -94,15 +98,24 @@ def hello(hparams: Namespace) -> None:
 
 
 
-    used_files = []
-    for ext in ('*.png', '*.jpg'):
-        used_files.extend(glob(os.path.join(project_path, ext)))
-    used_files.sort()
-    process_item = [Path(far_p).stem for far_p in used_files]
+    # used_files = []
+    # for ext in ('*.png', '*.jpg'):
+    #     used_files.extend(glob(os.path.join(project_path, ext)))
+    # used_files.sort()
+    # process_item = [Path(far_p).stem for far_p in used_files]
+
+    process_item=[]
+    for metadata_item in tqdm(train_items):
+        gt_label = metadata_item.load_gt()
+        has_nonzero = (gt_label != 0).any()
+        non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
+        if has_nonzero and non_zero_ratio>0.1:
+            process_item.append(f"{metadata_item.image_path.stem}")
+    print(len(process_item))
     
     for metadata_item in tqdm(train_items, desc="extract the far m2f label"):
         file_name = Path(metadata_item.image_path).stem
-        if file_name not in process_item:
+        if file_name not in process_item or metadata_item.is_val:
             continue
         
         # 读取ori的标签文件

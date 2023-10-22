@@ -102,20 +102,33 @@ def hello(hparams: Namespace) -> None:
     hparams.dataset_type='memory_depth_dji'
     device = 'cpu'
     hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
+    if 'Longhua' in hparams.dataset_path:
+        hparams.train_scale_factor =1
+        hparams.val_scale_factor =1
+
     runner = Runner(hparams)
     train_items = runner.train_items
 
 
 
-    used_files = []
-    for ext in ('*.png', '*.jpg'):
-        used_files.extend(glob(os.path.join(far_paths, ext)))
-    used_files.sort()
-    process_item = [Path(far_p).stem for far_p in used_files]
+    # used_files = []
+    # for ext in ('*.png', '*.jpg'):
+    #     used_files.extend(glob(os.path.join(far_paths, ext)))
+    # used_files.sort()
+    # process_item = [Path(far_p).stem for far_p in used_files]
+
+    process_item=[]
+    for metadata_item in tqdm(train_items):
+        gt_label = metadata_item.load_gt()
+        has_nonzero = (gt_label != 0).any()
+        non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
+        if has_nonzero and non_zero_ratio>0.1:
+            process_item.append(f"{metadata_item.image_path.stem}")
+    print(len(process_item))
     
-    for metadata_item in tqdm(train_items, desc="extract the far m2f label"):
+    for metadata_item in tqdm(train_items, desc="project to ori"):
         file_name = Path(metadata_item.image_path).stem
-        if file_name not in process_item: # or int(file_name) != 182:
+        if file_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
             continue
         
         directions = get_ray_directions(metadata_item.W,
@@ -144,6 +157,7 @@ def hello(hparams: Namespace) -> None:
 
         # nan_mask = torch.isnan(depth_map)
         inf_mask = torch.isinf(depth_map)
+
         depth_map[inf_mask] = depth_map[~inf_mask].max()
         # depth_map[nan_mask] = interpolate(depth_map[None, None, ...], size=(H,W),mode='bilinear', align_corners=False)[0, 0, nan_mask]
 
@@ -177,8 +191,8 @@ def hello(hparams: Namespace) -> None:
         # camera_position = metadata_item.c2w[:3, 3].to(device)
 
         camera_matrix = torch.tensor([[metadata_item.intrinsics[0], 0, metadata_item.intrinsics[2]],
-                              [0, metadata_item.intrinsics[1], metadata_item.intrinsics[3]],
-                              [0, 0, 1]]).to(device)
+                            [0, metadata_item.intrinsics[1], metadata_item.intrinsics[3]],
+                            [0, 0, 1]]).to(device)
 
         
         # NOTE: 2. 自己写，正确  
@@ -263,7 +277,7 @@ def hello(hparams: Namespace) -> None:
         cat = cat.reshape(H, 2*W, 3)
         Image.fromarray(cat.astype(np.uint8)).save(os.path.join(output_path, 'project_before_after', f"{file_name}.png"))
         a=1
-
+           
     print('done')
 
 
