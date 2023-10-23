@@ -28,7 +28,7 @@ ckpt_path=logs_dji/1021_lh_block1_density_depth_hash22_ds_cropdepth/0/models/200
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 lr=0.01
-exp_name=logs_dji/1022_longhua_b1_density_depth_hash22_fusion0.3_car2_semantic
+exp_name=logs_dji/1023_longhua_b1_density_depth_hash22_fusion0.3_car2_semantic
 
 log2_hashmap_size=22
 desired_resolution=8192
