@@ -77,13 +77,14 @@ class MemoryDataset(Dataset):
             
             if image_keep_mask is not None:
                 image_rays = image_rays[image_keep_mask == True]
+                depth_scale = self._depth_scale[image_keep_mask == True]
 
 
             rgbs.append(image_rgbs)
             rays.append(image_rays)
             indices.append(image_indices)
             instances.append(torch.tensor(instance, dtype=torch.int))
-            depth_djis.append(depth_dji)
+            depth_djis.append(depth_dji / depth_scale)
 
         print(f"load_subset: {load_subset}")
         main_print('Finished loading data')
@@ -116,12 +117,10 @@ class MemoryDataset(Dataset):
             'rays': self._rays[idx][sampling_idx],
             'img_indices': self._img_indices[idx] * torch.ones(sampling_idx.shape[0], dtype=torch.int32),
             'labels': self._labels[idx][sampling_idx].int(),
-            # 'depth_dji': self._depth_djis[idx][sampling_idx],
-            # 'depth_scale': self._depth_scale[sampling_idx],
         }
         if self._depth_djis[idx] is not None:
             item['depth_dji'] = self._depth_djis[idx][sampling_idx]
-            item['depth_scale'] = self._depth_scale[sampling_idx]
+            # item['depth_scale'] = self._depth_scale[sampling_idx]  # 10.23  这里有个bug，   depth_scale没经过mask过滤
         
         return item
     

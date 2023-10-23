@@ -88,8 +88,8 @@ class MemoryDataset(Dataset):
             indices.append(image_indices)
             if label is not None:
                 labels.append(torch.tensor(label, dtype=torch.int))
-            depth_djis.append(depth_dji)
-            depth_scales.append(depth_scale)
+            depth_djis.append(depth_dji / depth_scale)
+            # depth_scales.append(depth_scale)
 
         print(f"load_subset: {load_subset}")
         main_print('Finished loading data')
@@ -106,7 +106,7 @@ class MemoryDataset(Dataset):
         else:
             self._depth_djis = []
 
-        self._depth_scales = torch.cat(depth_scales)
+        # self._depth_scales = torch.cat(depth_scales)
 
     def __len__(self) -> int:
         return self._rgbs.shape[0]
@@ -123,7 +123,7 @@ class MemoryDataset(Dataset):
         
         if self._depth_djis != []:
             item['depth_dji'] = self._depth_djis[idx]
-            item['depth_scale'] = self._depth_scales[idx]
+            # item['depth_scale'] = self._depth_scales[idx]
 
         return item
     

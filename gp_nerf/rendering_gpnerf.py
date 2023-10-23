@@ -30,7 +30,6 @@ def render_rays(nerf: nn.Module,
                 get_bg_fg_rgb: bool,
                 train_iterations=-1,
                 gt_depths=None,
-                depth_scale=None,
                 pose_scale_factor=None) -> Tuple[Dict[str, torch.Tensor], bool]:
     
     N_rays = rays.shape[0]
@@ -169,7 +168,7 @@ def render_rays(nerf: nn.Module,
         z_1 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.25), device=device)
         z_2 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.625), device=device)
         z_3 = torch.linspace(0, 1, int(hparams.coarse_samples * 0.125), device=device)
-        surface_point = gt_depths[valid_depth_mask] / (depth_scale[valid_depth_mask])  # 得到表面点的far
+        surface_point = gt_depths[valid_depth_mask]  # 得到表面点的far
         # epsilon =  (far-near).max() / 100
         epsilon =  hparams.around_mesh_meter / pose_scale_factor
         s_near = (surface_point - epsilon).unsqueeze(-1)
@@ -225,7 +224,6 @@ def render_rays(nerf: nn.Module,
                            xyz_fine_fn=lambda fine_z_vals: (rays_o + rays_d * fine_z_vals.unsqueeze(-1), None),
                            train_iterations=train_iterations,
                            gt_depths=gt_depths,
-                           depth_scale=depth_scale,
                            valid_depth_mask=valid_depth_mask,
                            s_near=s_near)
     
@@ -255,7 +253,6 @@ def render_rays(nerf: nn.Module,
                                   xyz_fine_fn=lambda fine_z_vals: (rays_o[rays_with_bg] + rays_d[rays_with_bg] * fine_z_vals.unsqueeze(-1), None),
                                   train_iterations=train_iterations,
                                   gt_depths=gt_depths,
-                                  depth_scale=depth_scale, 
                                   valid_depth_mask=None,
                                   s_near=None)
         
@@ -320,7 +317,6 @@ def _get_results(point_type,
                  xyz_fine_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, Optional[torch.Tensor]]],
                  train_iterations=-1,
                  gt_depths=None,
-                 depth_scale=None,
                  valid_depth_mask=None,
                  s_near=None)-> Dict[str, torch.Tensor]:
     results = {}
@@ -347,7 +343,6 @@ def _get_results(point_type,
                depth_real=depth_real,
                train_iterations=train_iterations,
                gt_depths=gt_depths,
-               depth_scale=depth_scale,
                valid_depth_mask=valid_depth_mask,
                s_near=s_near)
 
@@ -397,7 +392,6 @@ def _get_results(point_type,
                    depth_real=depth_real_fine,
                    train_iterations=train_iterations,
                    gt_depths=gt_depths,
-                   depth_scale=depth_scale,
                    valid_depth_mask=valid_depth_mask,
                    s_near=s_near)
 
@@ -426,7 +420,6 @@ def _inference(point_type,
                depth_real: Optional[torch.Tensor],
                train_iterations=-1,
                gt_depths=None,
-               depth_scale=None,
                valid_depth_mask=None,
                s_near=None):
 
@@ -577,7 +570,7 @@ def _inference(point_type,
             # dists = torch.cat([dists, torch.Tensor([1e10]).to(weights.device).expand(dists[...,:1].shape)], -1)  # [N_rays, N_samples]
 
             dists = dists * torch.norm(rays_d, dim=-1)
-            sigma_loss = -torch.log(weights + 1e-5) * torch.exp(-(z_vals - (gt_depths / (depth_scale))[:,None]) ** 2 / (2 * err)) * dists
+            sigma_loss = -torch.log(weights + 1e-5) * torch.exp(-(z_vals - (gt_depths)[:,None]) ** 2 / (2 * err)) * dists
             sigma_loss = sigma_loss[valid_depth_mask]
             sigma_loss = torch.sum(sigma_loss, dim=1).mean()
             if 'sigma_loss' in results:

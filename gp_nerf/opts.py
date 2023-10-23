@@ -116,7 +116,8 @@ def get_opts_base():
     parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')
     parser.add_argument('--freeze_semantic', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
     parser.add_argument('--instance_name', type=str, default='instances_gt', choices=['instances_gt', 'instances_mask'], help='')
-    parser.add_argument('--slow_fast_mode', default=False, type=eval, choices=[True, False], help='')
+    parser.add_argument('--instance_loss_mode', type=str, default='slow_fast', choices=['contrastive', 'linear_assignment', 'slow_fast'], help='')
+
     
     
 

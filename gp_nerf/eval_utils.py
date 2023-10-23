@@ -300,7 +300,7 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
         else:
             sem_label = torch.ones_like(instances)
         
-        if hparams.slow_fast_mode:
+        if hparams.instance_loss_mode == 'slow_fast':
             slow_features = instances[...,hparams.num_instance_classes:] 
             # all_slow_features.append(slow_features)
             instances = instances[...,0:hparams.num_instance_classes] # keep fast features only
