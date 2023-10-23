@@ -23,7 +23,7 @@ enable_semantic=True
 freeze_geo=True
 label_name=1018_ml_fusion_0.3   # 这里标签虽然是22-23号生成的，但也取名叫这个
 separate_semantic=True
-ckpt_path=logs_dji/1021_lh_block1_density_depth_hash22_ds_cropdepth/0/models/200000.pt
+ckpt_path=logs_dji/1023_longhua_b1_density_depth_hash22_fusion0.3_car2_semantic/0/models/40000.pt
 
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1

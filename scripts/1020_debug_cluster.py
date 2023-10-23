@@ -34,7 +34,7 @@ from torchvision.utils import make_grid
 from gp_nerf.eval_utils import calculate_panoptic_quality_folders
 
 
-torch.cuda.set_device(5)
+# torch.cuda.set_device(5)
 
 
 
@@ -44,6 +44,8 @@ def hello() -> None:
     device='cuda'
     bandwidth=0.15
     num_points=50000
+    use_dbscan=True
+    use_silverman=False
     output=f'1022_panoptic_{bandwidth}_{num_points}_use_dbscan'
     Path(os.path.join('zyq',output)).mkdir(exist_ok=True)
     Path(os.path.join('zyq',output,'pred_semantics')).mkdir(exist_ok=True)
@@ -52,7 +54,7 @@ def hello() -> None:
     Path(os.path.join('zyq',output,'gt_surrogateid')).mkdir(exist_ok=True)
 
 
-    output_dir = '/data/yuqi/code/GP-NeRF-semantic/logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/1/eval_110000/val_rgbs/panoptic'
+    output_dir = 'logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/1/eval_200000/val_rgbs/panoptic'
     all_thing_features = np.load(os.path.join(output_dir, "all_thing_features.npy"))
     all_points_semantics = np.load(os.path.join(output_dir, "all_points_semantics.npy"))
     all_points_rgb = np.load(os.path.join(output_dir, "all_points_rgb.npy"))
@@ -68,31 +70,36 @@ def hello() -> None:
     H, W = 912, 1368
     thing_classes = [1]
     
-    all_points_instances = cluster(all_thing_features, bandwidth=bandwidth, device=device, num_images=15, num_points=num_points, use_silverman=False, use_dbscan=True)
+    all_points_instances = cluster(all_thing_features, bandwidth=bandwidth, device=device, num_images=15, 
+                                   num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan)
     save_i=0
     # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)
     for save_i in range(15):
         p_rgb = all_points_rgb[save_i]
-        p_semantics = all_points_semantics[save_i]
+        # p_semantics = all_points_semantics[save_i]
+        p_semantics = gt_points_semantic[save_i]
+
         p_instances = all_points_instances[save_i]
+
         gt_rgb = gt_points_rgb[save_i]
         gt_semantics = gt_points_semantic[save_i]
         gt_instances = gt_points_instance[save_i]
 
         output_semantics_with_invalid = p_semantics.detach()
         Image.fromarray(output_semantics_with_invalid.reshape(H, W).cpu().numpy().astype(np.uint8)).save(
-                str('zyq', output / 'pred_semantics'/ ("%06d.png" % save_i)))
+            os.path.join('zyq', output , 'pred_semantics', ("%06d.png" % save_i)))
         
         Image.fromarray(p_instances.argmax(dim=1).reshape(H, W).cpu().numpy().astype(np.uint16)).save(
-                str('zyq', output / 'pred_surrogateid'/ ("%06d.png" % save_i)))
+            os.path.join('zyq', output , 'pred_surrogateid', ("%06d.png" % save_i)))
+
         
 
         Image.fromarray(gt_semantics.reshape(H, W).cpu().numpy().astype(np.uint8)).save(
-                str('zyq', output / 'gt_semantics'/ ("%06d.png" % save_i)))
+            os.path.join('zyq', output , 'gt_semantics', ("%06d.png" % save_i)))
+
         
         Image.fromarray(gt_instances.reshape(H, W).cpu().numpy().astype(np.uint16)).save(
-                str('zyq', output / 'gt_surrogateid'/ ("%06d.png" % save_i)))
-        
+            os.path.join('zyq', output , 'gt_surrogateid', ("%06d.png" % save_i)))        
         
         stack = visualize_panoptic_outputs(
             p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
@@ -111,10 +118,11 @@ def hello() -> None:
     if Path(path_target_inst).exists():
         pq, sq, rq = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
                         path_target_sem, path_target_inst, image_size=[H, W])
+        print(f'\n pq, sq, rq: {pq:.5f} {sq:.5f} {rq:.5f}\n')  
     
-    with(os.path.join('zyq',output, 'metric.txt')).open('w') as f:
-        f.write(f'\n pq, sq, rq: {pq:.5f} {sq:.5f} {rq:.5f}\n')  
-    print('done')
+        with(Path(os.path.join('zyq',output, 'metric.txt'))).open('w') as f:
+            f.write(f'\n pq, sq, rq: {pq:.5f} {sq:.5f} {rq:.5f}\n')  
+        print('done')
 
 
 if __name__ == '__main__':

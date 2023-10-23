@@ -45,7 +45,7 @@ from tools.unetformer.metric import Evaluator
 import pandas as pd
 
 from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map, get_semantic_gt_pred_render_zyq, get_instance_pred, calculate_panoptic_quality_folders
-from tools.contrastive_lift.utils import cluster, visualize_panoptic_outputs
+from tools.contrastive_lift.utils import cluster, visualize_panoptic_outputs, assign_clusters
 from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folder_logger, save_semantic_metric
 from gp_nerf.eval_utils import prepare_depth_normal_visual
 
@@ -65,6 +65,7 @@ import open3d as o3d
 import matplotlib.pyplot as plt
 from scipy.spatial import Delaunay
 from scipy.spatial import cKDTree
+import pickle
 
 
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
@@ -566,9 +567,11 @@ class Runner:
                 elif item == ['end']:
                     self._save_checkpoint(optimizers, scaler, train_iterations, dataset_index,
                                   dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
-                    val_metrics = self._run_validation(train_iterations)
                     if self.hparams.enable_instance:
-                        val_metrics = self.instance_cluster_prediction(train_iterations, val_metrics, dataset=dataset)
+                        all_centroids = self.instance_cluster_prediction(train_iterations, dataset=dataset)
+                        val_metrics = self._run_validation(train_iterations, all_centroids)
+                    else:
+                        val_metrics = self._run_validation(train_iterations)
                     self._write_final_metrics(val_metrics, train_iterations)
                     # raise TypeError
 
@@ -706,9 +709,12 @@ class Runner:
                                             dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
             
                 if (train_iterations > 0 and train_iterations % self.hparams.val_interval == 0) or train_iterations == self.hparams.train_iterations:
-                    val_metrics = self._run_validation(train_iterations)
                     if self.hparams.enable_instance:
-                        val_metrics = self.instance_cluster_prediction(train_iterations, val_metrics, dataset=dataset)
+                        all_centroids = self.instance_cluster_prediction(train_iterations, dataset=dataset)
+                        val_metrics = self._run_validation(train_iterations, all_centroids)
+                    else:
+                        val_metrics = self._run_validation(train_iterations)
+                    
                     if 'llff' not in self.hparams.dataset_type and 'sa3d' not in self.hparams.dataset_type:
                         self._write_final_metrics(val_metrics, train_iterations)
                 
@@ -731,9 +737,16 @@ class Runner:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             train_iterations = checkpoint['iteration']
         self._setup_experiment_dir()
-        val_metrics = self._run_validation(train_iterations)
         if self.hparams.enable_instance:
-            val_metrics = self.instance_cluster_prediction(train_iterations, val_metrics, dataset=None)
+            if self.hparams.cached_centroids_path is None:
+                all_centroids = self.instance_cluster_prediction(train_iterations, dataset=None)
+            else:
+                with open(self.hparams.cached_centroids_path, 'rb') as f:
+                    all_centroids = pickle.load(f)
+            val_metrics = self._run_validation(train_iterations, all_centroids)
+        else:
+            val_metrics = self._run_validation(train_iterations)
+        
         self._write_final_metrics(val_metrics, train_iterations=train_iterations)
         
 
@@ -784,7 +797,10 @@ class Runner:
             self.writer.flush()
             self.writer.close()
 
-    def instance_cluster_prediction(self, train_iterations, val_metrics, dataset=None):
+    def instance_cluster_prediction(self, train_iterations, dataset=None):
+        from gp_nerf.rendering_gpnerf import render_rays
+        from tools.contrastive_lift.utils import create_instances_from_semantics
+
         # 先只考虑用聚类方式的instance
         if dataset == None:   # 在eval.py时不会读取data_loader,所以这里要手动读取
             from gp_nerf.datasets.memory_dataset_depth_dji_instance import MemoryDataset
@@ -802,39 +818,84 @@ class Runner:
         # self._depth_djis = depth_djis 
         #############   render需要rays, gt_depth, image_indices
         ############# 10.23 为了方便， 把代码里的depth_scale在存入dataset时已经做处理，  从dataset里拿到的是相机到物体的距离（而不是z轴的分量）
-        total_size = len(dataset)
+        total_size = torch.cat(dataset._rays).shape[0]
         sample_size = int(1e7)
         sampled_indices = torch.randint(0, total_size, (sample_size,), dtype=torch.int64)
-        _rays=dataset._
-        for i in range(0, rays.shape[0], self.hparams.image_pixel_batch_size):
-            if self.hparams.depth_dji_type == "mesh" and self.hparams.sampling_mesh_guidance:
-                gt_depths = metadata.load_depth_dji().view(-1).to(self.device)
-            else: 
-                gt_depths = None
-            result_batch, _ = render_rays(nerf=nerf, bg_nerf=bg_nerf,
-                                            rays=rays[i:i + self.hparams.image_pixel_batch_size],
-                                            image_indices=image_indices[
-                                                        i:i + self.hparams.image_pixel_batch_size] if self.hparams.appearance_dim > 0 else None,
-                                            hparams=self.hparams,
-                                            sphere_center=self.sphere_center,
-                                            sphere_radius=self.sphere_radius,
-                                            get_depth=True,
-                                            get_depth_variance=False,
-                                            get_bg_fg_rgb=True,
-                                            train_iterations=train_iterations,
-                                            gt_depths= gt_depths[i:i + self.hparams.image_pixel_batch_size] if gt_depths is not None else None,
-                                            pose_scale_factor = self.pose_scale_factor)
-            if 'air_sigma_loss' in result_batch:
-                del result_batch['air_sigma_loss']
-            for key, value in result_batch.items():
-                if key not in results:
-                    results[key] = []
-                results[key].append(value.cpu())
 
-        for key, value in results.items():
-            results[key] = torch.cat(value)
+        rays = torch.cat(dataset._rays)[sampled_indices].to(self.device)
+        instances = torch.cat(dataset._labels)[sampled_indices].to(self.device)
+        image_indices = torch.ones_like(instances).to(self.device)
+        gt_depths = torch.cat(dataset._depth_djis)[sampled_indices].to(self.device)
 
-    
+        results = {}
+        with torch.no_grad():
+            for i in tqdm(range(0, sampled_indices.shape[0], self.hparams.image_pixel_batch_size),desc='sampling point to cluster instance'):
+
+                result_batch, _ = render_rays(nerf=self.nerf, bg_nerf=self.bg_nerf,
+                                                rays=rays[i:i + self.hparams.image_pixel_batch_size],
+                                                image_indices=image_indices[
+                                                            i:i + self.hparams.image_pixel_batch_size] if self.hparams.appearance_dim > 0 else None,
+                                                hparams=self.hparams,
+                                                sphere_center=self.sphere_center,
+                                                sphere_radius=self.sphere_radius,
+                                                get_depth=True,
+                                                get_depth_variance=False,
+                                                get_bg_fg_rgb=True,
+                                                train_iterations=train_iterations,
+                                                gt_depths= gt_depths[i:i + self.hparams.image_pixel_batch_size] if gt_depths is not None else None,
+                                                pose_scale_factor = self.pose_scale_factor)
+                if 'air_sigma_loss' in result_batch:
+                    del result_batch['air_sigma_loss']
+                for key, value in result_batch.items():
+                    if key not in results:
+                        results[key] = []
+                    results[key].append(value.cpu())
+
+        # for key, value in results.items():
+        #     results[key] = torch.cat(value)
+
+        # 以下对instance feature进行处理
+        #################
+        typ = 'fine'
+        all_instance_features, all_thing_features = [], []
+
+        for i in range(len(results[f'instance_map_{typ}'])):
+            instances = results[f'instance_map_{typ}'][i]
+            device = instances.device
+
+            sem_logits = results[f'sem_map_{typ}'][i]
+            sem_label = self.logits_2_label(sem_logits)
+            sem_label = remapping(sem_label)
+            
+            if self.hparams.instance_loss_mode == 'slow_fast':
+                slow_features = instances[...,self.hparams.num_instance_classes:] 
+                # all_slow_features.append(slow_features)
+                instances = instances[...,0:self.hparams.num_instance_classes] # keep fast features only
+
+            p_instances = create_instances_from_semantics(instances, sem_label, self.thing_classes, device=device)
+            all_instance_features.append(instances)
+            all_thing_features.append(p_instances)
+            #########################
+
+
+        #  对所有计算的instance进行聚类
+        # instance clustering
+        all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+        all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+        
+        experiment_path_current = self.experiment_path / "eval_{}".format(train_iterations)
+        output_dir = str(experiment_path_current / 'panoptic')
+        if not os.path.exists(output_dir):
+            Path(output_dir).mkdir(parents=True)
+            
+
+        all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, use_dbscan=True)
+        all_centroids_path = os.path.join(output_dir, f"all_centroids.npy")
+        with open(all_centroids_path, "wb") as file:
+            pickle.dump(all_centroids, file)
+        print(f"save all_centroids_cache to : {all_centroids_path}")
+
+        return all_centroids
 
     def _setup_experiment_dir(self) -> None:
         if self.is_master:
@@ -1305,7 +1366,7 @@ class Runner:
                     # all_points_rgb, all_points_semantics = [], []
                     # gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
 
-                # indices_to_eval = indices_to_eval[:1]
+                indices_to_eval = indices_to_eval[339:]
                 
                 for i in main_tqdm(indices_to_eval):
                     self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -1414,7 +1475,7 @@ class Runner:
             return val_metrics
             
     
-    def _run_validation(self, train_index=-1) -> Dict[str, float]:
+    def _run_validation(self, train_index=-1, all_centroids=None) -> Dict[str, float]:
 
         if 'llff' in self.hparams.dataset_type:
             from gp_nerf.rendering_gpnerf import render_rays
@@ -1677,12 +1738,12 @@ class Runner:
                             samantic_each_value['F1'] = []
                             # samantic_each_value['OA'] = []
 
-                            # if self.hparams.enable_instance:
-                            #     all_instance_features, all_thing_features = [], []
-                            #     all_points_rgb, all_points_semantics = [], []
-                            #     gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
+                            if self.hparams.enable_instance:
+                                all_instance_features, all_thing_features = [], []
+                                all_points_rgb, all_points_semantics = [], []
+                                gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
                             
-                            # indices_to_eval = indices_to_eval[:2]
+                            indices_to_eval = indices_to_eval[:2]
                             for i in main_tqdm(indices_to_eval):
                                 self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                                 # if i != 0:
@@ -1692,9 +1753,9 @@ class Runner:
                                 elif val_type == 'train':
                                     metadata_item = self.train_items[i]
 
-                                # if self.hparams.enable_instance:
-                                #     gt_instance_label = metadata_item.load_instance()
-                                #     gt_points_instance.append(gt_instance_label.view(-1))
+                                if self.hparams.enable_instance:
+                                    gt_instance_label = metadata_item.load_instance()
+                                    gt_points_instance.append(gt_instance_label.view(-1))
                                 
                                 results, _ = self.render_image(metadata_item, train_index)
                                 typ = 'fine' if 'rgb_fine' in results else 'coarse'
@@ -1732,15 +1793,15 @@ class Runner:
                                                     i, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each)
                                 
                                 
-                                # if self.hparams.enable_instance:
-                                #     instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
-                                #         results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
-                                #         experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
-                                #         all_points_rgb, all_points_semantics, gt_points_semantic)
+                                if self.hparams.enable_instance:
+                                    instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
+                                        results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
+                                        experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
+                                        all_points_rgb, all_points_semantics, gt_points_semantic)
                                     
-                                #     all_instance_features.append(instances)
-                                #     all_thing_features.append(p_instances)
-                                #     gt_points_rgb.append(viz_rgbs.view(-1,3))
+                                    all_instance_features.append(instances)
+                                    all_thing_features.append(p_instances)
+                                    gt_points_rgb.append(viz_rgbs.view(-1,3))
 
 
 
@@ -1790,69 +1851,65 @@ class Runner:
                                     self.metrics_val_each.reset()
                                 del results
                         
-                        # if self.hparams.enable_instance:
-                        #     # instance clustering
-                        #     all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
-                        #     all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
-                        #     output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
-                        #     if not os.path.exists(output_dir):
-                        #         Path(output_dir).mkdir()
-                        #     np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                        #     np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                        #     np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
-                        #     np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
-                        #     np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
-                        #     np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
+                        if self.hparams.enable_instance:
+                            # instance clustering
+                            all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+                            all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                            output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
+                            if not os.path.exists(output_dir):
+                                Path(output_dir).mkdir()
+                            np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                            np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                            np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
 
+                            all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
+                                                                   device=self.device, num_images=len(indices_to_eval))
 
-                            
-                            
-                            
-                        #     all_points_instances = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                        #                                    num_images=len(indices_to_eval), use_dbscan=True)
+                            if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
+                                Path(str(experiment_path_current / 'pred_semantics')).mkdir()
+                            if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
+                                Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
 
-                        #     if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
-                        #         Path(str(experiment_path_current / 'pred_semantics')).mkdir()
-                        #     if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
-                        #         Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
-
-                        #     for save_i in range(len(indices_to_eval)):
-                        #         p_rgb = all_points_rgb[save_i]
-                        #         p_semantics = all_points_semantics[save_i]
-                        #         p_instances = all_points_instances[save_i]
-                        #         gt_rgb = gt_points_rgb[save_i]
-                        #         gt_semantics = gt_points_semantic[save_i]
-                        #         gt_instances = gt_points_instance[save_i]
+                            for save_i in range(len(indices_to_eval)):
+                                p_rgb = all_points_rgb[save_i]
+                                p_semantics = all_points_semantics[save_i]
+                                p_instances = all_points_instances[save_i]
+                                gt_rgb = gt_points_rgb[save_i]
+                                gt_semantics = gt_points_semantic[save_i]
+                                gt_instances = gt_points_instance[save_i]
 
                                 
-                        #         output_semantics_with_invalid = p_semantics.detach()
-                        #         Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
-                        #                 str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                output_semantics_with_invalid = p_semantics.detach()
+                                Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
+                                        str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
                                 
-                        #         Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-                        #                 str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                                        str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
                                 
-                        #         stack = visualize_panoptic_outputs(
-                        #             p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
-                        #             self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
-                        #         )
-                        #         grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
-                        #         grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                                stack = visualize_panoptic_outputs(
+                                    p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
+                                    self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
+                                )
+                                grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
+                                grid = (grid * 255).cpu().numpy().astype(np.uint8)
                                 
-                        #         Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
+                                Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
                             
-                        #     # calculate the panoptic quality
+                            # calculate the panoptic quality
                             
-                        #     path_target_sem = os.path.join(self.hparams.dataset_path, 'val', 'labels_gt')
-                        #     path_target_inst = os.path.join(self.hparams.dataset_path, 'val', 'instances_gt')
-                        #     path_pred_sem = str(experiment_path_current / 'pred_semantics')
-                        #     path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
-                        #     if Path(path_target_inst).exists():
-                        #         pq, sq, rq = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
-                        #                      path_target_sem, path_target_inst, image_size=[self.H, self.W])
-                        #         val_metrics['pq'] = pq
-                        #         val_metrics['sq'] = sq
-                        #         val_metrics['rq'] = rq
+                            path_target_sem = os.path.join(self.hparams.dataset_path, 'val', 'labels_gt')
+                            path_target_inst = os.path.join(self.hparams.dataset_path, 'val', 'instances_gt')
+                            path_pred_sem = str(experiment_path_current / 'pred_semantics')
+                            path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
+                            if Path(path_target_inst).exists():
+                                pq, sq, rq = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                                             path_target_sem, path_target_inst, image_size=[self.H, self.W])
+                                val_metrics['pq'] = pq
+                                val_metrics['sq'] = sq
+                                val_metrics['rq'] = rq
 
                             
 

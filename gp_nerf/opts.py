@@ -117,6 +117,7 @@ def get_opts_base():
     parser.add_argument('--freeze_semantic', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
     parser.add_argument('--instance_name', type=str, default='instances_gt', choices=['instances_gt', 'instances_mask'], help='')
     parser.add_argument('--instance_loss_mode', type=str, default='slow_fast', choices=['contrastive', 'linear_assignment', 'slow_fast'], help='')
+    parser.add_argument('--cached_centroids_path', type=str, default=None, help='path towards serialized model checkpoint')
 
     
     
@@ -130,7 +131,7 @@ def get_opts_base():
 
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=5, help='')
-    parser.add_argument('--num_layers_semantic_hidden', type=int, default=1, choices=[1, 3], help='change our color layer')
+    parser.add_argument('--num_layers_semantic_hidden', type=int, default=3, choices=[1, 3], help='change our color layer')
     parser.add_argument('--semantic_layer_dim', type=int, default=128, help='')
     parser.add_argument('--wgt_sem_loss', default=1, type=float, help='')
     parser.add_argument('--network_type', type=str, default='gpnerf', choices=['gpnerf', 'gpnerf_nr3d', 'mlp', 'sdf', 'sdf_mlp', 'sdf_nr3d'], help='')

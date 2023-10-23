@@ -75,9 +75,10 @@ class MemoryDataset(Dataset):
             
             image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
             
+            depth_scale = self._depth_scale
             if image_keep_mask is not None:
                 image_rays = image_rays[image_keep_mask == True]
-                depth_scale = self._depth_scale[image_keep_mask == True]
+                depth_scale = depth_scale[image_keep_mask == True]
 
 
             rgbs.append(image_rgbs)
