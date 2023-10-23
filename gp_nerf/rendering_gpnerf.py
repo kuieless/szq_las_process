@@ -147,6 +147,7 @@ def render_rays(nerf: nn.Module,
         rays_with_bg = torch.arange(N_rays, device=device)[far.squeeze() > fg_far]
         rays_with_fg = torch.arange(N_rays, device=device)[far.squeeze() <= fg_far]
     if not hparams.render_zyq:
+    # if False:
         assert rays_with_bg.shape[0] + rays_with_fg.shape[0] == far.shape[0]
     rays_o = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
     rays_d = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
@@ -660,6 +661,7 @@ def _intersect_sphere(rays_o: torch.Tensor, rays_d: torch.Tensor, sphere_center:
     ray_d_cos = 1. / torch.norm(rays_d, dim=-1)
     p_norm_sq = torch.sum(p * p, dim=-1)
     if (p_norm_sq >= 1.).any() and render_zyq == False:
+    # if False:
         raise Exception(
             'Not all your cameras are bounded by the unit sphere; please make sure the cameras are normalized properly!')
     d2 = torch.sqrt(1. - p_norm_sq) * ray_d_cos

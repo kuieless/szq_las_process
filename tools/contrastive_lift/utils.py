@@ -113,6 +113,7 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
         p_instances = p_instances.argmax(dim=1)
     if len(p_semantics.shape) > 1:
         p_semantics = p_semantics.argmax(dim=1)
+    p_semantics = p_semantics.to(torch.int64)
     img_semantics = distinct_colors_semantic.apply_colors_fast_torch(p_semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img * (1 - alpha)
     boundaries_img_semantics = get_boundary_mask(p_semantics.cpu().view(H, W))
     img_semantics[:, boundaries_img_semantics > 0] = 0

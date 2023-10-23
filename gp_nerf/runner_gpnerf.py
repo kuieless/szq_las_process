@@ -741,6 +741,10 @@ class Runner:
                     print(f'pq, sq, rq: {pq:.5f} {sq:.5f} {rq:.5f}')
 
                     f.write(f'\n pq, sq, rq: {pq:.5f} {sq:.5f} {rq:.5f}\n')  
+                    self.writer.add_scalar('2_val_metric_average/pq', pq, train_iterations)
+                    self.writer.add_scalar('2_val_metric_average/sq', sq, train_iterations)
+                    self.writer.add_scalar('2_val_metric_average/rq', rq, train_iterations)
+
 
                     del val_metrics['pq'],val_metrics['sq'],val_metrics['rq']
                 for key in val_metrics:
@@ -1233,6 +1237,11 @@ class Runner:
                 samantic_each_value['FW_IoU'] = []
                 samantic_each_value['F1'] = []
 
+                all_instance_features, all_thing_features = [], []
+                all_points_rgb, all_points_semantics = [], []
+                gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
+                # indices_to_eval = indices_to_eval[:1]
+                
                 for i in main_tqdm(indices_to_eval):
                     self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                     metadata_item = render_items[i]
@@ -1249,7 +1258,7 @@ class Runner:
                     # get rendering rgbs and depth
                     viz_result_rgbs = results[f'rgb_{typ}'].view(H, W, 3).cpu()
                     viz_result_rgbs = viz_result_rgbs.clamp(0,1)
-                    
+                    self.H, self.W = viz_result_rgbs.shape[0],viz_result_rgbs.shape[1]
 
                     save_depth_dir = os.path.join(str(experiment_path_current), 'val_rgbs', "pred_depth_save")
                     if not os.path.exists(save_depth_dir):
@@ -1273,7 +1282,16 @@ class Runner:
 
                     get_semantic_gt_pred_render_zyq(results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping,
                                         self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
-                    
+                    if self.hparams.enable_instance:
+                        instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
+                                        results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping, img_list, 
+                                        experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
+                                        all_points_rgb, all_points_semantics, gt_points_semantic)
+            
+                        all_instance_features.append(instances)
+                        all_thing_features.append(p_instances)
+
+
                     # NOTE: 对需要可视化的list进行处理
                     # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
                     # 将None元素转换为zeros矩阵
@@ -1284,7 +1302,49 @@ class Runner:
                     Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / 'pred_all'/ ("%06d_all.jpg" % i)))
 
                     del results
-            
+
+            if self.hparams.enable_instance:
+        
+                # instance clustering
+                all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+                all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
+                if not os.path.exists(output_dir):
+                    Path(output_dir).mkdir()
+                np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+
+                all_points_instances = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                num_images=len(indices_to_eval), use_dbscan=True)
+
+                if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
+                    Path(str(experiment_path_current / 'pred_semantics')).mkdir()
+                if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
+                    Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
+
+                for save_i in range(len(indices_to_eval)):
+                    p_rgb = all_points_rgb[save_i]
+                    p_semantics = all_points_semantics[save_i]
+                    p_instances = all_points_instances[save_i]
+
+                    
+                    output_semantics_with_invalid = p_semantics.detach()
+                    Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
+                            str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                    
+                    Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                            str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                    
+                    stack = visualize_panoptic_outputs(
+                        p_rgb, p_semantics, p_instances, None, None, None, None,
+                        self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
+                    )
+                    grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
+                    grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                    
+                    Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
+                
             return val_metrics
             
     
@@ -1680,7 +1740,8 @@ class Runner:
                             
                             
                             
-                            all_points_instances = cluster(all_thing_features, bandwidth=0.2, device=self.device, num_images=len(indices_to_eval))
+                            all_points_instances = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                           num_images=len(indices_to_eval), use_dbscan=True)
 
                             if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                                 Path(str(experiment_path_current / 'pred_semantics')).mkdir()
@@ -2266,7 +2327,7 @@ class Runner:
         depth_scale = torch.abs(directions[:, :, 2]).view(-1)
 
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
-            ###3 . 俯视图
+            # ##3 . 俯视图，  render0.3视角下第一张图片
             # image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
             # ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
             # ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
@@ -2297,7 +2358,8 @@ class Runner:
 
             rays = rays.view(-1, 8).to(self.device, non_blocking=True).cuda()  # (H*W, 8)
             if self.hparams.render_zyq:
-                image_indices = 817 * torch.ones(rays.shape[0], device=rays.device)
+                image_indices = 300 * torch.ones(rays.shape[0], device=rays.device)
+                # image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device)
             else:
                 image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device) \
                     if self.hparams.appearance_dim > 0 else None

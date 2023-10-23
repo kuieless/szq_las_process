@@ -286,9 +286,11 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
         instances = results[f'instance_map_{typ}']
         device = instances.device
         # gt_semantic
-        gt_label = metadata_item.load_gt()
-        gt_label = remapping(gt_label)
-        
+        if not hparams.render_zyq:
+            gt_label = metadata_item.load_gt()
+            gt_label = remapping(gt_label)
+            gt_points_semantic.append(gt_label.view(-1))
+
         # 如果pred semantic存在，则使用
         # 若不存在， 则创建一个全是things的semantic
         if f'sem_map_{typ}' in results:
@@ -308,7 +310,6 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
         # pred_instances = cluster(padded_instances, device)
         all_points_rgb.append(viz_result_rgbs.view(-1,3))
         all_points_semantics.append(sem_label.view(-1))
-        gt_points_semantic.append(gt_label.view(-1))
         return instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic
     else:
         return None, None, None, None, None
