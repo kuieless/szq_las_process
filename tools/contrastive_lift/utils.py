@@ -28,7 +28,7 @@ def create_instances_from_semantics(instances, semantics, thing_classes, device)
 # copy from contrastive-lift
 
 def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=False,
-            use_silverman=False, cluster_size=500, num_points=50000):
+            use_silverman=False, cluster_size=500, num_points=50000, all_centroids=None):
     thing_mask = all_thing_features[...,0] == -float('inf')
     features = all_thing_features[thing_mask]
     features = features[:,1:]
@@ -48,49 +48,63 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
 
     fps_points_rescaled = centers_rescaled[fps_points_indices]
     
-    if not use_dbscan:
-        t1_ms = time.time()
-        if use_silverman:
-            kde = gaussian_kde(fps_points_rescaled.T, bw_method='silverman')
-            bandwidth_ = kde.covariance_factor()
-            print("Using Silverman bandwidth: ", bandwidth_)
-        else:
-            bandwidth_ = bandwidth
-        clustering = MeanShift(bandwidth=bandwidth_, cluster_all=False, bin_seeding=True,
-                               min_bin_freq=10).fit(fps_points_rescaled)
-        t2_ms = time.time()
-        print(f"MeanShift took {t2_ms-t1_ms} seconds")
-        labels = clustering.labels_
-        centroids = clustering.cluster_centers_
-        all_labels = clustering.predict(
-            (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
-        )
-    else: # Use HDBSCAN
-        t1_dbscan = time.time()
-        clusterer = HDBSCAN(min_cluster_size=cluster_size, min_samples=1, prediction_data=True,
-                                    allow_single_cluster=True).fit(fps_points_rescaled)
-        t2_dbscan = time.time()
-        print(f"HDBSCAN took {t2_dbscan-t1_dbscan} seconds")
-        labels = clusterer.labels_
-        centroids = np.stack([clusterer.weighted_cluster_centroid(cluster_id=cluster_id) \
-                              for cluster_id in np.unique(labels) if cluster_id != -1])
-        distances = torch.zeros((all_thing_features.shape[0], centroids.shape[0]), device=device)
-        chunksize = 10**7
-        all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
-        for i in range(0, all_thing_features.shape[0], chunksize):
-            distances[i:i+chunksize] = torch.cdist(
-                torch.FloatTensor(all_thing_features_rescaled[i:i+chunksize]).to(device),
-                torch.FloatTensor(centroids).to(device)
+    if all_centroids is not None:
+        
+        if not use_dbscan:
+            t1_ms = time.time()
+            if use_silverman:
+                kde = gaussian_kde(fps_points_rescaled.T, bw_method='silverman')
+                bandwidth_ = kde.covariance_factor()
+                print("Using Silverman bandwidth: ", bandwidth_)
+            else:
+                bandwidth_ = bandwidth
+            clustering = MeanShift(bandwidth=bandwidth_, cluster_all=False, bin_seeding=True,
+                                min_bin_freq=10).fit(fps_points_rescaled)
+            t2_ms = time.time()
+            print(f"MeanShift took {t2_ms-t1_ms} seconds")
+            labels = clustering.labels_
+            centroids = clustering.cluster_centers_
+            all_labels = clustering.predict(
+                (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
             )
-        all_labels = torch.argmin(distances, dim=-1).cpu().numpy()
+        else: # Use HDBSCAN
+            t1_dbscan = time.time()
+            clusterer = HDBSCAN(min_cluster_size=cluster_size, min_samples=1, prediction_data=True,
+                                        allow_single_cluster=True).fit(fps_points_rescaled)
+            t2_dbscan = time.time()
+            print(f"HDBSCAN took {t2_dbscan-t1_dbscan} seconds")
+            labels = clusterer.labels_
+            centroids = np.stack([clusterer.weighted_cluster_centroid(cluster_id=cluster_id) \
+                                for cluster_id in np.unique(labels) if cluster_id != -1])
+            distances = torch.zeros((all_thing_features.shape[0], centroids.shape[0]), device=device)
+            chunksize = 10**7
+            all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
+            for i in range(0, all_thing_features.shape[0], chunksize):
+                distances[i:i+chunksize] = torch.cdist(
+                    torch.FloatTensor(all_thing_features_rescaled[i:i+chunksize]).to(device),
+                    torch.FloatTensor(centroids).to(device)
+                )
+            all_labels = torch.argmin(distances, dim=-1).cpu().numpy()
+    else:
+        if use_dbscan:
+            centroids=all_centroids
+            distances = torch.zeros((all_thing_features.shape[0], centroids.shape[0]), device=device)
+            chunksize = 10**7
+            all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
+            for i in range(0, all_thing_features.shape[0], chunksize):
+                distances[i:i+chunksize] = torch.cdist(
+                    torch.FloatTensor(all_thing_features_rescaled[i:i+chunksize]).to(device),
+                    torch.FloatTensor(centroids).to(device)
+                )
+            all_labels = torch.argmin(distances, dim=-1).cpu().numpy()
 
     all_labels[~thing_mask] = -1
     # to one hot
     all_labels = all_labels + 1 # -1,0,...,K-1 -> 0,1,...,K
     all_labels_onehot = np.zeros((all_labels.shape[0], centroids.shape[0]+1))
     all_labels_onehot[np.arange(all_labels.shape[0]), all_labels] = 1
-    # all_points_instances = torch.from_numpy(all_labels_onehot).view(num_images, -1, centroids.shape[0]+1).to(device)
-    return None, centroids
+    all_points_instances = torch.from_numpy(all_labels_onehot).view(num_images, -1, centroids.shape[0]+1).to(device)
+    return all_points_instances, centroids
 
 
 

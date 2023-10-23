@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=5
 
 
 
@@ -43,8 +43,8 @@ render_type=render_far0.3
 #     --output_path=$output_path/project_far_to_ori_replace_building
 
 
-# # 以上得到了替换building的结果，  接下来要把car tree换掉      
-# # 用/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/combine_sam_m2f2_ds2crop_1022process_b1.sh
+# # # 以上得到了替换building的结果，  接下来要把car tree换掉      
+# # # 用/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/combine_sam_m2f2_ds2crop_1022process_b1.sh
 
 
 # ##  3.先注释， 最后跑

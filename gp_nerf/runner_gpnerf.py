@@ -568,7 +568,7 @@ class Runner:
                 elif item == ['end']:
                     self._save_checkpoint(optimizers, scaler, train_iterations, dataset_index,
                                   dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
-                    if self.hparams.enable_instance:
+                    if self.hparams.enable_instance and self.hparams.cached_centroids_type == 'all':
                         all_centroids = self.instance_cluster_prediction(train_iterations, dataset=dataset)
                         val_metrics = self._run_validation(train_iterations, all_centroids)
                     else:
@@ -710,7 +710,7 @@ class Runner:
                                             dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
             
                 if (train_iterations > 0 and train_iterations % self.hparams.val_interval == 0) or train_iterations == self.hparams.train_iterations:
-                    if self.hparams.enable_instance:
+                    if self.hparams.enable_instance and self.hparams.cached_centroids_type == 'all':
                         all_centroids = self.instance_cluster_prediction(train_iterations, dataset=dataset)
                         val_metrics = self._run_validation(train_iterations, all_centroids)
                     else:
@@ -739,8 +739,10 @@ class Runner:
             train_iterations = checkpoint['iteration']
         self._setup_experiment_dir()
         if self.hparams.enable_instance:
+            all_centroids=None
             if self.hparams.cached_centroids_path is None:
-                all_centroids = self.instance_cluster_prediction(train_iterations, dataset=None)
+                if self.hparams.cached_centroids_type == 'all':
+                    all_centroids = self.instance_cluster_prediction(train_iterations, dataset=None)
             else:
                 with open(self.hparams.cached_centroids_path, 'rb') as f:
                     all_centroids = pickle.load(f)
@@ -1451,10 +1453,27 @@ class Runner:
                 np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
                 np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
                 np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
-
-                all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
-                                                        device=self.device, num_images=len(indices_to_eval))
-                
+                if self.hparams.cached_centroids_type == 'all':
+                    all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
+                                                            device=self.device, num_images=len(indices_to_eval))
+                elif self.hparams.cached_centroids_type == 'test':
+                    if self.hparams.cached_centroids_path is not None:
+                        with open(self.hparams.cached_centroids_path, 'rb') as f:
+                            all_centroids = pickle.load(f)
+                        all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                    num_images=len(indices_to_eval), use_dbscan=True, all_centroids=all_centroids)
+    
+                    # else:
+                    #     all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                    #                                 num_images=len(indices_to_eval), use_dbscan=True)
+                    #     output_dir = str(experiment_path_current / 'panoptic')
+                    #     if not os.path.exists(output_dir):
+                    #         Path(output_dir).mkdir(parents=True)
+                            
+                    #     all_centroids_path = os.path.join(output_dir, f"all_centroids.npy")
+                    #     with open(all_centroids_path, "wb") as file:
+                    #         pickle.dump(all_centroids, file)
+                    #     print(f"save all_centroids_cache to : {all_centroids_path}")
 
                 if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                     Path(str(experiment_path_current / 'pred_semantics')).mkdir()
@@ -1482,7 +1501,7 @@ class Runner:
                     grid = (grid * 255).cpu().numpy().astype(np.uint8)
                     
                     Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
-                
+
             return val_metrics
             
     
@@ -1758,7 +1777,7 @@ class Runner:
                                 all_points_rgb, all_points_semantics = [], []
                                 gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
                             
-                            indices_to_eval = indices_to_eval[:2]
+                            # indices_to_eval = indices_to_eval[:2]
                             for i in main_tqdm(indices_to_eval):
                                 self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                                 # if i != 0:
@@ -1880,9 +1899,29 @@ class Runner:
                             np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
                             np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
 
-                            all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
-                                                                   device=self.device, num_images=len(indices_to_eval))
-
+                            
+                            if self.hparams.cached_centroids_type == 'all':
+                                all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
+                                                                        device=self.device, num_images=len(indices_to_eval))
+                            elif self.hparams.cached_centroids_type == 'test':
+                                if self.hparams.cached_centroids_path is not None:
+                                    with open(self.hparams.cached_centroids_path, 'rb') as f:
+                                        all_centroids = pickle.load(f)
+                                    all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                                num_images=len(indices_to_eval), use_dbscan=True, all_centroids=all_centroids)
+                
+                                else:
+                                    all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                                num_images=len(indices_to_eval), use_dbscan=True)
+                                    output_dir = str(experiment_path_current / 'panoptic')
+                                    if not os.path.exists(output_dir):
+                                        Path(output_dir).mkdir(parents=True)
+                                        
+                                    all_centroids_path = os.path.join(output_dir, f"all_centroids.npy")
+                                    with open(all_centroids_path, "wb") as file:
+                                        pickle.dump(all_centroids, file)
+                                    print(f"save all_centroids_cache to : {all_centroids_path}")
+                                    
                             if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                                 Path(str(experiment_path_current / 'pred_semantics')).mkdir()
                             if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
@@ -2468,31 +2507,32 @@ class Runner:
 
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
             ###############3 . 俯视图，  render0.3视角下第一张图片
-            image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
-            ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
-            ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
+            if self.hparams.render_zyq and self.hparams.enable_instance:
+                image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+                ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
+                ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
 
-            z_vals_inbound = 1
-            new_o = ray_o - ray_d * z_vals_inbound
-            metadata.c2w[:,3]= new_o
-            metadata.c2w[1:3,3]=self.sphere_center[1:3]
-            def rad(x):
-                return math.radians(x)
-            angle=30
-            cosine = math.cos(rad(angle))
-            sine = math.sin(rad(angle))
-            rotation_matrix_x = torch.tensor([[1, 0, 0],
-                              [0, cosine, sine],
-                              [0, -sine, cosine]])
-            angle=-40
-            cosine = math.cos(rad(angle))
-            sine = math.sin(rad(angle))
-            rotation_matrix_y = torch.tensor([[cosine, 0, sine],
-                              [0, 1, 0],
-                              [-sine, 0, cosine]])
-            metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
-            metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
-            metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
+                z_vals_inbound = 1
+                new_o = ray_o - ray_d * z_vals_inbound
+                metadata.c2w[:,3]= new_o
+                metadata.c2w[1:3,3]=self.sphere_center[1:3]
+                def rad(x):
+                    return math.radians(x)
+                angle=30
+                cosine = math.cos(rad(angle))
+                sine = math.sin(rad(angle))
+                rotation_matrix_x = torch.tensor([[1, 0, 0],
+                                [0, cosine, sine],
+                                [0, -sine, cosine]])
+                angle=-40
+                cosine = math.cos(rad(angle))
+                sine = math.sin(rad(angle))
+                rotation_matrix_y = torch.tensor([[cosine, 0, sine],
+                                [0, 1, 0],
+                                [-sine, 0, cosine]])
+                metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
+                metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
+                metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
             #########################################################
 
 

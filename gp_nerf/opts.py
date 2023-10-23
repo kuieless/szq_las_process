@@ -118,6 +118,7 @@ def get_opts_base():
     parser.add_argument('--instance_name', type=str, default='instances_gt', choices=['instances_gt', 'instances_mask'], help='')
     parser.add_argument('--instance_loss_mode', type=str, default='slow_fast', choices=['contrastive', 'linear_assignment', 'slow_fast'], help='')
     parser.add_argument('--cached_centroids_path', type=str, default=None, help='path towards serialized model checkpoint')
+    parser.add_argument('--cached_centroids_type', type=str, default='test', choices=['test', 'all'], help='')
 
     
     
