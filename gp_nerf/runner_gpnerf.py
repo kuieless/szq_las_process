@@ -396,6 +396,7 @@ class Runner:
             # # add by zyq : load the pretrain-gpnerf to train the semantic
             # if self.hparams.resume_ckpt_state:
             if not (self.hparams.enable_semantic or self.hparams.enable_instance):
+            # if not (self.hparams.enable_semantic or self.hparams.enable_instance) or True:
                 train_iterations = checkpoint['iteration']
                 for key, optimizer in optimizers.items():
                     optimizer_dict = optimizer.state_dict()
@@ -819,7 +820,7 @@ class Runner:
         #############   render需要rays, gt_depth, image_indices
         ############# 10.23 为了方便， 把代码里的depth_scale在存入dataset时已经做处理，  从dataset里拿到的是相机到物体的距离（而不是z轴的分量）
         total_size = torch.cat(dataset._rays).shape[0]
-        sample_size = int(1e7)
+        sample_size = int(3e7)
         sampled_indices = torch.randint(0, total_size, (sample_size,), dtype=torch.int64)
 
         rays = torch.cat(dataset._rays)[sampled_indices].to(self.device)
@@ -828,13 +829,14 @@ class Runner:
         gt_depths = torch.cat(dataset._depth_djis)[sampled_indices].to(self.device)
 
         results = {}
+        block_size = self.hparams.image_pixel_batch_size*4
         with torch.no_grad():
-            for i in tqdm(range(0, sampled_indices.shape[0], self.hparams.image_pixel_batch_size),desc='sampling point to cluster instance'):
+            for i in tqdm(range(0, sampled_indices.shape[0], block_size),desc='sampling point to cluster instance'):
 
                 result_batch, _ = render_rays(nerf=self.nerf, bg_nerf=self.bg_nerf,
-                                                rays=rays[i:i + self.hparams.image_pixel_batch_size],
+                                                rays=rays[i:i + block_size],
                                                 image_indices=image_indices[
-                                                            i:i + self.hparams.image_pixel_batch_size] if self.hparams.appearance_dim > 0 else None,
+                                                            i:i + block_size] if self.hparams.appearance_dim > 0 else None,
                                                 hparams=self.hparams,
                                                 sphere_center=self.sphere_center,
                                                 sphere_radius=self.sphere_radius,
@@ -842,7 +844,7 @@ class Runner:
                                                 get_depth_variance=False,
                                                 get_bg_fg_rgb=True,
                                                 train_iterations=train_iterations,
-                                                gt_depths= gt_depths[i:i + self.hparams.image_pixel_batch_size] if gt_depths is not None else None,
+                                                gt_depths= gt_depths[i:i + block_size] if gt_depths is not None else None,
                                                 pose_scale_factor = self.pose_scale_factor)
                 if 'air_sigma_loss' in result_batch:
                     del result_batch['air_sigma_loss']
@@ -888,12 +890,13 @@ class Runner:
         if not os.path.exists(output_dir):
             Path(output_dir).mkdir(parents=True)
             
-
+        # 下面的 all_points_instances直接返回None ,用不到
         all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, use_dbscan=True)
         all_centroids_path = os.path.join(output_dir, f"all_centroids.npy")
         with open(all_centroids_path, "wb") as file:
             pickle.dump(all_centroids, file)
         print(f"save all_centroids_cache to : {all_centroids_path}")
+        
 
         return all_centroids
 
@@ -1301,10 +1304,17 @@ class Runner:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             train_iterations = checkpoint['iteration']
         self._setup_experiment_dir()
-        val_metrics = self._run_validation_render_zyq(train_iterations)
+
+        if self.hparams.enable_instance:
+            with open(self.hparams.cached_centroids_path, 'rb') as f:
+                all_centroids = pickle.load(f)
+            val_metrics = self._run_validation_render_zyq(train_iterations, all_centroids)
+        else:
+            val_metrics = self._run_validation_render_zyq(train_iterations)
+
         self._write_final_metrics(val_metrics, train_iterations=train_iterations)
     
-    def _run_validation_render_zyq(self, train_index=-1) -> Dict[str, float]:
+    def _run_validation_render_zyq(self, train_index=-1, all_centroids=None) -> Dict[str, float]:
 
         with torch.inference_mode():
             #semantic 
@@ -1361,12 +1371,12 @@ class Runner:
                 samantic_each_value['FW_IoU'] = []
                 samantic_each_value['F1'] = []
                 
-                # if self.hparams.enable_instance:
-                    # all_instance_features, all_thing_features = [], []
-                    # all_points_rgb, all_points_semantics = [], []
-                    # gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
+                if self.hparams.enable_instance:
+                    all_instance_features, all_thing_features = [], []
+                    all_points_rgb, all_points_semantics = [], []
+                    gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
 
-                indices_to_eval = indices_to_eval[339:]
+                indices_to_eval = indices_to_eval[:1]
                 
                 for i in main_tqdm(indices_to_eval):
                     self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -1409,14 +1419,14 @@ class Runner:
                     get_semantic_gt_pred_render_zyq(results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping,
                                         self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
                     
-                    # if self.hparams.enable_instance:
-                    #     instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
-                    #                     results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping, img_list, 
-                    #                     experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
-                    #                     all_points_rgb, all_points_semantics, gt_points_semantic)
+                    if self.hparams.enable_instance:
+                        instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
+                                        results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping, img_list, 
+                                        experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
+                                        all_points_rgb, all_points_semantics, gt_points_semantic)
             
-                    #     all_instance_features.append(instances)
-                    #     all_thing_features.append(p_instances)
+                        all_instance_features.append(instances)
+                        all_thing_features.append(p_instances)
 
 
                     # NOTE: 对需要可视化的list进行处理
@@ -1430,47 +1440,48 @@ class Runner:
 
                     del results
 
-            # if self.hparams.enable_instance:
+            if self.hparams.enable_instance:
         
-            #     # instance clustering
-            #     all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
-            #     all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
-            #     output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
-            #     if not os.path.exists(output_dir):
-            #         Path(output_dir).mkdir()
-            #     np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-            #     np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-            #     np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                # instance clustering
+                all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+                all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
+                if not os.path.exists(output_dir):
+                    Path(output_dir).mkdir()
+                np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
 
-            #     all_points_instances = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-            #                                     num_images=len(indices_to_eval), use_dbscan=True)
+                all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
+                                                        device=self.device, num_images=len(indices_to_eval))
+                
 
-            #     if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
-            #         Path(str(experiment_path_current / 'pred_semantics')).mkdir()
-            #     if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
-            #         Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
+                if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
+                    Path(str(experiment_path_current / 'pred_semantics')).mkdir()
+                if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
+                    Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
 
-            #     for save_i in range(len(indices_to_eval)):
-            #         p_rgb = all_points_rgb[save_i]
-            #         p_semantics = all_points_semantics[save_i]
-            #         p_instances = all_points_instances[save_i]
+                for save_i in range(len(indices_to_eval)):
+                    p_rgb = all_points_rgb[save_i]
+                    p_semantics = all_points_semantics[save_i]
+                    p_instances = all_points_instances[save_i]
 
                     
-            #         output_semantics_with_invalid = p_semantics.detach()
-            #         Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
-            #                 str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                    output_semantics_with_invalid = p_semantics.detach()
+                    Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
+                            str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
                     
-            #         Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-            #                 str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                    Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                            str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
                     
-            #         stack = visualize_panoptic_outputs(
-            #             p_rgb, p_semantics, p_instances, None, None, None, None,
-            #             self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
-            #         )
-            #         grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
-            #         grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                    stack = visualize_panoptic_outputs(
+                        p_rgb, p_semantics, p_instances, None, None, None, None,
+                        self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
+                    )
+                    grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
+                    grid = (grid * 255).cpu().numpy().astype(np.uint8)
                     
-            #         Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
+                    Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
                 
             return val_metrics
             
@@ -1726,8 +1737,12 @@ class Runner:
                             
                         
                         experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
-                        Path(str(experiment_path_current)).mkdir()
-                        Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+                        if self.hparams.cached_centroids_path is None and self.hparams.enable_instance:
+                            Path(str(experiment_path_current)).mkdir(exist_ok=True)
+                            Path(str(experiment_path_current / 'val_rgbs')).mkdir(exist_ok=True)
+                        else:
+                            Path(str(experiment_path_current)).mkdir()
+                            Path(str(experiment_path_current / 'val_rgbs')).mkdir()
                         with (experiment_path_current / 'psnr.txt').open('w') as f:
                             
                             samantic_each_value = {}
@@ -1910,7 +1925,7 @@ class Runner:
                                 val_metrics['pq'] = pq
                                 val_metrics['sq'] = sq
                                 val_metrics['rq'] = rq
-
+                            print(f"all_centroids: {all_centroids.shape}")
                             
 
                         # logger
@@ -2452,32 +2467,34 @@ class Runner:
         depth_scale = torch.abs(directions[:, :, 2]).view(-1)
 
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
-            # ##3 . 俯视图，  render0.3视角下第一张图片
-            # image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
-            # ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
-            # ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
+            ###############3 . 俯视图，  render0.3视角下第一张图片
+            image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+            ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
+            ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
 
-            # z_vals_inbound = 1
-            # new_o = ray_o - ray_d * z_vals_inbound
-            # metadata.c2w[:,3]= new_o
-            # metadata.c2w[1:3,3]=self.sphere_center[1:3]
-            # def rad(x):
-            #     return math.radians(x)
-            # angle=30
-            # cosine = math.cos(rad(angle))
-            # sine = math.sin(rad(angle))
-            # rotation_matrix_x = torch.tensor([[1, 0, 0],
-            #                   [0, cosine, sine],
-            #                   [0, -sine, cosine]])
-            # angle=-40
-            # cosine = math.cos(rad(angle))
-            # sine = math.sin(rad(angle))
-            # rotation_matrix_y = torch.tensor([[cosine, 0, sine],
-            #                   [0, 1, 0],
-            #                   [-sine, 0, cosine]])
-            # metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
-            # metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
-            # metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
+            z_vals_inbound = 1
+            new_o = ray_o - ray_d * z_vals_inbound
+            metadata.c2w[:,3]= new_o
+            metadata.c2w[1:3,3]=self.sphere_center[1:3]
+            def rad(x):
+                return math.radians(x)
+            angle=30
+            cosine = math.cos(rad(angle))
+            sine = math.sin(rad(angle))
+            rotation_matrix_x = torch.tensor([[1, 0, 0],
+                              [0, cosine, sine],
+                              [0, -sine, cosine]])
+            angle=-40
+            cosine = math.cos(rad(angle))
+            sine = math.sin(rad(angle))
+            rotation_matrix_y = torch.tensor([[cosine, 0, sine],
+                              [0, 1, 0],
+                              [-sine, 0, cosine]])
+            metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
+            metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
+            metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
+            #########################################################
+
 
             rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
 

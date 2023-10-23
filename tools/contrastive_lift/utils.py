@@ -89,13 +89,17 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
     all_labels = all_labels + 1 # -1,0,...,K-1 -> 0,1,...,K
     all_labels_onehot = np.zeros((all_labels.shape[0], centroids.shape[0]+1))
     all_labels_onehot[np.arange(all_labels.shape[0]), all_labels] = 1
-    all_points_instances = torch.from_numpy(all_labels_onehot).view(num_images, -1, centroids.shape[0]+1).to(device)
-    return all_points_instances, centroids
+    # all_points_instances = torch.from_numpy(all_labels_onehot).view(num_images, -1, centroids.shape[0]+1).to(device)
+    return None, centroids
 
 
 
 def assign_clusters(all_thing_features, all_points_semantics, all_centroids, device, num_images=None):
-    all_points_semantics = torch.cat(all_points_semantics, dim=0).argmax(dim=-1).cpu().numpy()
+    ##########2023 10 23    ,因为我们只有一个things，手动给一个维度
+    # all_centroids = all_centroids[np.newaxis,...]
+    ##########
+    
+    all_points_semantics = torch.cat(all_points_semantics, dim=0).cpu().numpy()
 
     thing_mask = all_thing_features[...,0] == -float('inf')
     features = all_thing_features[thing_mask]
@@ -108,28 +112,31 @@ def assign_clusters(all_thing_features, all_points_semantics, all_centroids, dev
     all_labels = np.zeros(all_thing_features.shape[0], dtype=np.int32)
     all_thing_labels = np.zeros(features.shape[0], dtype=np.int32)
     max_label = 0
-    for thing_cls in thing_classes:
-        thing_cls_mask = thing_semantics == thing_cls
-        thing_cls_features = features[thing_cls_mask] # features of this thing class
 
-        centroids = all_centroids[thing_cls]
-        distances = torch.zeros((thing_cls_features.shape[0], centroids.shape[0]), device=device)
-        chunksize = 10**7
-        thing_cls_features_reshaped = thing_cls_features.reshape(-1, thing_cls_features.shape[-1])
-        for i in range(0, thing_cls_features.shape[0], chunksize):
-            distances[i:i+chunksize] = torch.cdist(
-                torch.FloatTensor(thing_cls_features_reshaped[i:i+chunksize]).to(device),
-                torch.FloatTensor(centroids).to(device)
-            )
-        thing_cls_all_labels = torch.argmin(distances, dim=-1).cpu().numpy()
-        
-        # assign labels
-        # if thing_cls_all_labels=-1, keep it as -1
-        # else add max_label and assign it to thing_cls_all_labels
-        thing_cls_all_labels[thing_cls_all_labels != -1] += max_label
-        if np.any(thing_cls_all_labels != -1): # i.e. if there are clusters
-            max_label = thing_cls_all_labels.max() + 1
-        all_thing_labels[thing_cls_mask] = thing_cls_all_labels
+    # for thing_cls in thing_classes:
+    #######################################################  no loop 因为我们只有一类things
+    thing_cls_mask = thing_semantics == 1
+    thing_cls_features = features[thing_cls_mask] # features of this thing class
+
+    centroids = all_centroids
+    distances = torch.zeros((thing_cls_features.shape[0], centroids.shape[0]), device=device)
+    chunksize = 10**7
+    thing_cls_features_reshaped = thing_cls_features.reshape(-1, thing_cls_features.shape[-1])
+    for i in range(0, thing_cls_features.shape[0], chunksize):
+        distances[i:i+chunksize] = torch.cdist(
+            torch.FloatTensor(thing_cls_features_reshaped[i:i+chunksize]).to(device),
+            torch.FloatTensor(centroids).to(device)
+        )
+    thing_cls_all_labels = torch.argmin(distances, dim=-1).cpu().numpy()
+    
+    # assign labels
+    # if thing_cls_all_labels=-1, keep it as -1
+    # else add max_label and assign it to thing_cls_all_labels
+    thing_cls_all_labels[thing_cls_all_labels != -1] += max_label
+    if np.any(thing_cls_all_labels != -1): # i.e. if there are clusters
+        max_label = thing_cls_all_labels.max() + 1
+    all_thing_labels[thing_cls_mask] = thing_cls_all_labels
+    #######################################################
 
     all_labels[thing_mask] = all_thing_labels
     all_labels[~thing_mask] = -1 # assign -1 to stuff points
