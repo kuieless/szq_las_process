@@ -3,6 +3,7 @@ import sys
 os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 sys.path.append(".")
 
+import random
 import logging
 import argparse
 from plyfile import PlyData
@@ -138,13 +139,14 @@ def process_sample(args):
 def _get_opts():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_path', default='/data/jxchen/dataset/dji/longhua_ds_1011_copy',type=str, required=False)
-    parser.add_argument('--output_path', default='/data/jxchen/dataset/dji/longhua_ds_1011_copy/render_gt_ply_meshMask_m2fLabel_rightcolor',type=str, required=False)
-    parser.add_argument('--meshMask_path', default='/data/jxchen/dataset/dji/longhua_ds_1011_copy',type=str)
+    parser.add_argument('--dataset_path', default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',type=str, required=False)
+    parser.add_argument('--output_path', default='/data/jxchen/dataset/dji/Yingrenshi/render_instance_label',type=str, required=False)
+    parser.add_argument('--meshMask_path', default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',type=str)
     # parser.add_argument('--txt_path', default='/data/jxchen/dji/Yingrenshi/dji_labeled_segmented_ply.txt',type=str)
-    parser.add_argument('--ply_path', default='/data/jxchen/dataset/dji/longhua/gt_label_simplfied_reversed_fineReg_trans.txt', type=str)
-    parser.add_argument('--metaXml_path', default='/data/yuqi/Datasets/DJI/origin/Longhua_origin/block1/terra_obj_low/metadata.xml', type=str)
-    parser.add_argument('--down_scale', type=int, default=1, help='')
+    parser.add_argument('--ply_path', default='/data/jxchen/dataset/dji/Yingrenshi/dji_instance_labeled_segmented_ply.ply', type=str)
+    parser.add_argument('--metaXml_path', default='/data/yuqi/Datasets/DJI/origin/Yingrenshi_20230926_origin/terra_obj_M/metadata.xml', type=str)
+    parser.add_argument('--instance', type=bool, default=True, help='')
+    parser.add_argument('--down_scale', type=int, default=4, help='')
     parser.add_argument('--alpha_cover', default=True, action='store_false')
     parser.add_argument('--m2f_label', default=True, action='store_false')
 
@@ -210,14 +212,29 @@ def main(hparams):
 
         scalar_attribute = np.zeros((len(colors), 1), dtype=np.uint8)  # 初始化颜色数组
         # 定义标量到颜色的映射函数
-        color_mapping = {
-            (0, 0, 255): 2,   # 蓝色 (Blue), terrain,2
-            (0, 255, 0): 4,   # 绿色 (Green), vegetation,4
-            # 2: (128, 0, 128),  # 紫色 (Purple)
-            # 3: (255, 165, 0),  # 橙色 (Orange)
-            (255, 255, 0): 3,  # 黄色 (Yellow), vehicle,3
-            (255, 0, 0): 1,    # 红色 (Red), building,1
-        }
+        if not (hparams.instance):
+            color_mapping = {
+                (0, 0, 255): 2,   # 蓝色 (Blue), terrain,2
+                (0, 255, 0): 4,   # 绿色 (Green), vegetation,4
+                # 2: (128, 0, 128),  # 紫色 (Purple)
+                # 3: (255, 165, 0),  # 橙色 (Orange)
+                (255, 255, 0): 3,  # 黄色 (Yellow), vehicle,3
+                (255, 0, 0): 1,    # 红色 (Red), building,1
+            }
+        else:
+            random.seed(0)
+            def random_color():
+                # 生成随机的红、绿、蓝通道值
+                r = random.randint(1, 255)
+                g = random.randint(1, 255)
+                b = random.randint(1, 255)
+                return (r, g, b)
+
+            # 生成50种随机颜色
+            random_colors = [random_color() for _ in range(50)]
+            color_mapping = {random_colors[x]:(x+1) for x in range(50)}
+            color_mapping[(0,0,0)] = -1+1  # 原本-100对应0，0，0  现在令其对应-1然后+1
+
         for key, value in color_mapping.items():
             mask = np.all(colors == key, axis=1).reshape(-1, 1)
             scalar_attribute[mask] = value

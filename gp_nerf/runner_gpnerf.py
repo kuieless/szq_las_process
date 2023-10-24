@@ -766,9 +766,17 @@ class Runner:
                     self.writer.add_scalar('2_val_metric_average/pq', pq, train_iterations)
                     self.writer.add_scalar('2_val_metric_average/sq', sq, train_iterations)
                     self.writer.add_scalar('2_val_metric_average/rq', rq, train_iterations)
+                    
+                    metrics_each = val_metrics['metrics_each']
+                    # f.write(f'panoptic metrics_each: {metrics_each} \n')  
+                    
+                    for key in metrics_each['all']:
+                        avg_val = metrics_each['all'][key]
+                        message = ' {}: {}'.format(key, avg_val)
+                        f.write('{}\n'.format(message))
+                        print(message)
 
-
-                    del val_metrics['pq'],val_metrics['sq'],val_metrics['rq']
+                    del val_metrics['pq'],val_metrics['sq'],val_metrics['rq'], val_metrics['metrics_each']
                 for key in val_metrics:
                     avg_val = val_metrics[key] / len(self.val_items)
                     if key== 'val/psnr':
@@ -1071,12 +1079,16 @@ class Runner:
             instance_features = results[f'instance_map_{typ}']
             labels_gt = labels.type(torch.long)
 
-            instance_loss = self.calculate_instance_clustering_loss(instance_features, labels_gt)
+            # contrastive loss or slow-fast loss
+            instance_loss, concentration_loss = self.calculate_instance_clustering_loss(instance_features, labels_gt)
 
-            
+            # Concentration loss from contrastive lift
 
             metrics['instance_loss'] = instance_loss
-            metrics['loss'] += self.hparams.wgt_instance_loss * instance_loss
+
+            metrics['concentration_loss'] = concentration_loss
+
+            metrics['loss'] += self.hparams.wgt_instance_loss * (instance_loss)
 
         #semantic loss
         if self.hparams.enable_semantic and (not self.hparams.freeze_semantic):
@@ -1278,17 +1290,19 @@ class Runner:
                 return torch.tensor(0.0, device=instance_features.device)
             
             instance_loss = 0
-            
-            # ### Concentration loss
-            # intersecting_labels = fast_labels[torch.where(torch.isin(fast_labels, slow_labels))] # [num_centroids]
-            # for l in intersecting_labels:
-            #     mask_ = torch.logical_and(fast_mask, labels_gt==l)
-            #     centroid_ = slow_centroids[slow_labels==l] # [1, d]
-            #     # distance between fast features and slow centroid
-            #     dist_sq = torch.pow(fast_projections[mask_] - centroid_, 2).sum(dim=-1) # [num_points]
-            #     instance_loss += -1.0 * (torch.exp(-dist_sq / 1.0) * confidences[mask_]).mean()
-            # if intersecting_labels.shape[0] > 0: 
-            #     instance_loss /= intersecting_labels.shape[0]
+            concentration_loss = 0
+            ### Concentration loss
+            intersecting_labels = fast_labels[torch.where(torch.isin(fast_labels, slow_labels))] # [num_centroids]
+            for l in intersecting_labels:
+                mask_ = torch.logical_and(fast_mask, labels_gt==l)
+                centroid_ = slow_centroids[slow_labels==l] # [1, d]
+                # distance between fast features and slow centroid
+                dist_sq = torch.pow(fast_projections[mask_] - centroid_, 2).sum(dim=-1) # [num_points]
+                # loss += -1.0 * (torch.exp(-dist_sq / 1.0) * confidences[mask_]).mean()  # 1024 暂时不考虑confidence
+                concentration_loss += -1.0 * (torch.exp(-dist_sq / 1.0)).mean()  # 1024 暂时不考虑confidence
+
+            if intersecting_labels.shape[0] > 0: 
+                concentration_loss /= intersecting_labels.shape[0]
             
             ### Contrastive loss
             label_matrix = labels_gt[fast_mask].unsqueeze(1) == labels_gt[slow_mask].unsqueeze(0) # [num_points1, num_points2]
@@ -1299,7 +1313,7 @@ class Runner:
             prob_masked = torch.masked_select(prob, prob.ne(0))
             instance_loss += -torch.log(prob_masked).mean()
 
-        return instance_loss
+        return instance_loss, concentration_loss
 
     def render_zyq(self):
         if self.hparams.ckpt_path is not None:
@@ -1761,8 +1775,8 @@ class Runner:
                                 all_instance_features, all_thing_features = [], []
                                 all_points_rgb, all_points_semantics = [], []
                                 gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
-                            
-                            # indices_to_eval = indices_to_eval[:2]
+                            if self.hparams.debug:
+                                indices_to_eval = indices_to_eval[:2]
                             for i in main_tqdm(indices_to_eval):
                                 self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                                 # if i != 0:
@@ -1944,11 +1958,12 @@ class Runner:
                             path_pred_sem = str(experiment_path_current / 'pred_semantics')
                             path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
                             if Path(path_target_inst).exists():
-                                pq, sq, rq = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
-                                             path_target_sem, path_target_inst, image_size=[self.H, self.W])
+                                pq, sq, rq, metrics_each = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                                             path_target_sem, path_target_inst, image_size=[self.W, self.H])
                                 val_metrics['pq'] = pq
                                 val_metrics['sq'] = sq
                                 val_metrics['rq'] = rq
+                                val_metrics['metrics_each']=metrics_each
                             print(f"all_centroids: {all_centroids.shape}")
                             
 
@@ -2492,7 +2507,7 @@ class Runner:
 
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
             ###############3 . 俯视图，  render0.3视角下第一张图片
-            if self.hparams.render_zyq and self.hparams.enable_instance:
+            if self.hparams.render_zyq: # and self.hparams.enable_instance:
                 image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
                 ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
                 ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]

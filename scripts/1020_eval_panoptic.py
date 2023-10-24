@@ -43,19 +43,30 @@ torch.cuda.set_device(6)
 def hello() -> None:
     H,W = 912,1368
     dataset_path='/data/yuqi/Datasets/DJI/Yingrenshi_20230926'
-    path_target_sem = os.path.join(dataset_path, 'val', 'labels_gt')
-    path_target_inst = os.path.join(dataset_path, 'val', 'instances_mask_test')
-    path_pred_sem = os.path.join(dataset_path, 'val', 'labels_gt')
-    path_pred_inst = os.path.join(dataset_path, 'val', 'instances_mask_test')
+    # path_target_sem = os.path.join(dataset_path, 'val', 'labels_gt')
+    # path_target_inst = os.path.join(dataset_path, 'val', 'instances_mask_test')
+    # path_pred_sem = os.path.join(dataset_path, 'val', 'labels_gt')
+    # path_pred_inst = os.path.join(dataset_path, 'val', 'instances_mask_test')
 
-    # path_pred_sem = str(experiment_path_current / 'pred_semantics')
-    # path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
+
+    path_target_sem = os.path.join(dataset_path, 'val', 'labels_gt')
+    path_target_inst = os.path.join(dataset_path, 'val', 'instances_gt')
+
+    experiment_path_current = '/data/yuqi/code/GP-NeRF-semantic/logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/12/eval_200000'
+    path_pred_sem = os.path.join(experiment_path_current, 'pred_semantics')
+    path_pred_inst = os.path.join(experiment_path_current, 'pred_surrogateid')
+
     if Path(path_target_inst).exists():
-        pq, sq, rq = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
-                        path_target_sem, path_target_inst, image_size=[H,W])
+        pq, sq, rq, metrics_each = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                        path_target_sem, path_target_inst, image_size=[W,H])
         # val_metrics['pq'] = pq
         # val_metrics['sq'] = sq
         # val_metrics['rq'] = rq
+        for key in metrics_each['all']:
+            avg_val = metrics_each['all'][key]
+            message = ' {}: {}'.format(key, avg_val)
+            print(message)
+
     print(f"pq, sq, rq: {pq}, {sq}, {rq}")
     print('done')
 

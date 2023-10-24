@@ -211,7 +211,14 @@ def _panoptic_quality_compute(
             n=len(stuff),
         ),
     )
-    return metrics
+    metrics_each = dict(
+        all=dict(
+            pq=panoptic_quality,
+            rq=recognition_quality,
+            sq=segmentation_quality,
+            n=len(things) + len(stuff),
+        ))
+    return metrics, metrics_each
 
 
 def get_non_robust_classes_for_image(pred_sem, target_sem, robustness_thres=0.005):
@@ -243,8 +250,8 @@ def panoptic_quality(
     iou_sum, true_positives, false_positives, false_negatives = _panoptic_quality_update(
         flatten_preds, flatten_target, cat_id_to_continuous_id, void_color
     )
-    results = _panoptic_quality_compute(things, stuff, iou_sum, true_positives, false_positives, false_negatives)
-    return results["all"]["pq"], results["all"]["sq"], results["all"]["rq"]
+    results, metrics_each = _panoptic_quality_compute(things, stuff, iou_sum, true_positives, false_positives, false_negatives)
+    return results["all"]["pq"], results["all"]["sq"], results["all"]["rq"], metrics_each
 
 
 def panoptic_quality_match(
