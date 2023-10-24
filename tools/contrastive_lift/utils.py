@@ -40,15 +40,21 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
     centers_filtered = features[outlier_mask]
     print("Num centers pre-filtering: ", features.shape[0], features.min(axis=0), features.max(axis=0))
     print("Num centers post-filtering: ", centers_filtered.shape[0], centers_filtered.min(axis=0), centers_filtered.max(axis=0))
-    rescaling_bias = centers_filtered.min(axis=0)
-    rescaling_factor = 1/(centers_filtered.max(axis=0) - centers_filtered.min(axis=0))
-    centers_rescaled = (centers_filtered - rescaling_bias) * rescaling_factor
-    # perform clustering
-    fps_points_indices = np.random.choice(centers_rescaled.shape[0], num_points, replace=False)
-
-    fps_points_rescaled = centers_rescaled[fps_points_indices]
     
-    if all_centroids is not None:
+    ##### 1. 下面对聚类和聚类中心进行了rescale，更改了位置和尺度，对全局有影响， 所以换成新的写法
+    # rescaling_bias = centers_filtered.min(axis=0)
+    # rescaling_factor = 1/(centers_filtered.max(axis=0) - centers_filtered.min(axis=0))
+    # centers_rescaled = (centers_filtered - rescaling_bias) * rescaling_factor
+    # # perform clustering
+    # fps_points_indices = np.random.choice(centers_rescaled.shape[0], num_points, replace=False)
+    # fps_points_rescaled = centers_rescaled[fps_points_indices]
+
+    ##### NOTE: 2. 不需要rescale， 但变量保留原始名称 'fps_points_rescaled'
+    fps_points_indices = np.random.choice(centers_filtered.shape[0], num_points, replace=False)
+    fps_points_rescaled = centers_filtered[fps_points_indices]
+
+    
+    if all_centroids is None:
         
         if not use_dbscan:
             t1_ms = time.time()
@@ -64,8 +70,11 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
             print(f"MeanShift took {t2_ms-t1_ms} seconds")
             labels = clustering.labels_
             centroids = clustering.cluster_centers_
+            # all_labels = clustering.predict(
+            #     (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
+            # )
             all_labels = clustering.predict(
-                (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
+                all_thing_features.reshape(-1, all_thing_features.shape[-1])
             )
         else: # Use HDBSCAN
             t1_dbscan = time.time()
@@ -78,7 +87,9 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
                                 for cluster_id in np.unique(labels) if cluster_id != -1])
             distances = torch.zeros((all_thing_features.shape[0], centroids.shape[0]), device=device)
             chunksize = 10**7
-            all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
+            # all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
+            all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]))
+            
             for i in range(0, all_thing_features.shape[0], chunksize):
                 distances[i:i+chunksize] = torch.cdist(
                     torch.FloatTensor(all_thing_features_rescaled[i:i+chunksize]).to(device),
@@ -90,7 +101,8 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
             centroids=all_centroids
             distances = torch.zeros((all_thing_features.shape[0], centroids.shape[0]), device=device)
             chunksize = 10**7
-            all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
+            # all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]) - rescaling_bias) * rescaling_factor
+            all_thing_features_rescaled = (all_thing_features.reshape(-1, all_thing_features.shape[-1]))
             for i in range(0, all_thing_features.shape[0], chunksize):
                 distances[i:i+chunksize] = torch.cdist(
                     torch.FloatTensor(all_thing_features_rescaled[i:i+chunksize]).to(device),

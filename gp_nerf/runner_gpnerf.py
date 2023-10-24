@@ -888,7 +888,7 @@ class Runner:
         all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
         
         experiment_path_current = self.experiment_path / "eval_{}".format(train_iterations)
-        output_dir = str(experiment_path_current / 'panoptic')
+        output_dir = str(experiment_path_current)
         if not os.path.exists(output_dir):
             Path(output_dir).mkdir(parents=True)
             
@@ -1447,33 +1447,18 @@ class Runner:
                 # instance clustering
                 all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
                 all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
-                output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
+                output_dir = str(experiment_path_current / 'panoptic')
                 if not os.path.exists(output_dir):
                     Path(output_dir).mkdir()
-                np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                # np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                # np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                # np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
                 if self.hparams.cached_centroids_type == 'all':
                     all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
                                                             device=self.device, num_images=len(indices_to_eval))
                 elif self.hparams.cached_centroids_type == 'test':
-                    if self.hparams.cached_centroids_path is not None:
-                        with open(self.hparams.cached_centroids_path, 'rb') as f:
-                            all_centroids = pickle.load(f)
-                        all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                    num_images=len(indices_to_eval), use_dbscan=True, all_centroids=all_centroids)
-    
-                    # else:
-                    #     all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                    #                                 num_images=len(indices_to_eval), use_dbscan=True)
-                    #     output_dir = str(experiment_path_current / 'panoptic')
-                    #     if not os.path.exists(output_dir):
-                    #         Path(output_dir).mkdir(parents=True)
-                            
-                    #     all_centroids_path = os.path.join(output_dir, f"all_centroids.npy")
-                    #     with open(all_centroids_path, "wb") as file:
-                    #         pickle.dump(all_centroids, file)
-                    #     print(f"save all_centroids_cache to : {all_centroids_path}")
+                    all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                num_images=len(indices_to_eval), use_dbscan=True, all_centroids=all_centroids)
 
                 if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                     Path(str(experiment_path_current / 'pred_semantics')).mkdir()
@@ -1500,7 +1485,7 @@ class Runner:
                     grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
                     grid = (grid * 255).cpu().numpy().astype(np.uint8)
                     
-                    Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
+                    Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % save_i)))
 
             return val_metrics
             
@@ -1889,35 +1874,34 @@ class Runner:
                             # instance clustering
                             all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
                             all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
-                            output_dir = str(experiment_path_current / 'val_rgbs' / 'panoptic')
+                            output_dir = str(experiment_path_current / 'panoptic')
                             if not os.path.exists(output_dir):
                                 Path(output_dir).mkdir()
-                            np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                            np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                            np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
-                            np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
-                            np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
-                            np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
+                            # np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                            # np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                            # np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                            # np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
+                            # np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
+                            # np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
 
                             
                             if self.hparams.cached_centroids_type == 'all':
                                 all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
                                                                         device=self.device, num_images=len(indices_to_eval))
                             elif self.hparams.cached_centroids_type == 'test':
-                                if self.hparams.cached_centroids_path is not None:
-                                    with open(self.hparams.cached_centroids_path, 'rb') as f:
-                                        all_centroids = pickle.load(f)
+                                if all_centroids is not None:
+                                    
                                     all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
                                                                 num_images=len(indices_to_eval), use_dbscan=True, all_centroids=all_centroids)
                 
                                 else:
                                     all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
                                                                 num_images=len(indices_to_eval), use_dbscan=True)
-                                    output_dir = str(experiment_path_current / 'panoptic')
+                                    output_dir = str(experiment_path_current)
                                     if not os.path.exists(output_dir):
                                         Path(output_dir).mkdir(parents=True)
                                         
-                                    all_centroids_path = os.path.join(output_dir, f"all_centroids.npy")
+                                    all_centroids_path = os.path.join(output_dir, f"test_centroids.npy")
                                     with open(all_centroids_path, "wb") as file:
                                         pickle.dump(all_centroids, file)
                                     print(f"save all_centroids_cache to : {all_centroids_path}")
@@ -1929,7 +1913,8 @@ class Runner:
 
                             for save_i in range(len(indices_to_eval)):
                                 p_rgb = all_points_rgb[save_i]
-                                p_semantics = all_points_semantics[save_i]
+                                # p_semantics = all_points_semantics[save_i]
+                                p_semantics = gt_points_semantic[save_i]
                                 p_instances = all_points_instances[save_i]
                                 gt_rgb = gt_points_rgb[save_i]
                                 gt_semantics = gt_points_semantic[save_i]
@@ -1950,7 +1935,7 @@ class Runner:
                                 grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
                                 grid = (grid * 255).cpu().numpy().astype(np.uint8)
                                 
-                                Image.fromarray(grid).save(str(experiment_path_current / 'val_rgbs' / 'panoptic' / ("%06d.jpg" % save_i)))
+                                Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % save_i)))
                             
                             # calculate the panoptic quality
                             
