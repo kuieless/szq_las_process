@@ -41,7 +41,7 @@ def calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, path_targe
         target_ = torch.cat([img_target_sem, img_target_inst], dim=1).reshape(-1, 2)
         pred.append(pred_)
         target.append(target_)
-    pq, sq, rq, metrics_each = panoptic_quality(torch.cat(pred, dim=0).cuda(), torch.cat(target, dim=0).cuda(), things, stuff, allow_unknown_preds_category=True)
+    pq, sq, rq, metrics_each,  = panoptic_quality(torch.cat(pred, dim=0).cuda(), torch.cat(target, dim=0).cuda(), things, stuff, allow_unknown_preds_category=True)
     return pq.item(), sq.item(), rq.item(), metrics_each
 
 

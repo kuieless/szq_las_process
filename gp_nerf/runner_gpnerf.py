@@ -1465,9 +1465,9 @@ class Runner:
                 output_dir = str(experiment_path_current / 'panoptic')
                 if not os.path.exists(output_dir):
                     Path(output_dir).mkdir()
-                # np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                # np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                # np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
                 if self.hparams.cached_centroids_type == 'all':
                     all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
                                                             device=self.device, num_images=len(indices_to_eval))

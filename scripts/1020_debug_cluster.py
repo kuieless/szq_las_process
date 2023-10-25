@@ -34,7 +34,7 @@ from torchvision.utils import make_grid
 from gp_nerf.eval_utils import calculate_panoptic_quality_folders
 
 
-# torch.cuda.set_device(5)
+torch.cuda.set_device(7)
 
 
 
@@ -43,9 +43,10 @@ from gp_nerf.eval_utils import calculate_panoptic_quality_folders
 def hello() -> None:
     device='cuda'
     bandwidth=0.2
-    num_points=50000
+    num_points=500000
     use_dbscan=True
     use_silverman=False
+    cluster_size=5000
     output=f'1024_panoptic'
     Path(os.path.join('zyq',output)).mkdir(exist_ok=True)
     Path(os.path.join('zyq',output,'pred_semantics')).mkdir(exist_ok=True)
@@ -54,7 +55,7 @@ def hello() -> None:
     Path(os.path.join('zyq',output,'gt_surrogateid')).mkdir(exist_ok=True)
 
 
-    output_dir = 'logs_dji/1024_yingrenshi_density_depth_hash22_instance_freeze_test2/1/eval_10000/panoptic'
+    output_dir = 'logs_dji/1024_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_test21/1/eval_100000/panoptic'
     all_thing_features = np.load(os.path.join(output_dir, "all_thing_features.npy"))
     all_points_semantics = np.load(os.path.join(output_dir, "all_points_semantics.npy"))
     all_points_rgb = np.load(os.path.join(output_dir, "all_points_rgb.npy"))
@@ -71,7 +72,8 @@ def hello() -> None:
     thing_classes = [1]
     
     all_points_instances, centroids = cluster(all_thing_features, bandwidth=bandwidth, device=device, num_images=15, 
-                                   num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan)
+                                   num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan,cluster_size=cluster_size)
+    print(f"centroids shape: {centroids.shape}")
     save_i=0
     # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)
     for save_i in range(15):
@@ -116,8 +118,16 @@ def hello() -> None:
     path_pred_sem = os.path.join('zyq',output,'pred_semantics')
     path_pred_inst = os.path.join('zyq',output,'pred_surrogateid')
     if Path(path_target_inst).exists():
-        pq, sq, rq = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
-                        path_target_sem, path_target_inst, image_size=[H, W])
+        pq, sq, rq, metrics_each = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                        path_target_sem, path_target_inst, image_size=[W,H])
+        # val_metrics['pq'] = pq
+        # val_metrics['sq'] = sq
+        # val_metrics['rq'] = rq
+        for key in metrics_each['all']:
+            avg_val = metrics_each['all'][key]
+            message = ' {}: {}'.format(key, avg_val)
+            print(message)
+
         print(f'\n pq, sq, rq: {pq:.5f} {sq:.5f} {rq:.5f}\n')  
     
         with(Path(os.path.join('zyq',output, 'metric.txt'))).open('w') as f:

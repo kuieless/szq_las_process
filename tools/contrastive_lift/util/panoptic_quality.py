@@ -217,6 +217,10 @@ def _panoptic_quality_compute(
             rq=recognition_quality,
             sq=segmentation_quality,
             n=len(things) + len(stuff),
+            iou_sum=iou_sum,
+            true_positives=true_positives,
+            false_positives=false_positives,
+            false_negatives=false_negatives,
         ))
     return metrics, metrics_each
 
@@ -250,6 +254,11 @@ def panoptic_quality(
     iou_sum, true_positives, false_positives, false_negatives = _panoptic_quality_update(
         flatten_preds, flatten_target, cat_id_to_continuous_id, void_color
     )
+    # print(f'iou_sum: {iou_sum}')
+    # print(f'true_positives: {true_positives}')
+    # print(f'false_positives: {false_positives}')
+    # print(f'false_negatives: {false_negatives}')
+
     results, metrics_each = _panoptic_quality_compute(things, stuff, iou_sum, true_positives, false_positives, false_negatives)
     return results["all"]["pq"], results["all"]["sq"], results["all"]["rq"], metrics_each
 
