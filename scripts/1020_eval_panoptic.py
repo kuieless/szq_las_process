@@ -50,6 +50,7 @@ def hello() -> None:
 
 
     path_target_sem = os.path.join(dataset_path, 'val', 'labels_gt')
+    # path_target_inst = os.path.join(dataset_path, 'val', 'instances_gt_noremapping')
     path_target_inst = os.path.join(dataset_path, 'val', 'instances_gt')
 
     experiment_path_current = '/data/yuqi/code/GP-NeRF-semantic/logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/12/eval_200000'

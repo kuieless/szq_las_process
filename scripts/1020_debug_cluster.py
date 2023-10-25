@@ -42,11 +42,11 @@ from gp_nerf.eval_utils import calculate_panoptic_quality_folders
 
 def hello() -> None:
     device='cuda'
-    bandwidth=0.15
+    bandwidth=0.2
     num_points=50000
     use_dbscan=True
     use_silverman=False
-    output=f'1022_panoptic_{bandwidth}_{num_points}_use_dbscan'
+    output=f'1024_panoptic'
     Path(os.path.join('zyq',output)).mkdir(exist_ok=True)
     Path(os.path.join('zyq',output,'pred_semantics')).mkdir(exist_ok=True)
     Path(os.path.join('zyq',output,'pred_surrogateid')).mkdir(exist_ok=True)
@@ -54,7 +54,7 @@ def hello() -> None:
     Path(os.path.join('zyq',output,'gt_surrogateid')).mkdir(exist_ok=True)
 
 
-    output_dir = 'logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/1/eval_200000/val_rgbs/panoptic'
+    output_dir = 'logs_dji/1024_yingrenshi_density_depth_hash22_instance_freeze_test2/1/eval_10000/panoptic'
     all_thing_features = np.load(os.path.join(output_dir, "all_thing_features.npy"))
     all_points_semantics = np.load(os.path.join(output_dir, "all_points_semantics.npy"))
     all_points_rgb = np.load(os.path.join(output_dir, "all_points_rgb.npy"))
@@ -70,7 +70,7 @@ def hello() -> None:
     H, W = 912, 1368
     thing_classes = [1]
     
-    all_points_instances = cluster(all_thing_features, bandwidth=bandwidth, device=device, num_images=15, 
+    all_points_instances, centroids = cluster(all_thing_features, bandwidth=bandwidth, device=device, num_images=15, 
                                    num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan)
     save_i=0
     # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)

@@ -115,11 +115,13 @@ def get_opts_base():
     parser.add_argument('--num_instance_classes', type=int, default=25, help='')
     parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')
     parser.add_argument('--freeze_semantic', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-    parser.add_argument('--instance_name', type=str, default='instances_gt', choices=['instances_gt', 'instances_mask'], help='')
+    parser.add_argument('--instance_name', type=str, default='instances_gt', choices=['instances_gt', 'instances_gt_noremapping', 'instances_mask'], help='')
     parser.add_argument('--instance_loss_mode', type=str, default='slow_fast', choices=['contrastive', 'linear_assignment', 'slow_fast'], help='')
     parser.add_argument('--cached_centroids_path', type=str, default=None, help='path towards serialized model checkpoint')
     parser.add_argument('--cached_centroids_type', type=str, default='test', choices=['test', 'all'], help='')
-
+    parser.add_argument('--use_dbscan', default=True, type=eval, choices=[True, False], help='')
+    
+    
     
     
 

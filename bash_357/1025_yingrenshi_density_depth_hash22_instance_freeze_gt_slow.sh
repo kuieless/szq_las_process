@@ -28,9 +28,8 @@ ckpt_path=logs_dji/1018_yingrenshi_density_depth_hash22_far0.3_car2/0/continue15
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 lr=0.01
-exp_name=logs_dji/1024_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_remove
+exp_name=logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow
 instance_name=instances_gt
-slow_fast_mode=True
 
 log2_hashmap_size=22
 desired_resolution=8192

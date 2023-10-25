@@ -1088,7 +1088,7 @@ class Runner:
 
             metrics['concentration_loss'] = concentration_loss
 
-            metrics['loss'] += self.hparams.wgt_instance_loss * (instance_loss)
+            metrics['loss'] += self.hparams.wgt_instance_loss * (instance_loss + concentration_loss)
 
         #semantic loss
         if self.hparams.enable_semantic and (not self.hparams.freeze_semantic):
@@ -1252,6 +1252,8 @@ class Runner:
         return metrics, bg_nerf_rays_present
 
     def calculate_instance_clustering_loss(self, instance_features, labels_gt):
+        instance_loss = 0
+        concentration_loss = 0
         if self.hparams.instance_loss_mode == "linear_assignment":
             pass
         
@@ -1289,8 +1291,7 @@ class Runner:
                 # This happens when labels_gt of shape 1
                 return torch.tensor(0.0, device=instance_features.device)
             
-            instance_loss = 0
-            concentration_loss = 0
+            
             ### Concentration loss
             intersecting_labels = fast_labels[torch.where(torch.isin(fast_labels, slow_labels))] # [num_centroids]
             for l in intersecting_labels:
@@ -1472,7 +1473,7 @@ class Runner:
                                                             device=self.device, num_images=len(indices_to_eval))
                 elif self.hparams.cached_centroids_type == 'test':
                     all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                num_images=len(indices_to_eval), use_dbscan=True, all_centroids=all_centroids)
+                                                num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
 
                 if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                     Path(str(experiment_path_current / 'pred_semantics')).mkdir()
@@ -1636,7 +1637,6 @@ class Runner:
                         self.val_items=self.val_items[:19]
                     elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
                         self.val_items=self.val_items[:10]
-                    # self.val_items=self.val_items[:2]
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
                     # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
@@ -1748,7 +1748,6 @@ class Runner:
                                 self.val_items=self.val_items[:19]
                             elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
                                 self.val_items=self.val_items[:10]
-                            # self.val_items=self.val_items[:2]
                             indices_to_eval = np.arange(len(self.val_items))
                         elif val_type == 'train':
                             indices_to_eval = np.arange(370,490)  
@@ -1777,6 +1776,8 @@ class Runner:
                                 gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
                             if self.hparams.debug:
                                 indices_to_eval = indices_to_eval[:2]
+                                # indices_to_eval = indices_to_eval[:2]
+                            
                             for i in main_tqdm(indices_to_eval):
                                 self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
                                 # if i != 0:
@@ -1891,12 +1892,12 @@ class Runner:
                             output_dir = str(experiment_path_current / 'panoptic')
                             if not os.path.exists(output_dir):
                                 Path(output_dir).mkdir()
-                            # np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                            # np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                            # np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
-                            # np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
-                            # np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
-                            # np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
+                            np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                            np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                            np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
+                            np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
 
                             
                             if self.hparams.cached_centroids_type == 'all':
@@ -1906,11 +1907,11 @@ class Runner:
                                 if all_centroids is not None:
                                     
                                     all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                                num_images=len(indices_to_eval), use_dbscan=True, all_centroids=all_centroids)
+                                                                num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
                 
                                 else:
                                     all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                                num_images=len(indices_to_eval), use_dbscan=True)
+                                                                num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
                                     output_dir = str(experiment_path_current)
                                     if not os.path.exists(output_dir):
                                         Path(output_dir).mkdir(parents=True)
@@ -1997,7 +1998,6 @@ class Runner:
                                 self.val_items=self.val_items[:19]
                             elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
                                 self.val_items=self.val_items[:10]
-                            # self.val_items=self.val_items[:2]
                             indices_to_eval = np.arange(len(self.val_items))
                         elif val_type == 'train':
                             indices_to_eval = np.arange(800,1200)  
