@@ -8,9 +8,9 @@ config_file=configs/yingrenshi.yaml
 
 
 batch_size=8192
-train_iterations=200000
-val_interval=10000
-ckpt_interval=10000
+train_iterations=100000
+val_interval=20000
+ckpt_interval=20000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf
 dataset_type=memory_depth_dji_instance
@@ -28,7 +28,7 @@ ckpt_path=logs_dji/1018_yingrenshi_density_depth_hash22_far0.3_car2/0/continue15
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
 lr=0.01
-exp_name=logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow
+exp_name=logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle
 instance_name=instances_gt
 
 log2_hashmap_size=22

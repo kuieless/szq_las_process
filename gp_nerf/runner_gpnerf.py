@@ -458,6 +458,12 @@ class Runner:
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
             self.W = dataset.W
+        elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview import MemoryDataset
+            dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
+            self.H = dataset.H
+            self.W = dataset.W
         elif self.hparams.dataset_type == 'sam':
             if self.hparams.add_random_rays:
                 from gp_nerf.datasets.memory_dataset_sam_random import MemoryDataset_SAM
@@ -544,7 +550,7 @@ class Runner:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type == 'memory_depth_dji_instance':
-                    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
+                    data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 else:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=16,
@@ -2578,7 +2584,7 @@ class Runner:
             for i in range(0, rays.shape[0], self.hparams.image_pixel_batch_size):
                 if self.hparams.depth_dji_type == "mesh" and self.hparams.sampling_mesh_guidance:
                     gt_depths = metadata.load_depth_dji().view(-1).to(self.device)
-                    gt_depths = gt_depths / depth_scale
+                    gt_depths = gt_depths / depth_scale    # 这里读的是depth mesh， 存储的是z分量
                 else: 
                     gt_depths = None
                 result_batch, _ = render_rays(nerf=nerf, bg_nerf=bg_nerf,
@@ -2852,8 +2858,6 @@ class Runner:
                                         metadata_item.intrinsics[3],
                                         self.hparams.center_pixels,
                                         'cpu')
-            # depth_scale = torch.abs(directions[:, :, 2:3]) # z-axis's values
-            # depth_map = (depth_map * depth_scale).numpy()   #  这里depth_dji_mesh出来的深度可以直接用，表示z
             depth_map = depth_map.numpy()
             K1 = metadata_item.intrinsics
             K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
@@ -2989,8 +2993,6 @@ class Runner:
                                         metadata_item.intrinsics[3],
                                         self.hparams.center_pixels,
                                         'cpu')
-            # depth_scale = torch.abs(directions[:, :, 2:3]) # z-axis's values
-            # depth_map = (depth_map * depth_scale).numpy()   #  这里depth_dji_mesh出来的深度可以直接用，表示z
             depth_map = depth_map.numpy()
             K1 = metadata_item.intrinsics
             K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
@@ -3153,8 +3155,6 @@ class Runner:
         #                                 metadata_item.intrinsics[3],
         #                                 self.hparams.center_pixels,
         #                                 'cpu')
-        #     depth_scale = torch.abs(directions[:, :, 2:3]) # z-axis's values
-        #     # depth_map = (depth_map * depth_scale).numpy()   #  这里depth_dji_mesh出来的深度可以直接用，表示z
         #     depth_map = depth_map.numpy()
         #     K1 = metadata_item.intrinsics
         #     K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
