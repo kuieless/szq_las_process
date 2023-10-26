@@ -776,6 +776,11 @@ class Runner:
                     self.writer.add_scalar('2_val_metric_average/sq', sq, train_iterations)
                     self.writer.add_scalar('2_val_metric_average/rq', rq, train_iterations)
                     
+                    all_centroids_shape = val_metrics['all_centroids_shape']
+                    self.writer.add_scalar('2_val_metric_average/all_centroids_shape', all_centroids_shape[0], train_iterations)
+                    f.write('all_centroids_shape: {}\n'.format(all_centroids_shape))
+
+                    
                     metrics_each = val_metrics['metrics_each']
                     # f.write(f'panoptic metrics_each: {metrics_each} \n')  
                     
@@ -785,7 +790,7 @@ class Runner:
                         f.write('{}\n'.format(message))
                         print(message)
 
-                    del val_metrics['pq'],val_metrics['sq'],val_metrics['rq'], val_metrics['metrics_each']
+                    del val_metrics['pq'],val_metrics['sq'],val_metrics['rq'], val_metrics['metrics_each'], val_metrics['all_centroids_shape']
                 for key in val_metrics:
                     avg_val = val_metrics[key] / len(self.val_items)
                     if key== 'val/psnr':
@@ -1802,7 +1807,7 @@ class Runner:
                                     metadata_item = self.train_items[i]
 
                                 if self.hparams.enable_instance:
-                                    gt_instance_label = metadata_item.load_instance()
+                                    gt_instance_label = metadata_item.load_instance_gt()
                                     gt_points_instance.append(gt_instance_label.view(-1))
                                 
                                 results, _ = self.render_image(metadata_item, train_index)
@@ -1995,6 +2000,7 @@ class Runner:
                                 val_metrics['sq'] = sq
                                 val_metrics['rq'] = rq
                                 val_metrics['metrics_each']=metrics_each
+                                val_metrics['all_centroids_shape'] = all_centroids.shape
                             print(f"all_centroids: {all_centroids.shape}")
                             
 
