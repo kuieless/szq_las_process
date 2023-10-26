@@ -44,15 +44,16 @@ def _get_train_opts() -> Namespace:
     parser.add_argument('--num_points', type=int, default=500000,required=False, help='')
     parser.add_argument('--cluster_size', type=int, default=500,required=False, help='experiment name')
     
-    # parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/14/eval_200000/panoptic/all_thing_features.npy',required=False, help='experiment name')
-    # parser.add_argument('--all_thing_features_fushi', type=str, default='logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/14/eval_200000_fushi/panoptic/all_thing_features.npy',required=False, help='experiment name')
-    # parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/14/eval_200000/panoptic',required=False, help='experiment name')
-    # parser.add_argument('--sem_rgb_fushi', type=str, default='logs_dji/1021_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/14/eval_200000_fushi/panoptic',required=False, help='experiment name')
-    parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/panoptic',required=False, help='experiment name')
-    parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_dim3/0/eval_140000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_dim3/0/eval_140000/panoptic',required=False, help='experiment name')
+    parser.add_argument('--all_thing_features_fushi', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_dim3/1/eval_140000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    parser.add_argument('--sem_rgb_fushi', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_dim3/1/eval_140000/panoptic',required=False, help='experiment name')
     
-    parser.add_argument('--sem_rgb_fushi', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/1/eval_170000/panoptic',required=False, help='experiment name')
-    parser.add_argument('--all_thing_features_fushi', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/1/eval_170000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    # parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/panoptic',required=False, help='experiment name')
+    # parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    
+    # parser.add_argument('--sem_rgb_fushi', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/1/eval_170000/panoptic',required=False, help='experiment name')
+    # parser.add_argument('--all_thing_features_fushi', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/1/eval_170000/panoptic/all_thing_features.npy',required=False, help='experiment name')
         
     return parser.parse_args()
 
@@ -122,7 +123,7 @@ def hello(hparams: Namespace) -> None:
             plt.title('LDA Visualization')
 
             # 保存图像为文件（例如，PNG格式）
-            plt.savefig(os.path.join('zyq_cluster', output,'lda_visualization.png'))
+            plt.savefig(os.path.join('zyq_cluster', output,f'lda_visualization_{num_points}point_clustersize{cluster_size}.png'))
 
             # 关闭图形窗口（如果不需要显示图形界面）
             plt.close()

@@ -1926,6 +1926,22 @@ class Runner:
                             if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
                                 Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
 
+
+
+                            # from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+                            # import matplotlib.pyplot as plt
+                            # lda = LinearDiscriminantAnalysis(n_components=2)
+                            # lda_result = lda.fit_transform(all_thing_features[:,1:], all_points_instances.view(-1,all_points_instances.shape[-1]).argmax(dim=1).cpu().numpy())
+                            # plt.scatter(lda_result[:, 0], lda_result[:, 1], c=p_instances.argmax(dim=1).cpu().numpy(), cmap='viridis')
+                            # plt.xlabel('LDA Component 1')
+                            # plt.ylabel('LDA Component 2')
+                            # plt.title('LDA Visualization')
+                            # # 保存图像为文件（例如，PNG格式）
+                            # plt.savefig(os.path.join(str(experiment_path_current / 'panoptic' / ("lda_visualization.jpg"))))
+                            # # 关闭图形窗口（如果不需要显示图形界面）
+                            # plt.close()
+
+
                             for save_i in range(len(indices_to_eval)):
                                 p_rgb = all_points_rgb[save_i]
                                 # p_semantics = all_points_semantics[save_i]
