@@ -197,8 +197,9 @@ def render_rays(nerf: nn.Module,
     if hparams.check_depth:
         visualize_points_list = [xyz_coarse_fg.view(-1, 3).cpu().numpy()]
         visualize_points(visualize_points_list)
-        return
-
+        print('save the sampling points.')
+        SystemExit
+    
 
     if hparams.contract_new:
         xyz_coarse_fg = contract_to_unisphere_new(xyz_coarse_fg, hparams)

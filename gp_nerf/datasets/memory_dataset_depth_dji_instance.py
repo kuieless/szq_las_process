@@ -106,7 +106,7 @@ class MemoryDataset(Dataset):
             # return None
         # 从非零值的索引中随机采样
         sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
-        if sampling_idx.shape[0] ==0:
+        if sampling_idx.shape[0] == 0 or sampling_idx.shape[0] < self.hparams.batch_size:
             return None
 
         # total_pixels = self._rgbs[idx].shape[0]

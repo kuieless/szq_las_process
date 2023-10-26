@@ -41,13 +41,13 @@ from torch.utils.tensorboard import SummaryWriter
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--num_points', type=int, default=500000,required=False, help='')
+    parser.add_argument('--num_points', type=int, default=50000,required=False, help='')
     parser.add_argument('--cluster_size', type=int, default=500,required=False, help='experiment name')
     
-    parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_dim3/0/eval_140000/panoptic/all_thing_features.npy',required=False, help='experiment name')
-    parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_dim3/0/eval_140000/panoptic',required=False, help='experiment name')
-    parser.add_argument('--all_thing_features_fushi', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_dim3/1/eval_140000/panoptic/all_thing_features.npy',required=False, help='experiment name')
-    parser.add_argument('--sem_rgb_fushi', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_dim3/1/eval_140000/panoptic',required=False, help='experiment name')
+    parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle/0/eval_80000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle/0/eval_80000/panoptic',required=False, help='experiment name')
+    parser.add_argument('--all_thing_features_fushi', type=str, default='logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle/2/eval_80000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    parser.add_argument('--sem_rgb_fushi', type=str, default='logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle/2/eval_80000/panoptic',required=False, help='experiment name')
     
     # parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/panoptic',required=False, help='experiment name')
     # parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/panoptic/all_thing_features.npy',required=False, help='experiment name')
@@ -68,7 +68,7 @@ def hello(hparams: Namespace) -> None:
     
 
     # for cluster_size in [500,1000,2000,3000,4000,5000,7000,10000]:
-    for cluster_size in [1000]:
+    for cluster_size in [500,1000,2000]:
         device='cuda'
         bandwidth=0.2
         use_dbscan=True

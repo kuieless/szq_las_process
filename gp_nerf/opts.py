@@ -13,7 +13,7 @@ def get_opts_base():
     
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['memory_depth_dji_instance','memory_depth_dji','sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff', 'llff_sa3d', 'mega_sa3d'],
+    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['memory_depth_dji_instance_crossview','memory_depth_dji_instance','memory_depth_dji','sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff', 'llff_sa3d', 'mega_sa3d'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
    
@@ -120,6 +120,7 @@ def get_opts_base():
     parser.add_argument('--cached_centroids_path', type=str, default=None, help='path towards serialized model checkpoint')
     parser.add_argument('--cached_centroids_type', type=str, default='test', choices=['test', 'all'], help='')
     parser.add_argument('--use_dbscan', default=True, type=eval, choices=[True, False], help='')
+    parser.add_argument('--wgt_concentration_loss', default=1, type=float, help='')
     
     
     

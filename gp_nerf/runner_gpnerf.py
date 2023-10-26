@@ -87,6 +87,7 @@ def custom_collate(batch):
     batch = [item for item in batch if item is not None]
     if len(batch) == 0:
         return None
+
     return torch.utils.data.dataloader.default_collate(batch)
 
 
@@ -459,7 +460,7 @@ class Runner:
             self.H = dataset.H
             self.W = dataset.W
         elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
-            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview import MemoryDataset
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
@@ -549,8 +550,11 @@ class Runner:
                 elif 'llff' in self.hparams.dataset_type or self.hparams.dataset_type =='mega_sa3d':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
-                elif self.hparams.dataset_type == 'memory_depth_dji_instance':
+                elif self.hparams.dataset_type =='memory_depth_dji_instance':
                     data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
+                                                pin_memory=False, collate_fn=custom_collate)
+                elif self.hparams.dataset_type =='memory_depth_dji_instance_crossview':
+                    data_loader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 else:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=16,
@@ -606,6 +610,11 @@ class Runner:
                     # 调整shape
                     if self.hparams.enable_semantic or self.hparams.enable_instance:
                         for key in item.keys():
+                            if item[key].dim() == 2:
+                                item[key] = item[key].reshape(-1)
+                            elif item[key].dim() == 3:
+                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
+
                             if item[key].shape[0]==1:
                                 item[key] = item[key].squeeze(0)
                             if item[key].dim() != 1:
@@ -614,12 +623,8 @@ class Runner:
                                 else:
                                     item[key] = item[key].reshape(-1, item[key].shape[-1])
                                 
+             
 
-
-                            # if item[key].dim() == 2:
-                            #     item[key] = item[key].reshape(-1)
-                            # elif item[key].dim() == 3:
-                            #     item[key] = item[key].reshape(-1, *item[key].shape[2:])
                         for key in item.keys():
                             if 'random' in key:
                                 continue
@@ -628,11 +633,9 @@ class Runner:
 
                     if (self.hparams.enable_semantic or self.hparams.enable_instance) and 'labels' in item.keys():
                         labels = item['labels'].to(self.device, non_blocking=True)
-                        # if self.hparams.dataset_type != 'sam_project':
-                            # from tools.unetformer.uavid2rgb import remapping
-                            # labels = remapping(labels)
-                        from tools.unetformer.uavid2rgb import remapping
-                        labels = remapping(labels)
+                        if not self.hparams.enable_instance:
+                            from tools.unetformer.uavid2rgb import remapping
+                            labels = remapping(labels)
                     else:
                         labels = None
 
@@ -1094,7 +1097,7 @@ class Runner:
 
             metrics['concentration_loss'] = concentration_loss
 
-            metrics['loss'] += self.hparams.wgt_instance_loss * (instance_loss + concentration_loss)
+            metrics['loss'] += self.hparams.wgt_instance_loss * instance_loss + self.hparams.wgt_concentration_loss * concentration_loss
 
         #semantic loss
         if self.hparams.enable_semantic and (not self.hparams.freeze_semantic):
@@ -1281,7 +1284,12 @@ class Runner:
 
             # sample two random batches from the current batch
             fast_mask = torch.zeros_like(labels_gt).bool()
-            fast_mask[:labels_gt.shape[0] // 2] = True
+            # 1026 这里采用固定的后半段， 改为随机一半
+            # fast_mask[:labels_gt.shape[0] // 2] = True
+            random_indices = torch.randperm(len(labels_gt))[:len(labels_gt) // 2]
+            fast_mask[random_indices] = True
+
+
             slow_mask = ~fast_mask # non-overlapping masks for slow and fast models
             
             ## compute centroids
@@ -2408,8 +2416,9 @@ class Runner:
                         if self.hparams.dataset_type == 'sam_project':
                             pass
                         else:
-                            from tools.unetformer.uavid2rgb import remapping
-                            labels = remapping(labels)
+                            if not self.hparams.enable_instance:
+                                from tools.unetformer.uavid2rgb import remapping
+                                labels = remapping(labels)
                     else:
                         labels = None
 

@@ -107,22 +107,12 @@ class MemoryDataset(Dataset):
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         
 
-
         # 找到第一张图的非零值的索引, 从非零值的索引中随机采样
         nonzero_indices = torch.nonzero(self._labels[idx]).squeeze()
         sampling_idx_current = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size//2]]
         if sampling_idx_current.shape[0] ==0:
             return None
 
-        ###可视化采样点
-        # visualization = True
-        # if visualization:
-        #     save_dir = f'zyq/1026_cross_view'
-        #     Path(save_dir).parent.mkdir(exist_ok=True)
-        #     Path(save_dir).mkdir(exist_ok=True)
-        #     vis_img = torch.zeros_like(self._rgbs[idx])
-        #     vis_img[sampling_idx, :] = torch.tensor([255,0,0]).to(torch.uint8)
-        #     cv2.imwrite(f"{save_dir}/{idx}.png", vis_img.view(self.H,self.W,3).cpu().numpy())
 
 
         # ### NOTE 投影需要用的是z分量的depth, 应人石数据没有考虑左右图片，暂时先按照（H,W）进行投影
@@ -157,83 +147,72 @@ class MemoryDataset(Dataset):
 
 
 
-        success = 0
         index_shuffle= list(range(len(self._rgbs)))
-        random.shuffle(index_shuffle)
-        index_count = 0
-        ## 投影到下一张图片
-        while index_count < len(self._rgbs):
-            
-            next_idx = index_shuffle[index_count]
-            if next_idx == idx:
+        index_shuffle.remove(idx)  # 从列表中移除已知的索引
+
+        # 从剩下的数字中随机选择一个数
+        next_idx = random.choice(index_shuffle)
+
+        metadata_next = self.metadata_items[self._img_indices[next_idx]]
+        E2 = metadata_next.c2w.clone().detach()
+        E2 = torch.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
+        w2c = torch.inverse(torch.cat((E2, torch.tensor([[0, 0, 0, 1]])), dim=0))
+        points_homogeneous = torch.cat((world_point, torch.ones((world_point.shape[0], 1), dtype=torch.float32)), dim=1)
+        pt_3d_trans = torch.mm(w2c, points_homogeneous.t())
+        pt_2d_trans = torch.mm(K1, pt_3d_trans[:3])
+        pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
+        projected_points = pt_2d_trans[:2].t()
+
+        ########### 考虑遮挡
+        threshold= 0.02
+        image_width, image_height = self.W, self.H
+        mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] < image_width)
+        mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
+        mask = mask_x & mask_y
+
+        ### NOTE:  第二张图的depth
+        depth_next = (self._depth_djis[next_idx] * self._depth_scales[next_idx]).view(self.H,self.W)
+
+
+        x = projected_points[:, 0].long()
+        y = projected_points[:, 1].long()
+        x[~mask] = 0
+        y[~mask] = 0
+        depth_map_next = depth_next[y, x]
+        depth_map_next[~mask] = -1e6
+
+        depth_z = pt_3d_trans[2]
+        mask_z = depth_z < (depth_map_next + threshold)
+        mask_xyz = (mask & mask_z)
+
+        # 从第二张图中拿到投影得到的label
+        labels_next = self._labels[next_idx].view(self.H,self.W)
+        # 将投影成功的label拿到
+
+        # 找到第一张图中每个label的对应位置，再根据 flatten 的顺序 找到它投影在第二张图上的位置
+        # 接下来用投影得到的label，把cross view的标签一致，并且从两张图中分别采样
+        ### SAM得到的mask可以对id进行递增，重新排序 tools/segment_anything/helpers/1019_get_sammask_autogenerate.py 
+        # 这里先用 ground truth instance label 进行处理
+        for uni  in labels_current_unique:
+            if uni == 0:  # 不处理0标签，他表示stuff
                 continue
-
-            metadata_next = self.metadata_items[self._img_indices[next_idx]]
-            E2 = metadata_next.c2w.clone().detach()
-            E2 = torch.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
-            w2c = torch.inverse(torch.cat((E2, torch.tensor([[0, 0, 0, 1]])), dim=0))
-            points_homogeneous = torch.cat((world_point, torch.ones((world_point.shape[0], 1), dtype=torch.float32)), dim=1)
-            pt_3d_trans = torch.mm(w2c, points_homogeneous.t())
-            pt_2d_trans = torch.mm(K1, pt_3d_trans[:3])
-            pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
-            projected_points = pt_2d_trans[:2].t()
-
+            first_index = (labels_current == uni).flatten()
+            first_index_valid = first_index * mask_xyz
+            if first_index_valid.sum() == 0:  #这个label没有投影到图像上
+                continue
+            # 如果投影到图像上，则根据投影得到的label最大值， 建立正样本
+            project_label = labels_next[y[first_index_valid], x[first_index_valid]]
+            unique_values, counts = torch.unique(project_label, return_counts=True)
+            max_count_index = torch.argmax(counts)
+            if unique_values[max_count_index]==0:     # 如果最大值是0，则舍弃
+                continue
+            labels_next[labels_next==unique_values[max_count_index]] = uni  # 这里把第二张图和第一张图的对应标签变为一致
             
 
-
-            ########### 考虑遮挡
-            threshold= 0.02
-            image_width, image_height = self.W, self.H
-            mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] < image_width)
-            mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
-            mask = mask_x & mask_y
-
-            ### NOTE:  第二张图的depth
-            depth_next = (self._depth_djis[next_idx] * self._depth_scales[next_idx]).view(self.H,self.W)
-
-
-            x = projected_points[:, 0].long()
-            y = projected_points[:, 1].long()
-            x[~mask] = 0
-            y[~mask] = 0
-            depth_map_next = depth_next[y, x]
-            depth_map_next[~mask] = -1e6
-
-            depth_z = pt_3d_trans[2]
-            mask_z = depth_z < (depth_map_next + threshold)
-            mask_xyz = (mask & mask_z)
-
-            # 从第二张图中拿到投影得到的label
-            labels_next = self._labels[next_idx].view(self.H,self.W)
-            # 将投影成功的label拿到
-
-            # 找到第一张图中每个label的对应位置，再根据 flatten 的顺序 找到它投影在第二张图上的位置
-            # 接下来用投影得到的label，把cross view的标签一致，并且从两张图中分别采样
-            ### SAM得到的mask可以对id进行递增，重新排序 tools/segment_anything/helpers/1019_get_sammask_autogenerate.py 
-            # 这里先用 ground truth instance label 进行处理
-            for uni  in labels_current_unique:
-                if uni == 0:
-                    continue
-                first_index = (labels_current == uni).flatten()
-                first_index_valid = first_index * mask_xyz
-                if first_index_valid.sum() == 0:
-                    continue
-                project_label = labels_next[y[first_index_valid], x[first_index_valid]]
-                unique_values, counts = torch.unique(project_label, return_counts=True)
-                max_count_index = torch.argmax(counts)
-                if unique_values[max_count_index]==0:
-                    continue
-                labels_next[labels_next==unique_values[max_count_index]] = uni  # 这里把第二张图和第一张图的对应标签变为一致
-                success += 1
-            
-            if success>0:
-                break
-
-            index_count += 1
         
 
         # 找到第二张图的非零值的索引, 从非零值的索引中随机采样
-        nonzero_indices = torch.nonzero(self._labels[next_idx]).squeeze()
+        nonzero_indices = torch.nonzero(labels_next.view(-1)).squeeze()
         sampling_idx_next = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size//2]]
                 
         rgbs = torch.cat([self._rgbs[idx][sampling_idx_current].float() / 255., 
@@ -248,6 +227,28 @@ class MemoryDataset(Dataset):
                           self._depth_djis[next_idx][sampling_idx_next]], dim=0)
         
 
+        ##可视化采样点
+        visualization = True
+        if visualization:
+            save_dir = f'zyq/1026_cross_view'
+            Path(save_dir).parent.mkdir(exist_ok=True)
+            Path(save_dir).mkdir(exist_ok=True)
+            
+            vis_img1 = torch.zeros_like(self._rgbs[idx])
+            vis_img1[sampling_idx_current, :] = torch.tensor([255,0,0]).to(torch.uint8)
+            for c in self._labels[idx][sampling_idx_current].unique():
+                
+
+            vis_img1 = vis_img1.view(self.H,self.W,3).cpu().numpy()*0.8+ 0.2* self._rgbs[idx].view(self.H,self.W,3).cpu().numpy()
+
+            vis_img2 = torch.zeros_like(self._rgbs[next_idx])
+            vis_img2[sampling_idx_next, :] = torch.tensor([0,0,255]).to(torch.uint8)
+            vis_img2 = vis_img2.view(self.H,self.W,3).cpu().numpy()*0.8+ 0.2* self._rgbs[next_idx].view(self.H,self.W,3).cpu().numpy()
+
+            vis_img = np.concatenate([vis_img1,vis_img2], axis=1)
+
+            cv2.imwrite(f"{save_dir}/{idx}.png", vis_img)
+
         item = {
             'rgbs': rgbs,
             'rays': rays,
@@ -258,3 +259,13 @@ class MemoryDataset(Dataset):
         
         return item
     
+
+
+def get_color(integer_values):
+    # 确保颜色数量足够覆盖所有整数值
+    assert len(integer_values) <= 256, "颜色数量超过了256种"
+    red = (integer_values * 5) % 256
+    green = (integer_values * 7) % 256
+    blue = (integer_values * 11) % 256
+
+    return torch.tensor([blue,green,red]).to(torch.uint8)
