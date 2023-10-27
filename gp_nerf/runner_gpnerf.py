@@ -586,7 +586,8 @@ class Runner:
                 if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
                     if item == ['end']:
                         print('done')
-                        SystemExit
+                        raise TypeError
+
                     continue
                 
                 if item == None:
@@ -628,10 +629,11 @@ class Runner:
                     # 调整shape
                     if self.hparams.enable_semantic or self.hparams.enable_instance:
                         for key in item.keys():
-                            if item[key].dim() == 2:
-                                item[key] = item[key].reshape(-1)
-                            elif item[key].dim() == 3:
-                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                            if self.hparams.enable_instance:
+                                if item[key].dim() == 2:
+                                    item[key] = item[key].reshape(-1)
+                                elif item[key].dim() == 3:
+                                    item[key] = item[key].reshape(-1, *item[key].shape[2:])
 
                             if item[key].shape[0]==1:
                                 item[key] = item[key].squeeze(0)
