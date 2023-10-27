@@ -16,11 +16,11 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 from PIL import Image
 
-torch.cuda.set_device(7)
+# torch.cuda.set_device(7)
 device= 'cuda'
 
 
-def save_mask_anns_torch(colors, anns, img_name, hparams):
+def save_mask_anns_torch(colors, anns, img_name, hparams, id):
     if len(anns) == 0:
         return
     sorted_anns = sorted(anns, key=lambda x: x['area'], reverse=False)
@@ -32,7 +32,7 @@ def save_mask_anns_torch(colors, anns, img_name, hparams):
     # 设置透明度通道
     # img[:, :, 3] = 0
 
-    id = 1
+    # id = 1
     for ann in sorted_anns:
         if ann['area'] < 0.01*img_shape[0]*img_shape[1]:
             continue
@@ -41,7 +41,7 @@ def save_mask_anns_torch(colors, anns, img_name, hparams):
         img[m] = id
         id = id + 1
 
-    return img
+    return img, id
 
 def visualize_labels(labels_tensor):
     non_zero_labels = labels_tensor[labels_tensor != 0]
@@ -69,9 +69,9 @@ def _get_train_opts() -> Namespace:
     # parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/sam_viz',required=False, help='')
     
 
-    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/val/rgbs',required=False, help='')
-    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/val/sam_features',required=False, help='')
-    parser.add_argument('--output_path', type=str, default='zyq/1019_get_instance_mask_val',required=False, help='')
+    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
+    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='zyq/1027_get_instance_mask_train',required=False, help='')
     
 
     return parser.parse_args()
@@ -120,7 +120,7 @@ def hello(hparams: Namespace) -> None:
     used_files.sort()
     process_item = [Path(far_p).stem for far_p in used_files]
 
-    
+    id = 1 
     for i in tqdm.tqdm(range(len(imgs))):
         img_name = imgs[i].split('/')[-1][:6]
         if img_name not in process_item and 'val' not in hparams.image_path:
@@ -137,10 +137,10 @@ def hello(hparams: Namespace) -> None:
         feature = torch.from_numpy(np.load(features[i]))
 
         ### NOTE: 有时候会报维度不匹配的错误，修改下面的代码
-        # masks = mask_generator.generate(image1, feature[0])
-        masks = mask_generator.generate(image1, feature)
+        masks = mask_generator.generate(image1, feature[0])
+        # masks = mask_generator.generate(image1, feature)
         
-        mask = save_mask_anns_torch(colors, masks, img_name, hparams)
+        mask, id = save_mask_anns_torch(colors, masks, img_name, hparams, id)
         mask_vis = visualize_labels(mask)
         
         Image.fromarray(mask.cpu().numpy().astype(np.uint8)).save(os.path.join(hparams.output_path, 'instances_mask', f"{img_name}.png"))

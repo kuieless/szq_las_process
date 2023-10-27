@@ -304,9 +304,10 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
             slow_features = instances[...,hparams.num_instance_classes:] 
             # all_slow_features.append(slow_features)
             instances = instances[...,0:hparams.num_instance_classes] # keep fast features only
-
-        p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
-        # p_instances = create_instances_from_semantics(instances, gt_label, thing_classes,device=device)
+        if not hparams.render_zyq:
+            p_instances = create_instances_from_semantics(instances, gt_label, thing_classes,device=device)
+        else:
+            p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
         
         # pred_instances = cluster(padded_instances, device)
         all_points_rgb.append(viz_result_rgbs.view(-1,3))

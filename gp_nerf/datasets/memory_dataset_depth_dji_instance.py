@@ -102,15 +102,23 @@ class MemoryDataset(Dataset):
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         # 找到非零值的索引
         nonzero_indices = torch.nonzero(self._labels[idx]).squeeze()
-        # if sum(nonzero_indices) ==0:
-            # return None
-        # 从非零值的索引中随机采样
-        sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
-        if sampling_idx.shape[0] == 0 or sampling_idx.shape[0] < self.hparams.batch_size:
-            return None
 
-        # total_pixels = self._rgbs[idx].shape[0]
-        # sampling_idx = torch.randperm(total_pixels)[:self.hparams.batch_size]
+        
+        sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
+        #### 1. 若点不够，返回None,但这个在多个batch size会出问题
+        # if sampling_idx.shape[0] == 0 or sampling_idx.shape[0] < self.hparams.batch_size:
+        #     return None
+        #### 2. 点不够， 则换张图采样
+        if sampling_idx.shape[0] == 0 or sampling_idx.shape[0] < self.hparams.batch_size:
+
+            index_shuffle= list(range(len(self._rgbs)))
+            index_shuffle.remove(idx)  # 从列表中移除已知的索引
+
+            # 从剩下的数字中随机选择一个数
+            next_idx = random.choice(index_shuffle)
+            item = self.__getitem__(next_idx)
+            return item
+
 
 
         item = {

@@ -41,14 +41,12 @@ from torch.utils.tensorboard import SummaryWriter
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--num_points', type=int, default=50000,required=False, help='')
+    parser.add_argument('--num_points', type=int, default=200000,required=False, help='')
     parser.add_argument('--cluster_size', type=int, default=500,required=False, help='experiment name')
-    
-    parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle/0/eval_80000/panoptic/all_thing_features.npy',required=False, help='experiment name')
-    parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle/0/eval_80000/panoptic',required=False, help='experiment name')
-    parser.add_argument('--all_thing_features_fushi', type=str, default='logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle/2/eval_80000/panoptic/all_thing_features.npy',required=False, help='experiment name')
-    parser.add_argument('--sem_rgb_fushi', type=str, default='logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_shuffle/2/eval_80000/panoptic',required=False, help='experiment name')
-    
+    parser.add_argument('--all_thing_features_15', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_crossview/2/eval_200000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    parser.add_argument('--sem_rgb_15', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_crossview/2/eval_200000/panoptic',required=False, help='experiment name')
+    parser.add_argument('--all_thing_features_fushi', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_crossview/3/eval_200000/panoptic/all_thing_features.npy',required=False, help='experiment name')
+    parser.add_argument('--sem_rgb_fushi', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1026_yingrenshi_density_depth_hash22_instance_freeze_gt_slow_crossview/3/eval_200000/panoptic',required=False, help='experiment name')
     # parser.add_argument('--sem_rgb_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/panoptic',required=False, help='experiment name')
     # parser.add_argument('--all_thing_features_15', type=str, default='logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/panoptic/all_thing_features.npy',required=False, help='experiment name')
     
@@ -64,7 +62,7 @@ def hello(hparams: Namespace) -> None:
 
 
 
-    writer = SummaryWriter(os.path.join('zyq_cluster', 'tb'))
+    writer = SummaryWriter(os.path.join('zyq_cluster_crossview_20W', 'tb'))
     
 
     # for cluster_size in [500,1000,2000,3000,4000,5000,7000,10000]:
@@ -74,13 +72,13 @@ def hello(hparams: Namespace) -> None:
         use_dbscan=True
         use_silverman=False
 
-        output=f'1025_panoptic_{num_points}point_clustersize{cluster_size}'
+        output=f'1027_panoptic_{num_points}point_clustersize{cluster_size}_crossview_20W'
 
-        Path(os.path.join('zyq_cluster',output)).mkdir(exist_ok=True, parents=True)
-        Path(os.path.join('zyq_cluster',output,'pred_semantics')).mkdir(exist_ok=True)
-        Path(os.path.join('zyq_cluster',output,'pred_surrogateid')).mkdir(exist_ok=True)
-        Path(os.path.join('zyq_cluster',output,'gt_semantics')).mkdir(exist_ok=True)
-        Path(os.path.join('zyq_cluster',output,'gt_surrogateid')).mkdir(exist_ok=True)
+        Path(os.path.join('zyq_cluster_crossview_20W',output)).mkdir(exist_ok=True, parents=True)
+        Path(os.path.join('zyq_cluster_crossview_20W',output,'pred_semantics')).mkdir(exist_ok=True)
+        Path(os.path.join('zyq_cluster_crossview_20W',output,'pred_surrogateid')).mkdir(exist_ok=True)
+        Path(os.path.join('zyq_cluster_crossview_20W',output,'gt_semantics')).mkdir(exist_ok=True)
+        Path(os.path.join('zyq_cluster_crossview_20W',output,'gt_surrogateid')).mkdir(exist_ok=True)
 
         #  test图像计算的instance feature，用来聚类
         all_thing_features = np.load(hparams.all_thing_features_15)
@@ -123,17 +121,17 @@ def hello(hparams: Namespace) -> None:
             plt.title('LDA Visualization')
 
             # 保存图像为文件（例如，PNG格式）
-            plt.savefig(os.path.join('zyq_cluster', output,f'lda_visualization_{num_points}point_clustersize{cluster_size}.png'))
+            plt.savefig(os.path.join('zyq_cluster_crossview_20W', output,f'lda_visualization_{num_points}point_clustersize{cluster_size}.png'))
 
             # 关闭图形窗口（如果不需要显示图形界面）
             plt.close()
 
             output_semantics_with_invalid = p_semantics.detach()
             Image.fromarray(output_semantics_with_invalid.reshape(H, W).cpu().numpy().astype(np.uint8)).save(
-                os.path.join('zyq_cluster', output , 'pred_semantics', ("%06d.png" % save_i)))
+                os.path.join('zyq_cluster_crossview_20W', output , 'pred_semantics', ("%06d.png" % save_i)))
             
             Image.fromarray(p_instances.argmax(dim=1).reshape(H, W).cpu().numpy().astype(np.uint16)).save(
-                os.path.join('zyq_cluster', output , 'pred_surrogateid', ("%06d.png" % save_i)))
+                os.path.join('zyq_cluster_crossview_20W', output , 'pred_surrogateid', ("%06d.png" % save_i)))
 
             stack = visualize_panoptic_outputs(
                 p_rgb, p_semantics, p_instances, None, None,None,None,
@@ -142,7 +140,7 @@ def hello(hparams: Namespace) -> None:
             grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
             grid = (grid * 255).cpu().numpy().astype(np.uint8)
             
-            Image.fromarray(grid).save(os.path.join('zyq_cluster',output,("%06d_fushitu.jpg" % save_i)))
+            Image.fromarray(grid).save(os.path.join('zyq_cluster_crossview_20W',output,("%06d_fushitu.jpg" % save_i)))
 
         output_dir = hparams.sem_rgb_15
         all_thing_features = np.load(os.path.join(output_dir, "all_thing_features.npy"))
@@ -172,19 +170,19 @@ def hello(hparams: Namespace) -> None:
 
             output_semantics_with_invalid = p_semantics.detach()
             Image.fromarray(output_semantics_with_invalid.reshape(H, W).cpu().numpy().astype(np.uint8)).save(
-                os.path.join('zyq_cluster', output , 'pred_semantics', ("%06d.png" % save_i)))
+                os.path.join('zyq_cluster_crossview_20W', output , 'pred_semantics', ("%06d.png" % save_i)))
             
             Image.fromarray(p_instances.argmax(dim=1).reshape(H, W).cpu().numpy().astype(np.uint16)).save(
-                os.path.join('zyq_cluster', output , 'pred_surrogateid', ("%06d.png" % save_i)))
+                os.path.join('zyq_cluster_crossview_20W', output , 'pred_surrogateid', ("%06d.png" % save_i)))
 
             
 
             Image.fromarray(gt_semantics.reshape(H, W).cpu().numpy().astype(np.uint8)).save(
-                os.path.join('zyq_cluster', output , 'gt_semantics', ("%06d.png" % save_i)))
+                os.path.join('zyq_cluster_crossview_20W', output , 'gt_semantics', ("%06d.png" % save_i)))
 
             
             Image.fromarray(gt_instances.reshape(H, W).cpu().numpy().astype(np.uint16)).save(
-                os.path.join('zyq_cluster', output , 'gt_surrogateid', ("%06d.png" % save_i)))        
+                os.path.join('zyq_cluster_crossview_20W', output , 'gt_surrogateid', ("%06d.png" % save_i)))        
             
             stack = visualize_panoptic_outputs(
                 p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
@@ -193,17 +191,17 @@ def hello(hparams: Namespace) -> None:
             grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
             grid = (grid * 255).cpu().numpy().astype(np.uint8)
             
-            Image.fromarray(grid).save(os.path.join('zyq_cluster',output,("%06d.jpg" % save_i)))
+            Image.fromarray(grid).save(os.path.join('zyq_cluster_crossview_20W',output,("%06d.jpg" % save_i)))
 
 
-        path_target_sem = os.path.join('zyq_cluster',output,'gt_semantics')
-        path_target_inst = os.path.join('zyq_cluster',output,'gt_surrogateid')
-        path_pred_sem = os.path.join('zyq_cluster',output,'pred_semantics')
-        path_pred_inst = os.path.join('zyq_cluster',output,'pred_surrogateid')
+        path_target_sem = os.path.join('zyq_cluster_crossview_20W',output,'gt_semantics')
+        path_target_inst = os.path.join('zyq_cluster_crossview_20W',output,'gt_surrogateid')
+        path_pred_sem = os.path.join('zyq_cluster_crossview_20W',output,'pred_semantics')
+        path_pred_inst = os.path.join('zyq_cluster_crossview_20W',output,'pred_surrogateid')
         if Path(path_target_inst).exists():
             pq, sq, rq, metrics_each = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
                             path_target_sem, path_target_inst, image_size=[W,H])
-            with(Path(os.path.join('zyq_cluster',output, 'metric.txt'))).open('w') as f:
+            with(Path(os.path.join('zyq_cluster_crossview_20W',output, 'metric.txt'))).open('w') as f:
                 for key in metrics_each['all']:
                     avg_val = metrics_each['all'][key]
                     message = ' {}: {}'.format(key, avg_val)
@@ -218,6 +216,7 @@ def hello(hparams: Namespace) -> None:
                 print(f"centroids shape: {centroids.shape}")
                 
                 writer.add_scalar('pq/pq', pq, cluster_size)
+                writer.add_scalar('pq/pq_building', metrics_each['all']['pq'][0], cluster_size)
                 writer.add_scalar('pq/sq', sq, cluster_size)
                 writer.add_scalar('pq/rq', rq, cluster_size)
 

@@ -623,13 +623,15 @@ class Runner:
                                 else:
                                     item[key] = item[key].reshape(-1, item[key].shape[-1])
                                 
-             
+
 
                         for key in item.keys():
                             if 'random' in key:
                                 continue
                             elif 'random_'+key in item.keys():
                                 item[key] = torch.cat((item[key], item['random_'+key]))
+
+                    # print(f"shape:{item['rgbs'].shape}")
 
                     if (self.hparams.enable_semantic or self.hparams.enable_instance) and 'labels' in item.keys():
                         labels = item['labels'].to(self.device, non_blocking=True)

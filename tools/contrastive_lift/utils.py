@@ -28,7 +28,7 @@ def create_instances_from_semantics(instances, semantics, thing_classes, device)
 # copy from contrastive-lift
 
 def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=False,
-            use_silverman=False, cluster_size=500, num_points=50000, all_centroids=None):
+            use_silverman=False, cluster_size=1000, num_points=500000, all_centroids=None):
     thing_mask = all_thing_features[...,0] == -float('inf')
     features = all_thing_features[thing_mask]
     features = features[:,1:]
