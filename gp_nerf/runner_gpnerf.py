@@ -465,6 +465,13 @@ class Runner:
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
             self.W = dataset.W
+        elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process import MemoryDataset
+            dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
+            self.H = dataset.H
+            self.W = dataset.W
+        
         elif self.hparams.dataset_type == 'sam':
             if self.hparams.add_random_rays:
                 from gp_nerf.datasets.memory_dataset_sam_random import MemoryDataset_SAM
@@ -556,6 +563,10 @@ class Runner:
                 elif self.hparams.dataset_type =='memory_depth_dji_instance_crossview':
                     data_loader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
+                elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
+                    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
+                                                pin_memory=False, collate_fn=custom_collate)
+                    
                 else:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=16,
                                                 pin_memory=False)
@@ -572,6 +583,11 @@ class Runner:
                 #     pbar.update(1)
                 #     continue
                 # torch.cuda.empty_cache()
+                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
+                    if item == ['end']:
+                        print('done')
+                        SystemExit
+                    continue
                 
                 if item == None:
                     continue
@@ -585,6 +601,8 @@ class Runner:
                         val_metrics = self._run_validation(train_iterations)
                     self._write_final_metrics(val_metrics, train_iterations)
                     # raise TypeError
+
+                
 
                 # item = np.load('79972.npy',allow_pickle=True).item()
 

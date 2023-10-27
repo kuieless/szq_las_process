@@ -188,7 +188,7 @@ class MemoryDataset(Dataset):
         # 从第二张图中拿到投影得到的label
         labels_next = self._labels[next_idx].view(self.H,self.W)
         # 将投影成功的label拿到
-
+        
         # 找到第一张图中每个label的对应位置，再根据 flatten 的顺序 找到它投影在第二张图上的位置
         # 接下来用投影得到的label，把cross view的标签一致，并且从两张图中分别采样
         ### SAM得到的mask可以对id进行递增，重新排序 tools/segment_anything/helpers/1019_get_sammask_autogenerate.py 
