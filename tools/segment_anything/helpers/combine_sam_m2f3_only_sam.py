@@ -88,11 +88,17 @@ def custom2rgb(mask):
 def _get_train_opts() -> Namespace:
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
 
-    parser.add_argument('--sam_features_path', type=str, default='',required=False, help='')
-    parser.add_argument('--labels_m2f_path', type=str, default='',required=False, help='')
-    parser.add_argument('--rgbs_path', type=str, default='',required=False, help='')
-    parser.add_argument('--output_path', type=str, default='',required=False, help='')
+    # parser.add_argument('--sam_features_path', type=str, default='',required=False, help='')
+    # parser.add_argument('--labels_m2f_path', type=str, default='',required=False, help='')
+    # parser.add_argument('--rgbs_path', type=str, default='',required=False, help='')
+    # parser.add_argument('--output_path', type=str, default='',required=False, help='')
+
+    parser.add_argument('--sam_features_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1028_lh_block1_far0.3/sam_features',required=False, help='')
+    parser.add_argument('--labels_m2f_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1028_lh_block1_far0.3/mask2former_output/labels_m2f',required=False, help='')
+    parser.add_argument('--rgbs_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1028_lh_block1_far0.3/pred_rgb',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1028_lh_block1_far0.3/1_labels_m2f_only_sam',required=False, help='')
     
+
     return parser.parse_args()
 
 
@@ -108,8 +114,10 @@ def hello(hparams: Namespace) -> None:
     save_path_o = hparams.output_path
     save_path = os.path.join(save_path_o, 'labels_merge')
     save_path_vis = os.path.join(save_path_o, 'labels_merge_vis')
+    save_path_vis_alpha = os.path.join(save_path_o, 'labels_merge_vis_alpha')
     Path(save_path).mkdir(exist_ok=True,parents=True)
     Path(save_path_vis).mkdir(exist_ok=True)
+    Path(save_path_vis_alpha).mkdir(exist_ok=True)
 
     sam_checkpoint = "tools/segment_anything/sam_vit_h_4b8939.pth"
     model_type = "vit_h"
@@ -140,6 +148,7 @@ def hello(hparams: Namespace) -> None:
     m2fs.sort()
     m2fs = m2fs[1:]
     # m2fs = m2fs[250:]
+    
 
     for i in tqdm(range(len(m2fs))):
 
@@ -170,9 +179,12 @@ def hello(hparams: Namespace) -> None:
         Image.fromarray(_mask.astype(np.uint16)).save(os.path.join(save_path, img_name+".png"))
 
         mask_rgb = custom2rgb(_mask)
-        Image.fromarray(mask_rgb).save(os.path.join(save_path_vis, img_name+".png"))
+        Image.fromarray(mask_rgb).save(os.path.join(save_path_vis, img_name+".jpg"))
         
+        vis_alpha = 0.4 * np.array(image1) + 0.6 * mask_rgb
+        Image.fromarray(vis_alpha.astype(np.uint8)).save(os.path.join(save_path_vis_alpha, img_name+".jpg"))
 
+        
 
 if __name__ == '__main__':
     hello(_get_train_opts())

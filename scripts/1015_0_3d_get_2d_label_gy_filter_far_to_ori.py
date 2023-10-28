@@ -223,7 +223,7 @@ def hello(hparams: Namespace) -> None:
 
         ### NOTE:  NeRF 渲染的depth
         # farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent), "pred_depth_save", f"{file_name}.npy")))
-        farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent.parent), "pred_depth_save", f"{file_name}.npy")))
+        farMask = torch.from_numpy(np.load(os.path.join(str(Path(far_paths).parent.parent), "pred_depth_save", f"{file_name}.npy")))
 
         farMask = (farMask) * depth_scale
 

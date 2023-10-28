@@ -22,8 +22,8 @@
 
 
 # 源文件夹A和目标文件夹B的路径
-folderA="/data/yuqi/code/Mask2Former_a/output_useful/1016_compare_ds2/labels_m2f_final"
-folderB="/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs"
+folderA="/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1028_lh_block1_far0.3/1_labels_m2f_only_sam/labels_merge_vis_alpha"
+folderB="/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1028_lh_block1_far0.3/2_project_to_ori_gt_only_sam/alpha"
 
 # 遍历文件夹A内的文件
 for fileA in "$folderA"/*; do

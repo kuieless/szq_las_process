@@ -109,6 +109,9 @@ class MemoryDataset(Dataset):
         overlap_threshold=0.5
         ###NOTE 需要将shuffle调成False, 不打乱，按照顺序处理
 
+        if idx < 112:
+            return None
+
         # 拿到当前图像的数据
         img_current = self._rgbs[idx].clone().view(self.H, self.W, 3)
         instances_current = self._labels[idx].clone().view(self.H, self.W)
@@ -260,7 +263,7 @@ class MemoryDataset(Dataset):
                 sorted_data = sorted(zip(merge_unique_label_list, score_list), key=lambda x: x[1], reverse=False)
 
                 merge_unique_label_list, score_list = zip(*sorted_data)
-
+                merge_unique_label_list = list(merge_unique_label_list)
                 merge_unique_label_list.append(mask_idx)
 
                 ###得到一个mask 在所有图像上需要融合的区域后， 对所有的mask求并集
@@ -273,8 +276,7 @@ class MemoryDataset(Dataset):
                 #     cv2.imwrite(f"zyq/1027_crossview_project/test/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
                 #     iiiii += 1
 
-                union_mask = reduce(torch.logical_or, merge_unique_label_list[-5:])
-                # union_mask = torch.logical_or.reduce(merge_unique_label_list)
+                union_mask = reduce(torch.logical_or, merge_unique_label_list)
                 new_instance[union_mask] = unique_label
 
 

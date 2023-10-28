@@ -4,7 +4,7 @@ export CUDA_VISIBLE_DEVICES=5
 
 
 
-# # 先对nerf渲染的far图像进行sam feature提取
+# # 先对nerf渲染的far图像进行sam feature提取  
 # python /data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/extract_embeddings.py   \
 #     --rgbs_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/augument/1022_lh_block2_far0.3/pred_rgb
 

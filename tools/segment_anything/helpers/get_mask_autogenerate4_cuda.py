@@ -61,7 +61,7 @@ def show_anns1_torch(colors, anns, img_name, hparams):
 
     # 将张量转换为图像
     # img_pil.save(os.path.join(hparams.output_path, 'viz_ori_sam', f"{img_name}.png"))
-    cv2.imwrite(os.path.join(hparams.output_path, 'viz_ori_sam', f"{img_name}.png"), img.numpy()*255)
+    cv2.imwrite(os.path.join(hparams.output_path, 'viz_ori_sam', f"{img_name}.jpg"), img.numpy()*255)
 
     return img.numpy()
 
@@ -205,7 +205,7 @@ def hello(hparams: Namespace) -> None:
 
         # mask = show_anns2(colors, masks, img_name, hparams)
         # image_cat = np.concatenate([image, mask*255], axis=1)
-        image_cat = image*0.6+ (mask*255)*0.4
+        image_cat = image*0.3+ (mask*255)*0.7
         cv2.imwrite(os.path.join(hparams.output_path,'image_cat', f"{img_name}.png"), image_cat)
                     
     print('done')
