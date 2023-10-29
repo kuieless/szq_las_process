@@ -125,7 +125,7 @@ class ImageMetadata:
             labels = labels.resize((self.W, self.H), Image.NEAREST)
        
         # return torch.ByteTensor(np.asarray(labels))
-        return torch.tensor(np.asarray(labels))
+        return torch.tensor(np.asarray(labels),dtype=torch.int32)
 
     
     def load_instance_gt(self) -> torch.Tensor:
@@ -136,6 +136,7 @@ class ImageMetadata:
 
         if size[0] != self.W or size[1] != self.H:
             labels = labels.resize((self.W, self.H), Image.NEAREST)
-       
-        return torch.tensor(np.asarray(labels))
+        #  gt instance的数字不会太大
+        return torch.ByteTensor(np.asarray(labels))
+        # return torch.tensor(np.asarray(labels))
 

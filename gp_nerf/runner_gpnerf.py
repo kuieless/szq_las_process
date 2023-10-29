@@ -1115,8 +1115,15 @@ class Runner:
             instance_features = results[f'instance_map_{typ}']
             labels_gt = labels.type(torch.long)
 
+            sem_logits = results[f'sem_map_{typ}']
+            sem_label = self.logits_2_label(sem_logits)
+            sem_label = remapping(sem_label)
+            # get building area
+            building_mask = sem_label==1
+
+
             # contrastive loss or slow-fast loss
-            instance_loss, concentration_loss = self.calculate_instance_clustering_loss(instance_features, labels_gt)
+            instance_loss, concentration_loss = self.calculate_instance_clustering_loss(instance_features[building_mask], labels_gt[building_mask])
 
             # Concentration loss from contrastive lift
 
@@ -1290,6 +1297,8 @@ class Runner:
     def calculate_instance_clustering_loss(self, instance_features, labels_gt):
         instance_loss = 0
         concentration_loss = 0
+        if instance_features == []:
+            return torch.tensor(0.0, device=instance_features.device),torch.tensor(0.0, device=instance_features.device)
         if self.hparams.instance_loss_mode == "linear_assignment":
             pass
         
@@ -1330,7 +1339,7 @@ class Runner:
             if len(fast_labels) == 0 or len(slow_labels) == 0:
                 print("Length of fast labels", len(fast_labels), "Length of slow labels", len(slow_labels))
                 # This happens when labels_gt of shape 1
-                return torch.tensor(0.0, device=instance_features.device)
+                return torch.tensor(0.0, device=instance_features.device),torch.tensor(0.0, device=instance_features.device)
             
             
             ### Concentration loss

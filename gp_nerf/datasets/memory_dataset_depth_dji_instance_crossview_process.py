@@ -48,7 +48,7 @@ class MemoryDataset(Dataset):
         main_print('Loading data')
         if hparams.debug:
             # metadata_items = metadata_items[::20]
-            metadata_items = metadata_items[100:150]
+            metadata_items = metadata_items[170:200]
             pass
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
@@ -112,15 +112,16 @@ class MemoryDataset(Dataset):
         overlap_threshold=0.5
         ###NOTE 需要将shuffle调成False, 不打乱，按照顺序处理
 
-        # if idx < 112:
-            # return None
+        
 
         # 拿到当前图像的数据
         img_current = self._rgbs[idx].clone().view(self.H, self.W, 3).to(device)
         instances_current = self._labels[idx].clone().view(self.H, self.W).to(device)
         depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W).to(device)
         metadata_current = self.metadata_items[self._img_indices[idx]]
-        visualization = False
+        if int(Path(metadata_current.image_path).stem) < 170:
+            return None
+        visualization = True
         if visualization:
             color_current = torch.zeros_like(img_current)
             unique_label = torch.unique(instances_current)
@@ -131,9 +132,9 @@ class MemoryDataset(Dataset):
                 if (instances_current==uni).sum() != 0:
                     color_current[instances_current==uni,:] = random_color
             vis_img1 = 0.7 * color_current + 0.3 * img_current
-            Path(f"zyq/1029_crossview_project/test/mask_vis").mkdir(exist_ok=True, parents=True)
+            Path(f"zyq/1030_crossview_project/test/mask_vis").mkdir(exist_ok=True, parents=True)
 
-            cv2.imwrite(f"zyq/1029_crossview_project/test/mask_vis/%06d.jpg" % (idx), color_current.cpu().numpy())
+            # cv2.imwrite(f"zyq/1030_crossview_project/test/mask_vis/%06d.jpg" % (idx), color_current.cpu().numpy())
 
 
 
@@ -226,25 +227,6 @@ class MemoryDataset(Dataset):
                 ######接下来对每个mask进行cross view 操作
                 # project_instance.nonzero().shape[0]> 0.05 * self.H * self.W
 
-                if visualization:
-                    color_project = torch.zeros_like(img_current)
-                    color_next = torch.zeros_like(img_current)
-                    unique_labels_next = torch.unique(instances_next)
-                    for uni in unique_labels_next:
-                        if (uni == 0) or ((instances_next==uni).sum() < 0.005 * self.H * self.W) or ((project_instance==uni).sum() < 0.005 * self.H * self.W):
-                            continue
-                        random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
-                        if (instances_next==uni).sum() != 0:
-                            color_next[instances_next==uni,:] = random_color
-                        if (project_instance==uni).sum() != 0:
-                            color_project[project_instance==uni,:] = random_color
-                    vis_img2 = 0.7 * color_next + 0.3 * img_next
-                    vis_img3 = 0.7 * color_project + 0.3 * img_current
-
-                    if project_instance.nonzero().shape[0]> 0.05 * self.H * self.W:
-                        vis_img = np.concatenate([vis_img1.cpu().numpy(), vis_img2.cpu().numpy(), vis_img3.cpu().numpy()], axis=1)
-                        Path(f"zyq/1029_crossview_project/test/each").mkdir(exist_ok=True, parents=True)
-                        cv2.imwrite(f"zyq/1029_crossview_project/test/each/%06d_label%06d_%06d.jpg" % (idx, unique_label, idx_next), vis_img)
                 
             
                 ## 以上投影结束后， 进行overlap计算
@@ -259,8 +241,30 @@ class MemoryDataset(Dataset):
                     mask_area_overlap = (mask_idx * mask_2).sum()
                     # 存储符合条件的并集mask 和 对应要融合区域大小的score
                     if (mask_area_overlap / mask_area_2) > overlap_threshold or (mask_area_overlap / mask_idx_area) > overlap_threshold:
+                        if mask_area_2 < 0.001 * self.H * self.W or (instances_next==uni_2).sum() < 0.001 * self.H * self.W:
+                            continue
                         merge_unique_label_list.append(mask_2)
                         score_list.append(mask_area_2)
+
+                        # if visualization:
+                        if False:
+                            color_project = torch.zeros_like(img_current)
+                            color_next = torch.zeros_like(img_current)
+                            random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
+                            if (instances_next==uni_2).sum() != 0:
+                                color_next[instances_next==uni_2,:] = random_color
+                            if (project_instance==uni_2).sum() != 0:
+                                color_project[project_instance==uni_2,:] = random_color
+
+                            vis_img2 = 0.7 * color_next + 0.3 * img_next
+                            vis_img3 = 0.7 * color_project + 0.3 * img_current
+
+                            # if project_instance.nonzero().shape[0]> 0.05 * self.H * self.W:
+                            vis_img = np.concatenate([vis_img1.cpu().numpy(), vis_img2.cpu().numpy(), vis_img3.cpu().numpy()], axis=1)
+                            Path(f"zyq/1030_crossview_project/test/each").mkdir(exist_ok=True, parents=True)
+                            cv2.imwrite(f"zyq/1030_crossview_project/test/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
+                    
+                                
 
             if merge_unique_label_list != []:
                 sorted_data = sorted(zip(merge_unique_label_list, score_list), key=lambda x: x[1], reverse=False)
@@ -276,7 +280,7 @@ class MemoryDataset(Dataset):
                 #     random_color = torch.randint(0, 256, (3,), dtype=torch.uint8)
 
                 #     color_result[iii_mask]=random_color
-                #     cv2.imwrite(f"zyq/1029_crossview_project/test/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
+                #     cv2.imwrite(f"zyq/1030_crossview_project/test/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
                 #     iiiii += 1
 
                 union_mask = reduce(torch.logical_or, merge_unique_label_list)
@@ -304,16 +308,16 @@ class MemoryDataset(Dataset):
             
             vis_img5 = np.concatenate([vis_img1.cpu().numpy(), vis_img4.cpu().numpy()], axis=1)
 
-            Path(f"zyq/1029_crossview_project/test/results").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1029_crossview_project/test/results/%06d_results_%06d.jpg" % (idx, unique_label), vis_img5)
-            Path(f"zyq/1029_crossview_project/test/crossview").mkdir(exist_ok=True, parents=True)
-            Image.fromarray(new_instance.cpu().numpy().astype(np.uint8)).save(f"zyq/1029_crossview_project/test/crossview/{Path(metadata_current.label_path).stem}.png")
+            Path(f"zyq/1030_crossview_project/test/results").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1030_crossview_project/test/results/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img5)
+            Path(f"zyq/1030_crossview_project/test/crossview").mkdir(exist_ok=True, parents=True)
+            Image.fromarray(new_instance.cpu().numpy().astype(np.uint8)).save(f"zyq/1030_crossview_project/test/crossview/{Path(metadata_current.label_path).stem}.png")
 
             
 
         if idx == len(self._rgbs) - 1:
             return 'end'
         else:
-            print(f"process idx : {idx}")
+            print(f"process idx : {int(Path(metadata_current.label_path).stem)}")
             return None
     
