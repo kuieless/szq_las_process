@@ -47,7 +47,9 @@ class MemoryDataset(Dataset):
         
         main_print('Loading data')
         if hparams.debug:
-            metadata_items = metadata_items[::20]
+            # metadata_items = metadata_items[::20]
+            metadata_items = metadata_items[100:150]
+            pass
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
@@ -106,16 +108,17 @@ class MemoryDataset(Dataset):
     
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        device='cuda'
         overlap_threshold=0.5
         ###NOTE 需要将shuffle调成False, 不打乱，按照顺序处理
 
-        if idx < 112:
-            return None
+        # if idx < 112:
+            # return None
 
         # 拿到当前图像的数据
-        img_current = self._rgbs[idx].clone().view(self.H, self.W, 3)
-        instances_current = self._labels[idx].clone().view(self.H, self.W)
-        depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W)
+        img_current = self._rgbs[idx].clone().view(self.H, self.W, 3).to(device)
+        instances_current = self._labels[idx].clone().view(self.H, self.W).to(device)
+        depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W).to(device)
         metadata_current = self.metadata_items[self._img_indices[idx]]
         visualization = False
         if visualization:
@@ -124,13 +127,13 @@ class MemoryDataset(Dataset):
             for uni in unique_label:
                 if uni ==0:
                     continue
-                random_color = torch.randint(0, 256, (3,), dtype=torch.uint8)
+                random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
                 if (instances_current==uni).sum() != 0:
                     color_current[instances_current==uni,:] = random_color
             vis_img1 = 0.7 * color_current + 0.3 * img_current
-            Path(f"zyq/1027_crossview_project/test/mask_vis").mkdir(exist_ok=True, parents=True)
+            Path(f"zyq/1029_crossview_project/test/mask_vis").mkdir(exist_ok=True, parents=True)
 
-            cv2.imwrite(f"zyq/1027_crossview_project/test/mask_vis/%06d.jpg" % (idx), color_current.cpu().numpy())
+            cv2.imwrite(f"zyq/1029_crossview_project/test/mask_vis/%06d.jpg" % (idx), color_current.cpu().numpy())
 
 
 
@@ -160,9 +163,9 @@ class MemoryDataset(Dataset):
 
             # 先进行投影
             for idx_next in index_list:
-                img_next = self._rgbs[idx_next].clone().view(self.H, self.W, 3)
-                instances_next = self._labels[idx_next].clone().view(self.H, self.W)
-                depth_next = (self._depth_djis[idx_next] * self._depth_scales[idx_next])
+                img_next = self._rgbs[idx_next].clone().view(self.H, self.W, 3).to(device)
+                instances_next = self._labels[idx_next].clone().view(self.H, self.W).to(device)
+                depth_next = (self._depth_djis[idx_next] * self._depth_scales[idx_next]).to(device)
                 inf_mask = torch.isinf(depth_next)
                 depth_next[inf_mask] = depth_next[~inf_mask].max()
                 metadata_next = self.metadata_items[self._img_indices[idx_next]]
@@ -170,26 +173,26 @@ class MemoryDataset(Dataset):
                 ###### 先投影， 这里采用把第二张图（其他图）投回第一张图
 
                 x_grid, y_grid = torch.meshgrid(torch.arange(self.W), torch.arange(self.H))
-                x_grid, y_grid = x_grid.T.flatten(), y_grid.T.flatten()
+                x_grid, y_grid = x_grid.T.flatten().to(device), y_grid.T.flatten().to(device)
                 ## 第二张图先得到点云
                 pixel_coordinates = torch.stack([x_grid, y_grid, torch.ones_like(x_grid)], dim=-1)
                 K1 = metadata_next.intrinsics
-                K1 = torch.tensor([[K1[0], 0, K1[2]], [0, K1[1], K1[3]], [0, 0, 1]])
+                K1 = torch.tensor([[K1[0], 0, K1[2]], [0, K1[1], K1[3]], [0, 0, 1]]).to(device)
                 pt_3d = depth_next[:, None] * (torch.linalg.inv(K1) @ pixel_coordinates[:, :, None].float()).squeeze()
-                arr2 = torch.ones((pt_3d.shape[0], 1))
+                arr2 = torch.ones((pt_3d.shape[0], 1)).to(device)
                 pt_3d = torch.cat([pt_3d, arr2], dim=-1)
                 # pt_3d = pt_3d[valid_depth_mask]
                 pt_3d = pt_3d.view(-1, 4)
                 E1 = metadata_next.c2w.clone().detach()
-                E1 = torch.stack([E1[:, 0], -E1[:, 1], -E1[:, 2], E1[:, 3]], dim=1)
-                world_point = torch.mm(torch.cat([E1, torch.tensor([[0, 0, 0, 1]])], dim=0), pt_3d.t()).t()
+                E1 = torch.stack([E1[:, 0], -E1[:, 1], -E1[:, 2], E1[:, 3]], dim=1).to(device)
+                world_point = torch.mm(torch.cat([E1, torch.tensor([[0, 0, 0, 1]], device=device)], dim=0), pt_3d.t()).t()
                 world_point = world_point[:, :3] / world_point[:, 3:4]
 
                 ### 投影回第一张图
                 E2 = metadata_current.c2w.clone().detach()
-                E2 = torch.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
-                w2c = torch.inverse(torch.cat((E2, torch.tensor([[0, 0, 0, 1]])), dim=0))
-                points_homogeneous = torch.cat((world_point, torch.ones((world_point.shape[0], 1), dtype=torch.float32)), dim=1)
+                E2 = torch.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1).to(device)
+                w2c = torch.inverse(torch.cat((E2, torch.tensor([[0, 0, 0, 1]], device=device)), dim=0))
+                points_homogeneous = torch.cat((world_point, torch.ones((world_point.shape[0], 1), dtype=torch.float32, device=device)), dim=1)
                 pt_3d_trans = torch.mm(w2c, points_homogeneous.t())
                 pt_2d_trans = torch.mm(K1, pt_3d_trans[:3])
                 pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
@@ -230,7 +233,7 @@ class MemoryDataset(Dataset):
                     for uni in unique_labels_next:
                         if (uni == 0) or ((instances_next==uni).sum() < 0.005 * self.H * self.W) or ((project_instance==uni).sum() < 0.005 * self.H * self.W):
                             continue
-                        random_color = torch.randint(0, 256, (3,), dtype=torch.uint8)
+                        random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
                         if (instances_next==uni).sum() != 0:
                             color_next[instances_next==uni,:] = random_color
                         if (project_instance==uni).sum() != 0:
@@ -240,8 +243,8 @@ class MemoryDataset(Dataset):
 
                     if project_instance.nonzero().shape[0]> 0.05 * self.H * self.W:
                         vis_img = np.concatenate([vis_img1.cpu().numpy(), vis_img2.cpu().numpy(), vis_img3.cpu().numpy()], axis=1)
-                        Path(f"zyq/1027_crossview_project/test/each").mkdir(exist_ok=True, parents=True)
-                        cv2.imwrite(f"zyq/1027_crossview_project/test/each/%06d_label%06d_%06d.jpg" % (idx, unique_label, idx_next), vis_img)
+                        Path(f"zyq/1029_crossview_project/test/each").mkdir(exist_ok=True, parents=True)
+                        cv2.imwrite(f"zyq/1029_crossview_project/test/each/%06d_label%06d_%06d.jpg" % (idx, unique_label, idx_next), vis_img)
                 
             
                 ## 以上投影结束后， 进行overlap计算
@@ -273,7 +276,7 @@ class MemoryDataset(Dataset):
                 #     random_color = torch.randint(0, 256, (3,), dtype=torch.uint8)
 
                 #     color_result[iii_mask]=random_color
-                #     cv2.imwrite(f"zyq/1027_crossview_project/test/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
+                #     cv2.imwrite(f"zyq/1029_crossview_project/test/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
                 #     iiiii += 1
 
                 union_mask = reduce(torch.logical_or, merge_unique_label_list)
@@ -291,7 +294,7 @@ class MemoryDataset(Dataset):
             for uni in unique_label_results:
                 if uni ==0:
                     continue
-                random_color = torch.randint(0, 256, (3,), dtype=torch.uint8)
+                random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
                 color_current[instances_current==uni,:] = random_color
                 color_result[new_instance==uni,:] = random_color
                 
@@ -301,10 +304,10 @@ class MemoryDataset(Dataset):
             
             vis_img5 = np.concatenate([vis_img1.cpu().numpy(), vis_img4.cpu().numpy()], axis=1)
 
-            Path(f"zyq/1027_crossview_project/test/results").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1027_crossview_project/test/results/%06d_results_%06d.jpg" % (idx, unique_label), vis_img5)
-            Path(f"zyq/1027_crossview_project/test/crossview").mkdir(exist_ok=True, parents=True)
-            Image.fromarray(new_instance.cpu().numpy().astype(np.uint8)).save(f"zyq/1027_crossview_project/test/crossview/{Path(metadata_current.label_path).stem}.png")
+            Path(f"zyq/1029_crossview_project/test/results").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1029_crossview_project/test/results/%06d_results_%06d.jpg" % (idx, unique_label), vis_img5)
+            Path(f"zyq/1029_crossview_project/test/crossview").mkdir(exist_ok=True, parents=True)
+            Image.fromarray(new_instance.cpu().numpy().astype(np.uint8)).save(f"zyq/1029_crossview_project/test/crossview/{Path(metadata_current.label_path).stem}.png")
 
             
 

@@ -124,7 +124,9 @@ class ImageMetadata:
         if size[0] != self.W or size[1] != self.H:
             labels = labels.resize((self.W, self.H), Image.NEAREST)
        
-        return torch.ByteTensor(np.asarray(labels))
+        # return torch.ByteTensor(np.asarray(labels))
+        return torch.tensor(np.asarray(labels))
+
     
     def load_instance_gt(self) -> torch.Tensor:
         gt_path = self.image_path.parent.parent / 'instances_gt' / f'{self.image_path.stem}.png'
@@ -135,5 +137,5 @@ class ImageMetadata:
         if size[0] != self.W or size[1] != self.H:
             labels = labels.resize((self.W, self.H), Image.NEAREST)
        
-        return torch.ByteTensor(np.asarray(labels))
+        return torch.tensor(np.asarray(labels))
 

@@ -27,14 +27,14 @@ def save_mask_anns_torch(colors, anns, img_name, hparams, id):
 
     # 创建一个初始的图像张量
     img_shape = (sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1])
-    img = torch.zeros(img_shape, dtype=torch.int16, device=device)
+    img = torch.zeros(img_shape, dtype=torch.int32, device=device)
 
     # 设置透明度通道
     # img[:, :, 3] = 0
 
     # id = 1
     for ann in sorted_anns:
-        if ann['area'] < 0.01*img_shape[0]*img_shape[1]:
+        if ann['area'] < hparams.threshold * img_shape[0] * img_shape[1]:
             continue
         m = ann['segmentation']
 
@@ -71,7 +71,8 @@ def _get_train_opts() -> Namespace:
 
     parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
     parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
-    parser.add_argument('--output_path', type=str, default='zyq/1027_get_instance_mask_train',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='zyq/1029_get_instance_mask_train',required=False, help='')
+    parser.add_argument('--threshold', type=float, default=0.005,required=False, help='')
     
 
     return parser.parse_args()
@@ -79,6 +80,11 @@ def _get_train_opts() -> Namespace:
 
 def hello(hparams: Namespace) -> None:
     file_name='DJi'
+    points_per_side=32
+    if points_per_side ==32:
+        output_path = hparams.output_path + f'_{hparams.threshold}'
+    else:
+        output_path = hparams.output_path + f'_{hparams.threshold}_{points_per_side}'
 
     sam_checkpoint = "tools/segment_anything/sam_vit_h_4b8939.pth"
     model_type = "vit_h"
@@ -87,7 +93,7 @@ def hello(hparams: Namespace) -> None:
 
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
-    mask_generator = SamAutomaticMaskGenerator(sam, points_per_side=32)
+    mask_generator = SamAutomaticMaskGenerator(sam, points_per_side=points_per_side)
 
     imgs = []
     for ext in ('*.png'):
@@ -108,17 +114,19 @@ def hello(hparams: Namespace) -> None:
     for i in range(len(imgs)):
         colors.append(np.random.random((1,3)).tolist()[0])
     colors = np.clip(colors, 0, 0.95)
-
-    Path(hparams.output_path).mkdir(exist_ok=True)
-    Path(os.path.join(hparams.output_path,'instances_mask')).mkdir(exist_ok=True)
-    Path(os.path.join(hparams.output_path,'instances_mask_vis')).mkdir(exist_ok=True)
-    Path(os.path.join(hparams.output_path,'image_cat')).mkdir(exist_ok=True)
+    
+    
+    Path(output_path).mkdir(exist_ok=True)
+    Path(os.path.join(output_path,'instances_mask')).mkdir(exist_ok=True)
+    Path(os.path.join(output_path,'instances_mask_vis')).mkdir(exist_ok=True)
+    Path(os.path.join(output_path,'image_cat')).mkdir(exist_ok=True)
 
     used_files = []
     for ext in ('*.png', '*.jpg'):
         used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs', ext)))
     used_files.sort()
     process_item = [Path(far_p).stem for far_p in used_files]
+    # process_item = process_item[350:]
 
     id = 1 
     for i in tqdm.tqdm(range(len(imgs))):
@@ -143,15 +151,16 @@ def hello(hparams: Namespace) -> None:
         mask, id = save_mask_anns_torch(colors, masks, img_name, hparams, id)
         mask_vis = visualize_labels(mask)
         
-        Image.fromarray(mask.cpu().numpy().astype(np.uint8)).save(os.path.join(hparams.output_path, 'instances_mask', f"{img_name}.png"))
+        Image.fromarray(mask.cpu().numpy().astype(np.uint32)).save(os.path.join(output_path, 'instances_mask', f"{img_name}.png"))
         
 
-        cv2.imwrite(os.path.join(hparams.output_path, 'instances_mask_vis', f"{img_name}.png"), mask_vis)
+        cv2.imwrite(os.path.join(output_path, 'instances_mask_vis', f"{img_name}.png"), mask_vis)
 
         image_cat = image*0.6+ mask_vis*0.4
-        cv2.imwrite(os.path.join(hparams.output_path,'image_cat', f"{img_name}.png"), image_cat)
+        cv2.imwrite(os.path.join(output_path,'image_cat', f"{img_name}.png"), image_cat)
                     
     print('done')
+    print(id)
 
 
 if __name__ == '__main__':
