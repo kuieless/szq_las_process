@@ -1,69 +1,115 @@
-####选择一个图像，往相机视角方向飞
+from typing import List, Dict
 
-
-import click
-import os
-import numpy as np
-import cv2 as cv
-from os.path import join as pjoin
-from glob import glob
-from scipy.spatial.transform import Rotation as R
-from scipy.spatial.transform import Slerp
 import torch
-from gp_nerf.runner_gpnerf import Runner
-from gp_nerf.opts import get_opts_base
-from argparse import Namespace
-from tqdm import tqdm
-import cv2
-from tools.unetformer.uavid2rgb import rgb2custom, custom2rgb,remapping
+from torch.utils.data import Dataset
 
-from PIL import Image
+from gp_nerf.datasets.dataset_utils import get_rgb_index_mask_depth_dji_instance
+from gp_nerf.image_metadata import ImageMetadata
+from mega_nerf.misc_utils import main_tqdm, main_print
+from mega_nerf.ray_utils import get_rays, get_ray_directions
+
+import numpy as np
+import glob
+import os
 from pathlib import Path
-import open3d as o3d
-import pickle
-import math
-from dji.process_dji_v8_color import euler2rotation, rad
-import xml.etree.ElementTree as ET
-from collections import Counter
-from pyntcloud import PyntCloud
-import pandas as pd
+import random
+from PIL import Image
+import cv2
 from functools import reduce
 
+class MemoryDataset(Dataset):
 
+    def __init__(self, metadata_items: List[ImageMetadata], near: float, far: float, ray_altitude_range: List[float],
+                 center_pixels: bool, device: torch.device, hparams=None):
+        super(MemoryDataset, self).__init__()
+        self.hparams = hparams
+        rgbs = []
+        rays = []
+        indices = []
+        instances = []
+        depth_djis = []
+        depth_scales = []
+        metadata_item = metadata_items[0]
+        self.metadata_items =metadata_items
 
-
-
-def _get_train_opts() -> Namespace:
-    parser = get_opts_base()
-    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
-    parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_10121215',required=False, help='experiment name')
-
-    
-    return parser.parse_args()
-
-
-def hello(hparams: Namespace) -> None:
-    hparams.ray_altitude_range = [-95, 54]
-    hparams.dataset_type='memory_depth_dji'
-    device = 'cpu'
-    threshold=0.015
-
-    hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
-    runner = Runner(hparams)
-    
-    used_files = []
-    for ext in ('*.png', '*.jpg'):
-        used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
-    used_files.sort()
-    process_item = [Path(far_p).stem for far_p in used_files]
-
-
-    for file_p in tqdm(process_item):
+        self.W = metadata_item.W
+        self.H = metadata_item.H
         
+        self._directions = get_ray_directions(metadata_item.W,
+                                        metadata_item.H,
+                                        metadata_item.intrinsics[0],
+                                        metadata_item.intrinsics[1],
+                                        metadata_item.intrinsics[2],
+                                        metadata_item.intrinsics[3],
+                                        center_pixels,
+                                        device)
+        depth_scale_full = torch.abs(self._directions[:, :, 2]).view(-1).cpu()
+        
+        main_print('Loading data')
+        if hparams.debug:
+            # metadata_items = metadata_items[::20]
+            metadata_items = metadata_items[170:200]
+            pass
+        load_subset = 0
+        for metadata_item in main_tqdm(metadata_items):
+        # for metadata_item in main_tqdm(metadata_items[:40]):
+            if hparams.enable_semantic and metadata_item.is_val:  # 训练语义的时候要去掉val图像
+                continue
+            if hparams.use_subset:
+                used_files = []
+                for ext in ('*.png', '*.jpg'):
+                    used_files.extend(glob.glob(os.path.join(f'{hparams.dataset_path}/subset/rgbs', ext)))
+                    # used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs', ext)))
+                    # used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/val/rgbs', ext)))
+                used_files.sort()
+                file_names = [os.path.splitext(os.path.basename(file_path))[0] for file_path in used_files]
+                if (metadata_item.label_path == None): #增强label集yingrenshi上只做了subset，所以可能会没有
+                    continue
+                else:
+                    if (Path(metadata_item.label_path).stem not in file_names):
+                        continue
+                    else:
+                        load_subset = load_subset+1
 
-        device='cpu'
-        overlap_threshold=0.5
+            image_data = get_rgb_index_mask_depth_dji_instance(metadata_item)
+
+            if image_data is None:
+                continue
+            #改成读取instance label
+            image_rgbs, image_indices, image_keep_mask, instance, depth_dji = image_data
+            
+            image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
+            
+            depth_scale = depth_scale_full.clone()
+            if image_keep_mask is not None:
+                image_rays = image_rays[image_keep_mask == True]
+                depth_scale = depth_scale[image_keep_mask == True]
+
+
+            rgbs.append(image_rgbs)
+            rays.append(image_rays)
+            indices.append(image_indices)
+            instances.append(torch.tensor(instance, dtype=torch.int))
+            depth_djis.append(depth_dji / depth_scale)
+            depth_scales.append(depth_scale)
+        print(f"load_subset: {load_subset}")
+        main_print('Finished loading data')
+
+        self._rgbs = rgbs
+        self._rays = rays
+        self._img_indices = indices  #  这个代码只存了一个
+        self._labels = instances
+        self._depth_djis = depth_djis 
+        self._depth_scales = depth_scales 
+
+
+    def __len__(self) -> int:
+        return len(self._rgbs)
+    
+
+    def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        device='cuda'
+        overlap_threshold=0.8
         ###NOTE 需要将shuffle调成False, 不打乱，按照顺序处理
 
         
@@ -73,9 +119,8 @@ def hello(hparams: Namespace) -> None:
         instances_current = self._labels[idx].clone().view(self.H, self.W).to(device)
         depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W).to(device)
         metadata_current = self.metadata_items[self._img_indices[idx]]
-        if int(Path(metadata_current.image_path).stem) < 200 and int(Path(metadata_current.image_path).stem) > 300:
-            return None
-        
+        # if int(Path(metadata_current.image_path).stem) < 170:
+        #     return None
         visualization = True
         if visualization:
             color_current = torch.zeros_like(img_current)
@@ -182,12 +227,11 @@ def hello(hparams: Namespace) -> None:
 
                 ######接下来对每个mask进行cross view 操作
                 # project_instance.nonzero().shape[0]> 0.05 * self.H * self.W
-                project_instances.append(project_instance)
+                project_instances.append()
                 
-        
-            ## 这里改为800张图像的投影结束后， 进行overlap计算  
-            for idx_next_i, idx_next in enumerate(index_list):
-                project_instance=project_instances[idx_next_i]
+            
+                ## 以上投影结束后， 进行overlap计算
+                
                 label_in_mask = project_instance[mask_idx]
                 uni_label_in_mask, count_label_in_mask = torch.unique(label_in_mask, return_counts=True)
                 for uni_2 in uni_label_in_mask:
@@ -221,7 +265,7 @@ def hello(hparams: Namespace) -> None:
                             Path(f"zyq/1030_crossview_project/test_{overlap_threshold}/each").mkdir(exist_ok=True, parents=True)
                             cv2.imwrite(f"zyq/1030_crossview_project/test_{overlap_threshold}/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
                     
-                            
+                                
 
             if merge_unique_label_list != []:
                 sorted_data = sorted(zip(merge_unique_label_list, score_list), key=lambda x: x[1], reverse=False)
@@ -272,8 +316,9 @@ def hello(hparams: Namespace) -> None:
 
             
 
-    print('done')
-
-
-if __name__ == '__main__':
-    hello(_get_train_opts())
+        if idx == len(self._rgbs) - 1:
+            return 'end'
+        else:
+            print(f"process idx : {int(Path(metadata_current.label_path).stem)}")
+            return None
+    

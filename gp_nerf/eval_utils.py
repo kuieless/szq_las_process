@@ -186,6 +186,10 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         # print(f'gt label: {gt_label.shape}')
         sem_label = logits_2_label(sem_logits)
 
+        if hparams.eval_m2f_2d:
+            m2f_path = os.path.join(hparams.dataset_path, 'val', 'labels_m2f', str(Path(metadata_item.image_path.stem))+'.png')
+            sem_label = Image.open(m2f_path)    #.convert('RGB')
+            sem_label = torch.ByteTensor(np.asarray(sem_label))
         if hparams.dataset_type == 'sam_project':
             pass
         else:
