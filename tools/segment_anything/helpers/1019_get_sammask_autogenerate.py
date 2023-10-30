@@ -72,7 +72,7 @@ def _get_train_opts() -> Namespace:
     parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
     parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
     parser.add_argument('--output_path', type=str, default='zyq/1029_get_instance_mask_train',required=False, help='')
-    parser.add_argument('--threshold', type=float, default=0.005,required=False, help='')
+    parser.add_argument('--threshold', type=float, default=0,required=False, help='')
     
 
     return parser.parse_args()
