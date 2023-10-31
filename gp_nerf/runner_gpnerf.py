@@ -583,7 +583,8 @@ class Runner:
                 #     pbar.update(1)
                 #     continue
                 # torch.cuda.empty_cache()
-                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process' and self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
+                # if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process' and self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
+                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
                     if item == ['end']:
                         print('done')
                         raise TypeError

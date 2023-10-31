@@ -106,11 +106,10 @@ class MemoryDataset(Dataset):
         return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        visualization = True
-        
+        visualization = False
         
         # 先用cross view对 instance进行一个并集判断
-        
+
         instance = self._instances[idx].clone().detach()
         instance_crossview = self._instance_crossview[idx].clone().detach()
 
@@ -120,7 +119,6 @@ class MemoryDataset(Dataset):
         unique_labels = unique_labels[non_zero_indices]
         counts = counts[non_zero_indices]
         
-
         for uni in unique_labels:
             uni_mask = instance==uni
             label_in_crossview = instance_crossview[uni_mask]
@@ -137,7 +135,6 @@ class MemoryDataset(Dataset):
                 #  把异常值剔掉
                 instance[uni_mask] = 0
 
-
         if visualization:
             def label_to_color(label_tensor):
                 unique_labels = torch.unique(label_tensor)
@@ -147,29 +144,13 @@ class MemoryDataset(Dataset):
                     if i ==0:
                         continue
                     color_image[label_tensor==i]=torch.randint(0, 256, (3,), dtype=torch.uint8)
-
-
                 return color_image
-
-            
-
             color = label_to_color(self._instances[idx].long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             color_crossview = label_to_color(instance_crossview.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             results = label_to_color(instance.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             vis_img = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy(), results.cpu().numpy()], axis=1)
             Path(f"zyq/1031_crossview_train").mkdir(exist_ok=True, parents=True)
             cv2.imwrite(f"zyq/1031_crossview_train/{idx}.jpg", vis_img)
-                    
-        return None
-
-
-
-
-
-
-
-        
-        
         
         
         # 找到非零值的索引
