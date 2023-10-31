@@ -11,7 +11,7 @@ config_file=configs/yingrenshi.yaml
 
 batch_size=8192
 train_iterations=200000
-val_interval=20
+val_interval=20000
 ckpt_interval=20000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf
@@ -52,4 +52,4 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=3    --semantic_layer_dim=128 \
     --use_subset=True      --lr=$lr    --balance_weight=True   --num_semantic_classes=5   \
     --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name   \
-    --instance_loss_mode=$instance_loss_mode  --debug=True
+    --instance_loss_mode=$instance_loss_mode  --num_instance_classes=50

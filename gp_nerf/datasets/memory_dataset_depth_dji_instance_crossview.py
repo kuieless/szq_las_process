@@ -134,7 +134,10 @@ class MemoryDataset(Dataset):
             if uni != most_frequent_label:
                 #  把异常值剔掉
                 instance[uni_mask] = 0
-
+        
+        Path(f"zyq/1031_crossview_train/results").mkdir(exist_ok=True, parents=True)
+        Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1031_crossview_train/results/%06d.png" % (self._img_indices[idx]))
+        
         if visualization:
             def label_to_color(label_tensor):
                 unique_labels = torch.unique(label_tensor)
@@ -149,8 +152,16 @@ class MemoryDataset(Dataset):
             color_crossview = label_to_color(instance_crossview.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             results = label_to_color(instance.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             vis_img = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy(), results.cpu().numpy()], axis=1)
-            Path(f"zyq/1031_crossview_train").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1031_crossview_train/{idx}.jpg", vis_img)
+            Path(f"zyq/1031_crossview_train/viz").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1031_crossview_train/viz/{idx}.jpg", vis_img)
+        
+        if idx == len(self._rgbs) - 1:
+            # torch.cuda.empty_cache()
+            return 'end'
+        else:
+            # torch.cuda.empty_cache()
+            print(f"process idx : {self._img_indices[idx]}")
+            return None
         
         
         # 找到非零值的索引
@@ -180,7 +191,7 @@ class MemoryDataset(Dataset):
             'rays': self._rays[idx][sampling_idx],
             'img_indices': self._img_indices[idx] * torch.ones(sampling_idx.shape[0], dtype=torch.int32),
             # 'labels': self._instances[idx][sampling_idx].int(),
-            'labels': instance[sampling_idx].int(),
+            'labels': instance[sampling_idx],
         }
         if self._depth_djis[idx] is not None:
             item['depth_dji'] = self._depth_djis[idx][sampling_idx]

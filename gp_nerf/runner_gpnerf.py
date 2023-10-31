@@ -565,7 +565,7 @@ class Runner:
                     data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type =='memory_depth_dji_instance_crossview':
-                    data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
+                    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
                     data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
@@ -587,8 +587,8 @@ class Runner:
                 #     pbar.update(1)
                 #     continue
                 # torch.cuda.empty_cache()
-                # if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process' and self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
-                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
+                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process' and self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
+                # if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
                     if item == ['end']:
                         print('done')
                         raise TypeError
@@ -610,7 +610,7 @@ class Runner:
 
                 
 
-                # item = np.load('79972.npy',allow_pickle=True).item()
+                # item = np.load('1236.npy',allow_pickle=True).item()
 
                 if dataset_index <= discard_index:
                     continue
@@ -694,6 +694,9 @@ class Runner:
                             if not math.isfinite(val):
                                 np.save(f"{train_iterations}.npy", item)
                                 raise Exception('Train metrics not finite: {}'.format(metrics))
+                            if math.isnan(val):
+                                np.save(f"{train_iterations}.npy", item)
+                                raise Exception('Train metrics is nan: {}'.format(metrics))
 
                 for optimizer in optimizers.values():
                     # optimizer.zero_grad(set_to_none=True)
@@ -1123,12 +1126,9 @@ class Runner:
             sem_logits = results[f'sem_map_{typ}']
             sem_label = self.logits_2_label(sem_logits)
             sem_label = remapping(sem_label)
-            # get building area
-            building_mask = sem_label==1
-
 
             # contrastive loss or slow-fast loss
-            instance_loss, concentration_loss = self.calculate_instance_clustering_loss(instance_features[building_mask], labels_gt[building_mask])
+            instance_loss, concentration_loss = self.calculate_instance_clustering_loss(instance_features, labels_gt)
 
             # Concentration loss from contrastive lift
 
@@ -1312,8 +1312,8 @@ class Runner:
         return new_labels
     
     def calculate_instance_clustering_loss(self, instance_features, labels_gt):
-        instance_loss = 0
-        concentration_loss = 0
+        instance_loss = 0    #torch.tensor(0., device=instance_features.device, requires_grad=True)
+        concentration_loss = 0 ##torch.tensor(0., device=instance_features.device, requires_grad=True)
         if instance_features == []:
             return torch.tensor(0., device=instance_features.device), torch.tensor(0., device=instance_features.device)
         if self.hparams.instance_loss_mode == "linear_assignment":
@@ -1382,6 +1382,8 @@ class Runner:
             # compute loss
             prob = torch.mul(logits, label_matrix).sum(dim=-1) / logits.sum(dim=-1)
             prob_masked = torch.masked_select(prob, prob.ne(0))
+            if prob_masked.shape[0] == 0:
+                return torch.tensor(0.0, device=instance_features.device, requires_grad=True),torch.tensor(0.0, device=instance_features.device, requires_grad=True)
             instance_loss += -torch.log(prob_masked).mean()
 
         return instance_loss, concentration_loss
@@ -3096,21 +3098,21 @@ class Runner:
 
         
         label_path = None
-        if not self.hparams.enable_instance:
-            for extension in ['.jpg', '.JPG', '.png', '.PNG']:
-                
-                candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_name}' / '{}{}'.format(metadata_path.stem, extension)
+        for extension in ['.jpg', '.JPG', '.png', '.PNG']:
+            
+            candidate = metadata_path.parent.parent / f'labels_{self.hparams.label_name}' / '{}{}'.format(metadata_path.stem, extension)
 
-                if candidate.exists():
-                    label_path = candidate
-                    break
-        else:
+            if candidate.exists():
+                label_path = candidate
+                break
+        instance_path = None
+        if self.hparams.enable_instance:
             for extension in ['.jpg', '.JPG', '.png', '.PNG']:
                 
                 candidate = metadata_path.parent.parent / f'{self.hparams.instance_name}' / '{}{}'.format(metadata_path.stem, extension)
 
                 if candidate.exists():
-                    label_path = candidate
+                    instance_path = candidate
                     break
         if self.hparams.dataset_type == 'sam':
             sam_feature_path = None
@@ -3149,11 +3151,11 @@ class Runner:
                 lerf_or_right = None
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                  intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, 
-                                 depth_dji_path=depth_dji_path, left_or_right=lerf_or_right, hparams=self.hparams)
+                                 depth_dji_path=depth_dji_path, left_or_right=lerf_or_right, hparams=self.hparams, instance_path=instance_path)
 
         else:
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
-                                intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path)
+                                intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, instance_path=instance_path)
 
     def _get_experiment_path(self) -> Path:
         exp_dir = Path(self.hparams.exp_name)

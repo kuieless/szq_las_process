@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=6
 
 
 
@@ -36,8 +36,8 @@ desired_resolution=8192
 instance_loss_mode=slow_fast
 
 enable_instance=True
-exp_name=logs_dji/1031_yingrenshi_density_depth_hash22_instance_origin_sam_0.001_crossview
-instance_name=instances_mask_0.001_crossview
+exp_name=logs_dji/1031_yingrenshi_density_depth_hash22_instance_origin_sam_0.001
+instance_name=instances_mask_0.001
 
 
 

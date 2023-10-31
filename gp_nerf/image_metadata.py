@@ -9,10 +9,9 @@ from PIL import Image
 
 import cv2
 class ImageMetadata:
-    #zyq : add label_path for semantic 
     def __init__(self, image_path: Path, c2w: torch.Tensor, W: int, H: int, intrinsics: torch.Tensor, image_index: int,
                  mask_path: Optional[Path], is_val: bool, label_path: Optional[Path], sam_feature_path=None, normal_path=None, 
-                 depth_path=None, depth_dji_path=None, left_or_right=None, hparams=None):
+                 depth_path=None, depth_dji_path=None, left_or_right=None, hparams=None, instance_path=None):
         self.image_path = image_path
         self.c2w = c2w
         self.W = W
@@ -28,6 +27,7 @@ class ImageMetadata:
         self.depth_dji_path = depth_dji_path
         self.left_or_right = left_or_right
         self.hparams = hparams
+        self.instance_path = instance_path
 
 
     def load_image(self) -> torch.Tensor:
@@ -38,8 +38,6 @@ class ImageMetadata:
             # rgbs = rgbs.resize((self.W, self.H), Image.LANCZOS) 
             # rgbs = rgbs.resize((self.W, self.H), Image.NEAREST) 
             rgbs = rgbs.resize((self.W, self.H), Image.BILINEAR)
-
-
 
         return torch.ByteTensor(np.asarray(rgbs))
 
@@ -61,7 +59,6 @@ class ImageMetadata:
         if self.label_path is None:
             return None
         labels = Image.open(self.label_path)    #.convert('RGB')
-        # labels = cv2.imread(str(self.label_path))
         size = labels.size
 
         if size[0] != self.W or size[1] != self.H:
@@ -71,10 +68,8 @@ class ImageMetadata:
     
     
     def load_gt(self) -> torch.Tensor:
-        # label_path = self.label_path
         gt_path = self.image_path.parent.parent / 'labels_gt' / f'{self.image_path.stem}.png'
         labels = Image.open(gt_path)    #.convert('RGB')
-        # labels = cv2.imread(str(self.label_path))
         size = labels.size
 
         if size[0] != self.W or size[1] != self.H:
@@ -115,10 +110,10 @@ class ImageMetadata:
     
     
     def load_instance(self) -> torch.Tensor:
-        if self.label_path is None:
+        if self.instance_path is None:
             return None
         
-        labels = Image.open(self.label_path)    #.convert('RGB')
+        labels = Image.open(self.instance_path)    #.convert('RGB')
         size = labels.size
         if size[0] != self.W or size[1] != self.H:
             labels = labels.resize((self.W, self.H), Image.NEAREST)
@@ -127,9 +122,9 @@ class ImageMetadata:
         return torch.tensor(np.asarray(labels),dtype=torch.int32)
 
     def load_instance_crossview(self) -> torch.Tensor:
-        if self.label_path is None:
+        if self.instance_path is None:
             return None
-        crossview_path = str(self.label_path).replace(self.hparams.instance_name, self.hparams.instance_name+'_crossview')
+        crossview_path = str(self.instance_path).replace(self.hparams.instance_name, self.hparams.instance_name+'_crossview_process')
 
         labels = Image.open(crossview_path)    #.convert('RGB')
         size = labels.size

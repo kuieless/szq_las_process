@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import random
 from PIL import Image
+from tools.unetformer.uavid2rgb import remapping
 
 class MemoryDataset(Dataset):
 
@@ -71,7 +72,7 @@ class MemoryDataset(Dataset):
             if image_data is None:
                 continue
             #改成读取instance label
-            image_rgbs, image_indices, image_keep_mask, instance, depth_dji = image_data
+            image_rgbs, image_indices, image_keep_mask, label, depth_dji, instance = image_data
             
             image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
             
@@ -80,6 +81,10 @@ class MemoryDataset(Dataset):
                 image_rays = image_rays[image_keep_mask == True]
                 depth_scale = depth_scale[image_keep_mask == True]
 
+            # 在instance 训练时只拿 semantic 中building的区域
+            label = remapping(label)
+            building_mask = label==1
+            instance[~building_mask] = 0
 
             rgbs.append(image_rgbs)
             rays.append(image_rays)
@@ -104,12 +109,11 @@ class MemoryDataset(Dataset):
         nonzero_indices = torch.nonzero(self._instances[idx]).squeeze()
 
         
-        sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
         #### 1. 若点不够，返回None,但这个在多个batch size会出问题
         # if sampling_idx.shape[0] == 0 or sampling_idx.shape[0] < self.hparams.batch_size:
         #     return None
         #### 2. 点不够， 则换张图采样
-        if sampling_idx.shape[0] == 0 or sampling_idx.shape[0] < self.hparams.batch_size:
+        if nonzero_indices.size(0) == 0 or nonzero_indices.size(0) < self.hparams.batch_size:
 
             index_shuffle= list(range(len(self._rgbs)))
             index_shuffle.remove(idx)  # 从列表中移除已知的索引
@@ -119,6 +123,7 @@ class MemoryDataset(Dataset):
             item = self.__getitem__(next_idx)
             return item
 
+        sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
 
 
         item = {
