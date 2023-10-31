@@ -460,13 +460,13 @@ class Runner:
             self.H = dataset.H
             self.W = dataset.W
         elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
-            from gp_nerf.datasets.memory_dataset_depth_dji_instance import MemoryDataset
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
             self.W = dataset.W
         elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
-            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process_1030_night import MemoryDataset
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
@@ -557,11 +557,11 @@ class Runner:
                 elif 'llff' in self.hparams.dataset_type or self.hparams.dataset_type =='mega_sa3d':
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
-                elif self.hparams.dataset_type =='memory_depth_dji_instance':
+                elif self.hparams.dataset_type == 'memory_depth_dji_instance':
                     data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type =='memory_depth_dji_instance_crossview':
-                    data_loader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=0,
+                    data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
                     data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
@@ -584,7 +584,6 @@ class Runner:
                 #     continue
                 # torch.cuda.empty_cache()
                 if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
-                    print()
                     if item == ['end']:
                         print('done')
                         raise TypeError

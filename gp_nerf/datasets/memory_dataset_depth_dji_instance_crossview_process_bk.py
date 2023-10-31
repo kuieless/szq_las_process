@@ -108,9 +108,7 @@ class MemoryDataset(Dataset):
     
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        # device='cpu'
         device='cuda'
-
         overlap_threshold=0.5
         ###NOTE 需要将shuffle调成False, 不打乱，按照顺序处理
 
@@ -123,7 +121,6 @@ class MemoryDataset(Dataset):
         metadata_current = self.metadata_items[self._img_indices[idx]]
         if int(Path(metadata_current.image_path).stem) < 460:
             return None
-        
         visualization = True
         if visualization:
             color_current = torch.zeros_like(img_current)
@@ -230,12 +227,11 @@ class MemoryDataset(Dataset):
 
                 ######接下来对每个mask进行cross view 操作
                 # project_instance.nonzero().shape[0]> 0.05 * self.H * self.W
-                project_instances.append(project_instance)
+                # project_instances.append()
                 
-        
-            ## 这里改为800张图像的投影结束后， 进行overlap计算  
-            for idx_next_i, idx_next in enumerate(index_list):
-                project_instance=project_instances[idx_next_i]
+            
+                ## 以上投影结束后， 进行overlap计算
+                
                 label_in_mask = project_instance[mask_idx]
                 uni_label_in_mask, count_label_in_mask = torch.unique(label_in_mask, return_counts=True)
                 for uni_2 in uni_label_in_mask:
@@ -269,7 +265,7 @@ class MemoryDataset(Dataset):
                             Path(f"zyq/1030_crossview_project/test_{overlap_threshold}/each").mkdir(exist_ok=True, parents=True)
                             cv2.imwrite(f"zyq/1030_crossview_project/test_{overlap_threshold}/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
                     
-                            
+                                
 
             if merge_unique_label_list != []:
                 sorted_data = sorted(zip(merge_unique_label_list, score_list), key=lambda x: x[1], reverse=False)
@@ -321,10 +317,8 @@ class MemoryDataset(Dataset):
             
 
         if idx == len(self._rgbs) - 1:
-            # torch.cuda.empty_cache()
             return 'end'
         else:
-            # torch.cuda.empty_cache()
             print(f"process idx : {int(Path(metadata_current.label_path).stem)}")
             return None
     
