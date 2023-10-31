@@ -179,7 +179,8 @@ class MemoryDataset(Dataset):
             'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,
             'rays': self._rays[idx][sampling_idx],
             'img_indices': self._img_indices[idx] * torch.ones(sampling_idx.shape[0], dtype=torch.int32),
-            'labels': self._instances[idx][sampling_idx].int(),
+            # 'labels': self._instances[idx][sampling_idx].int(),
+            'labels': instance[sampling_idx].int(),
         }
         if self._depth_djis[idx] is not None:
             item['depth_dji'] = self._depth_djis[idx][sampling_idx]
