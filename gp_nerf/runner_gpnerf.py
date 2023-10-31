@@ -466,7 +466,7 @@ class Runner:
             self.H = dataset.H
             self.W = dataset.W
         elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
-            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process import MemoryDataset
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process_1030_night import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
@@ -1322,13 +1322,10 @@ class Runner:
             # sample two random batches from the current batch
             fast_mask = torch.zeros_like(labels_gt).bool()
             # 1026 这里采用固定的后半段， 改为随机一半
-            # fast_mask[:labels_gt.shape[0] // 2] = True
-            random_indices = torch.randperm(len(labels_gt))[:len(labels_gt) // 2]
-            fast_mask[random_indices] = True
-
-
+            fast_mask[:labels_gt.shape[0] // 2] = True
+            # random_indices = torch.randperm(len(labels_gt))[:len(labels_gt) // 2]
+            # fast_mask[random_indices] = True
             slow_mask = ~fast_mask # non-overlapping masks for slow and fast models
-            
             ## compute centroids
             slow_centroids = []
             fast_labels, slow_labels = torch.unique(labels_gt[fast_mask]), torch.unique(labels_gt[slow_mask])
@@ -1341,7 +1338,6 @@ class Runner:
                 print("Length of fast labels", len(fast_labels), "Length of slow labels", len(slow_labels))
                 # This happens when labels_gt of shape 1
                 return torch.tensor(0.0, device=instance_features.device),torch.tensor(0.0, device=instance_features.device)
-            
             
             ### Concentration loss
             intersecting_labels = fast_labels[torch.where(torch.isin(fast_labels, slow_labels))] # [num_centroids]

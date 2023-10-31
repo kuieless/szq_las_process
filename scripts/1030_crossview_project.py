@@ -28,16 +28,18 @@ from collections import Counter
 from pyntcloud import PyntCloud
 import pandas as pd
 from functools import reduce
+from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 
 
+torch.cuda.set_device(5)
 
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--output_path', type=str, default='zyq/1010_3d_get2dlabel_gt_10121215',required=False, help='experiment name')
+    parser.add_argument('--output_path', type=str, default='zyq/1031_crossview_project',required=False, help='experiment name')
 
     
     return parser.parse_args()
@@ -45,56 +47,73 @@ def _get_train_opts() -> Namespace:
 
 def hello(hparams: Namespace) -> None:
     hparams.ray_altitude_range = [-95, 54]
-    hparams.dataset_type='memory_depth_dji'
-    device = 'cpu'
-    threshold=0.015
-
+    hparams.dataset_type='memory_depth_dji_instance_crossview_process'
+    hparams.depth_dji_type=='mesh'
     hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
+    hparams.instance_name = 'instances_mask_0.001' # ['m2f', 'merge', 'gt']
+    hparams.sampling_mesh_guidance=True
+
     runner = Runner(hparams)
-    
+    train_items = runner.train_items
+
     used_files = []
     for ext in ('*.png', '*.jpg'):
         used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
     used_files.sort()
     process_item = [Path(far_p).stem for far_p in used_files]
+    train_items = [train_item for train_item in train_items if (Path(train_item.image_path).stem in process_item)]
 
 
-    for file_p in tqdm(process_item):
-        
+    for idx, metadata_item in enumerate(tqdm(train_items, desc="")):
+        file_name = Path(metadata_item.image_path).stem
+        if file_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
+            continue
 
-        device='cpu'
+        device='cuda'
         overlap_threshold=0.5
         ###NOTE 需要将shuffle调成False, 不打乱，按照顺序处理
+        H, W = metadata_item.H, metadata_item.W
+        directions = get_ray_directions(metadata_item.W,
+                                        metadata_item.H,
+                                        metadata_item.intrinsics[0],
+                                        metadata_item.intrinsics[1],
+                                        metadata_item.intrinsics[2],
+                                        metadata_item.intrinsics[3],
+                                        False,
+                                        device)
+        _depth_scales = torch.abs(directions[:, :, 2]).to(device)
 
-        
 
-        # 拿到当前图像的数据
-        img_current = self._rgbs[idx].clone().view(self.H, self.W, 3).to(device)
-        instances_current = self._labels[idx].clone().view(self.H, self.W).to(device)
-        depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W).to(device)
-        metadata_current = self.metadata_items[self._img_indices[idx]]
-        if int(Path(metadata_current.image_path).stem) < 200 and int(Path(metadata_current.image_path).stem) > 300:
-            return None
+        # 拿到当前图像的数据  
+        img_current = metadata_item.load_image().view(H, W, 3).to(device)
+        instances_current = metadata_item.load_instance().view(H, W).to(device)
+        depth_current = (metadata_item.load_depth_dji().view(H, W).to(device) * _depth_scales)
+
+        metadata_current = metadata_item
+
+
+        # if int(Path(metadata_current.image_path).stem) < 200 and int(Path(metadata_current.image_path).stem) > 300:
+            # return None
         
         visualization = True
-        if visualization:
-            color_current = torch.zeros_like(img_current)
-            unique_label = torch.unique(instances_current)
-            for uni in unique_label:
-                if uni ==0:
-                    continue
-                random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
-                if (instances_current==uni).sum() != 0:
-                    color_current[instances_current==uni,:] = random_color
-            vis_img1 = 0.7 * color_current + 0.3 * img_current
-            Path(f"zyq/1030_crossview_project/test_{overlap_threshold}/mask_vis").mkdir(exist_ok=True, parents=True)
+        # if visualization:
+        #     color_current = torch.zeros_like(img_current)
+        #     unique_label = torch.unique(instances_current)
+        #     for uni in unique_label:
+        #         if uni ==0:
+        #             continue
+        #         random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
+        #         if (instances_current==uni).sum() != 0:
+        #             color_current[instances_current==uni,:] = random_color
+        #     vis_img1 = 0.7 * color_current + 0.3 * img_current
+        #     Path(f"{hparams.output_path}/test_{overlap_threshold}/mask_vis").mkdir(exist_ok=True, parents=True)
 
-            # cv2.imwrite(f"zyq/1030_crossview_project/test_{overlap_threshold}/mask_vis/%06d.jpg" % (idx), color_current.cpu().numpy())
-
-
+            # cv2.imwrite(f"{hparams.output_path}/test_{overlap_threshold}/mask_vis/%06d.jpg" % (idx), color_current.cpu().numpy())
 
 
-        index_list= list(range(len(self._rgbs)))
+
+
+        index_list= list(range(len(train_items)))
         index_list.remove(idx)  # 从列表中移除已知的索引
         ##### 新图像，用于存储 cross view 并集
         new_instance = torch.zeros_like(instances_current)
@@ -113,23 +132,24 @@ def hello(hparams: Namespace) -> None:
 
             mask_idx = instances_current == unique_label
             mask_idx_area = mask_idx.sum()
-            if mask_idx_area < 0.005 * self.H * self.W:
+            if mask_idx_area < 0.005 * H * W:
                 continue
 
             # 把投影结果先存储下来，避免重复投影
             project_instances = [] 
             # 先进行投影
             for idx_next in index_list:
-                img_next = self._rgbs[idx_next].clone().view(self.H, self.W, 3).to(device)
-                instances_next = self._labels[idx_next].clone().view(self.H, self.W).to(device)
-                depth_next = (self._depth_djis[idx_next] * self._depth_scales[idx_next]).to(device)
+                metadata_next = train_items[idx_next]
+                img_next = metadata_next.load_image().view(H, W, 3).to(device)
+                instances_next = metadata_next.load_instance().view(H, W).to(device)
+                depth_next = (metadata_next.load_depth_dji().view(H, W).to(device) * _depth_scales).view(-1)
+
                 inf_mask = torch.isinf(depth_next)
                 depth_next[inf_mask] = depth_next[~inf_mask].max()
-                metadata_next = self.metadata_items[self._img_indices[idx_next]]
 
                 ###### 先投影， 这里采用把第二张图（其他图）投回第一张图
 
-                x_grid, y_grid = torch.meshgrid(torch.arange(self.W), torch.arange(self.H))
+                x_grid, y_grid = torch.meshgrid(torch.arange(W), torch.arange(H))
                 x_grid, y_grid = x_grid.T.flatten().to(device), y_grid.T.flatten().to(device)
                 ## 第二张图先得到点云
                 pixel_coordinates = torch.stack([x_grid, y_grid, torch.ones_like(x_grid)], dim=-1)
@@ -157,7 +177,7 @@ def hello(hparams: Namespace) -> None:
 
                 ########### 取得落在图像上的点 mask_x & mask_y ， 并考虑遮挡 mask_z
                 threshold= 0.02
-                image_width, image_height = self.W, self.H
+                image_width, image_height = W, H
                 mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] < image_width)
                 mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
                 mask = mask_x & mask_y
@@ -181,7 +201,7 @@ def hello(hparams: Namespace) -> None:
                 project_instance[y[mask_xyz], x[mask_xyz]] = instances_next[y_grid[mask_xyz], x_grid[mask_xyz]]
 
                 ######接下来对每个mask进行cross view 操作
-                # project_instance.nonzero().shape[0]> 0.05 * self.H * self.W
+                # project_instance.nonzero().shape[0]> 0.05 * H * W
                 project_instances.append(project_instance)
                 
         
@@ -198,7 +218,7 @@ def hello(hparams: Namespace) -> None:
                     mask_area_overlap = (mask_idx * mask_2).sum()
                     # 存储符合条件的并集mask 和 对应要融合区域大小的score
                     if (mask_area_overlap / mask_area_2) > overlap_threshold or (mask_area_overlap / mask_idx_area) > overlap_threshold:
-                        if mask_area_2 < 0.001 * self.H * self.W or (instances_next==uni_2).sum() < 0.001 * self.H * self.W:
+                        if mask_area_2 < 0.001 * H * W or (instances_next==uni_2).sum() < 0.001 * H * W:
                             continue
                         merge_unique_label_list.append(mask_2)
                         score_list.append(mask_area_2)
@@ -216,10 +236,10 @@ def hello(hparams: Namespace) -> None:
                             vis_img2 = 0.7 * color_next + 0.3 * img_next
                             vis_img3 = 0.7 * color_project + 0.3 * img_current
 
-                            # if project_instance.nonzero().shape[0]> 0.05 * self.H * self.W:
+                            # if project_instance.nonzero().shape[0]> 0.05 * H * W:
                             vis_img = np.concatenate([vis_img1.cpu().numpy(), vis_img2.cpu().numpy(), vis_img3.cpu().numpy()], axis=1)
-                            Path(f"zyq/1030_crossview_project/test_{overlap_threshold}/each").mkdir(exist_ok=True, parents=True)
-                            cv2.imwrite(f"zyq/1030_crossview_project/test_{overlap_threshold}/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
+                            Path(f"{hparams.output_path}/test_{overlap_threshold}/each").mkdir(exist_ok=True, parents=True)
+                            cv2.imwrite(f"{hparams.output_path}/test_{overlap_threshold}/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
                     
                             
 
@@ -237,7 +257,7 @@ def hello(hparams: Namespace) -> None:
                 #     random_color = torch.randint(0, 256, (3,), dtype=torch.uint8)
 
                 #     color_result[iii_mask]=random_color
-                #     cv2.imwrite(f"zyq/1030_crossview_project/test_{overlap_threshold}/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
+                #     cv2.imwrite(f"{hparams.output_path}/test_{overlap_threshold}/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
                 #     iiiii += 1
 
                 union_mask = reduce(torch.logical_or, merge_unique_label_list)
@@ -265,10 +285,10 @@ def hello(hparams: Namespace) -> None:
             
             vis_img5 = np.concatenate([vis_img1.cpu().numpy(), vis_img4.cpu().numpy()], axis=1)
 
-            Path(f"zyq/1030_crossview_project/test_{overlap_threshold}/results").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1030_crossview_project/test_{overlap_threshold}/results/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img5)
-            Path(f"zyq/1030_crossview_project/test_{overlap_threshold}/crossview").mkdir(exist_ok=True, parents=True)
-            Image.fromarray(new_instance.cpu().numpy().astype(np.uint8)).save(f"zyq/1030_crossview_project/test_{overlap_threshold}/crossview/{Path(metadata_current.label_path).stem}.png")
+            Path(f"{hparams.output_path}/test_{overlap_threshold}/results").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"{hparams.output_path}/test_{overlap_threshold}/results/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img5)
+            Path(f"{hparams.output_path}/test_{overlap_threshold}/crossview").mkdir(exist_ok=True, parents=True)
+            Image.fromarray(new_instance.cpu().numpy().astype(np.uint8)).save(f"{hparams.output_path}/test_{overlap_threshold}/crossview/{Path(metadata_current.label_path).stem}.png")
 
             
 
