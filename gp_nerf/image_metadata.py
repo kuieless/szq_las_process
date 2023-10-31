@@ -117,18 +117,29 @@ class ImageMetadata:
     def load_instance(self) -> torch.Tensor:
         if self.label_path is None:
             return None
+        
         labels = Image.open(self.label_path)    #.convert('RGB')
-        # labels = cv2.imread(str(self.label_path))
         size = labels.size
-
         if size[0] != self.W or size[1] != self.H:
             labels = labels.resize((self.W, self.H), Image.NEAREST)
        
         # return torch.ByteTensor(np.asarray(labels))
         return torch.tensor(np.asarray(labels),dtype=torch.int32)
 
+    def load_instance_crossview(self) -> torch.Tensor:
+        if self.label_path is None:
+            return None
+        crossview_path = str(self.label_path).replace(self.hparams.instance_name, self.hparams.instance_name+'_crossview')
+
+        labels = Image.open(crossview_path)    #.convert('RGB')
+        size = labels.size
+        if size[0] != self.W or size[1] != self.H:
+            labels = labels.resize((self.W, self.H), Image.NEAREST)
+        return torch.tensor(np.asarray(labels),dtype=torch.int32)
+    
     
     def load_instance_gt(self) -> torch.Tensor:
+
         gt_path = self.image_path.parent.parent / 'instances_gt' / f'{self.image_path.stem}.png'
 
         labels = Image.open(gt_path)    #.convert('RGB')
@@ -139,4 +150,5 @@ class ImageMetadata:
         #  gt instance的数字不会太大
         return torch.ByteTensor(np.asarray(labels))
         # return torch.tensor(np.asarray(labels))
+
 

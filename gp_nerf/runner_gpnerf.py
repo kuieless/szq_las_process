@@ -466,7 +466,7 @@ class Runner:
             self.H = dataset.H
             self.W = dataset.W
         elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
-            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process import MemoryDataset
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process_bk import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
@@ -583,7 +583,7 @@ class Runner:
                 #     pbar.update(1)
                 #     continue
                 # torch.cuda.empty_cache()
-                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
+                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process' and self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
                     if item == ['end']:
                         print('done')
                         raise TypeError
@@ -1321,9 +1321,9 @@ class Runner:
             # sample two random batches from the current batch
             fast_mask = torch.zeros_like(labels_gt).bool()
             # 1026 这里采用固定的后半段， 改为随机一半
-            fast_mask[:labels_gt.shape[0] // 2] = True
-            # random_indices = torch.randperm(len(labels_gt))[:len(labels_gt) // 2]
-            # fast_mask[random_indices] = True
+            # fast_mask[:labels_gt.shape[0] // 2] = True
+            random_indices = torch.randperm(len(labels_gt))[:len(labels_gt) // 2]
+            fast_mask[random_indices] = True
             slow_mask = ~fast_mask # non-overlapping masks for slow and fast models
             ## compute centroids
             slow_centroids = []

@@ -93,7 +93,7 @@ class MemoryDataset(Dataset):
         self._rgbs = rgbs
         self._rays = rays
         self._img_indices = indices  #  这个代码只存了一个
-        self._labels = instances
+        self._instances = instances
         self._depth_djis = depth_djis 
 
     def __len__(self) -> int:
@@ -101,7 +101,7 @@ class MemoryDataset(Dataset):
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
         # 找到非零值的索引
-        nonzero_indices = torch.nonzero(self._labels[idx]).squeeze()
+        nonzero_indices = torch.nonzero(self._instances[idx]).squeeze()
 
         
         sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
@@ -125,7 +125,7 @@ class MemoryDataset(Dataset):
             'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,
             'rays': self._rays[idx][sampling_idx],
             'img_indices': self._img_indices[idx] * torch.ones(sampling_idx.shape[0], dtype=torch.int32),
-            'labels': self._labels[idx][sampling_idx].int(),
+            'labels': self._instances[idx][sampling_idx].int(),
         }
         if self._depth_djis[idx] is not None:
             item['depth_dji'] = self._depth_djis[idx][sampling_idx]
