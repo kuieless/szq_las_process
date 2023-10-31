@@ -63,6 +63,7 @@ from scripts.extract_mesh_sdf import extract_geometry
 from scripts.visualize_points import visualize_points
 import open3d as o3d
 import matplotlib.pyplot as plt
+import scipy
 from scipy.spatial import Delaunay
 from scipy.spatial import cKDTree
 import pickle
@@ -132,6 +133,9 @@ class Runner:
         print(f"ignore_index: {hparams.ignore_index}")
         self.temperature = 100
         self.thing_classes=[1]
+        # use when instance_loss_mode == 'linear_assignment'
+        self.loss_instances_cluster = torch.nn.CrossEntropyLoss(reduction='none')
+
         if hparams.balance_weight:
             # 1017之前：cluster 1，  building 1， road 1， car 5， tree 5， vegetation 5   
             # balance_weight = torch.FloatTensor([1, 1, 1, 5, 5, 5, 1, 1, 1, 1, 1]).cuda()
@@ -1294,14 +1298,33 @@ class Runner:
                 self.writer.add_scalar('1_train/normal_epsilon_ratio', results['normal_epsilon_ratio'], train_iterations)
             del results['cos_anneal_ratio'], results['normal_epsilon_ratio']
         return metrics, bg_nerf_rays_present
-
+    
+    def create_virtual_gt_with_linear_assignment(self, labels_gt, predicted_scores):
+        labels = sorted(torch.unique(labels_gt).cpu().tolist())[:predicted_scores.shape[-1]]
+        predicted_probabilities = torch.softmax(predicted_scores, dim=-1).detach()
+        cost_matrix = np.zeros([len(labels), predicted_probabilities.shape[-1]])
+        for lidx, label in enumerate(labels):
+            cost_matrix[lidx, :] = -(predicted_probabilities[labels_gt == label, :].sum(dim=0) / ((labels_gt == label).sum() + 1e-4)).cpu().numpy()
+        assignment = scipy.optimize.linear_sum_assignment(np.nan_to_num(cost_matrix))
+        new_labels = torch.zeros_like(labels_gt)
+        for aidx, lidx in enumerate(assignment[0]):
+            new_labels[labels_gt == labels[lidx]] = assignment[1][aidx]
+        return new_labels
+    
     def calculate_instance_clustering_loss(self, instance_features, labels_gt):
         instance_loss = 0
         concentration_loss = 0
         if instance_features == []:
-            return torch.tensor(0.0, device=instance_features.device),torch.tensor(0.0, device=instance_features.device)
+            return torch.tensor(0., device=instance_features.device), torch.tensor(0., device=instance_features.device)
         if self.hparams.instance_loss_mode == "linear_assignment":
-            pass
+            # 2023.10.31 18:54
+            virtual_gt_labels = self.create_virtual_gt_with_linear_assignment(labels_gt, instance_features)
+            predicted_labels = instance_features.argmax(dim=-1)
+            if torch.any(virtual_gt_labels != predicted_labels):  # should never reinforce correct labels
+                # return (self.loss_instances_cluster(instance_features, virtual_gt_labels) * confidences).mean()
+                # 我们这里先不考虑confidences
+                return (self.loss_instances_cluster(instance_features, virtual_gt_labels)).mean(), concentration_loss
+            return torch.tensor(0., device=instance_features.device, requires_grad=True), concentration_loss
         
         elif self.hparams.instance_loss_mode == "contrastive": # vanilla contrastive loss
             instance_loss = contrastive_loss(instance_features, labels_gt, self.temperature)

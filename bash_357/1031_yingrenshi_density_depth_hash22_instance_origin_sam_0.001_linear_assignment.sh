@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=5
 
 
 
@@ -11,11 +11,11 @@ config_file=configs/yingrenshi.yaml
 
 batch_size=8192
 train_iterations=200000
-val_interval=20000
+val_interval=20
 ckpt_interval=20000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf
-dataset_type=memory_depth_dji_instance_crossview
+dataset_type=memory_depth_dji_instance
 
 use_scaling=False
 sampling_mesh_guidance=True
@@ -33,10 +33,10 @@ lr=0.01
 log2_hashmap_size=22
 desired_resolution=8192
 
-instance_loss_mode=slow_fast
+instance_loss_mode=linear_assignment
 
 enable_instance=True
-exp_name=logs_dji/1031_yingrenshi_density_depth_hash22_instance_origin_sam_0.001_crossview
+exp_name=logs_dji/1031_yingrenshi_density_depth_hash22_instance_origin_sam_0.001_linear_assignment
 instance_name=instances_mask_0.001
 
 
@@ -52,4 +52,4 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=3    --semantic_layer_dim=128 \
     --use_subset=True      --lr=$lr    --balance_weight=True   --num_semantic_classes=5   \
     --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name   \
-    --instance_loss_mode=$instance_loss_mode
+    --instance_loss_mode=$instance_loss_mode  --debug=True
