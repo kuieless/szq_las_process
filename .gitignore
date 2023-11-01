@@ -1,5 +1,6 @@
 
 # Byte-compiled / optimized / DLL files
+logs_*
 zyq_cluster*
 logs_old/
 tools/segment_anything/output_merge/

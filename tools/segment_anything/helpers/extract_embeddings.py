@@ -30,6 +30,7 @@ def main(checkpoint_path, model_type, device, images_folder, embeddings_folder):
         image_embedding = predictor.get_image_embedding().cpu().numpy()
 
         out_path = os.path.join(embeddings_folder, os.path.splitext(image_name)[0] + ".npy")
+        # if not os.path.exists(out_path):
         np.save(out_path, image_embedding)
 
 if __name__ == "__main__":

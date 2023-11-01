@@ -69,10 +69,10 @@ def _get_train_opts() -> Namespace:
     # parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/sam_viz',required=False, help='')
     
 
-    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
-    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
-    parser.add_argument('--output_path', type=str, default='zyq/1029_get_instance_mask_train',required=False, help='')
-    parser.add_argument('--threshold', type=float, default=0,required=False, help='')
+    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds/train/rgbs',required=False, help='')
+    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds/train/sam_features',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='')
+    parser.add_argument('--threshold', type=float, default=0.001,required=False, help='')
     
 
     return parser.parse_args()
@@ -123,7 +123,7 @@ def hello(hparams: Namespace) -> None:
 
     used_files = []
     for ext in ('*.png', '*.jpg'):
-        used_files.extend(glob.glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926_subset/train/rgbs', ext)))
+        used_files.extend(glob.glob(os.path.join(str(Path(hparams.image_path).parent.parent), 'subset','rgbs', ext)))
     used_files.sort()
     process_item = [Path(far_p).stem for far_p in used_files]
     # process_item = process_item[350:]
