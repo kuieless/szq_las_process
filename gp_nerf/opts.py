@@ -50,6 +50,8 @@ def get_opts_base():
 
     parser.add_argument('--save_individual', default=False, type=eval, choices=[True, False])
 
+    parser.add_argument('--continue_train', default=False, type=eval, choices=[True, False])
+
     
 
 

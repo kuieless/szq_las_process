@@ -24,7 +24,8 @@ enable_semantic=True
 freeze_geo=True
 label_name=1028_ml_fusion_0.3
 separate_semantic=True
-ckpt_path=logs_longhua_b1/1029_longhua_b1_density_depth_hash22_car2_semantic_1028_fusion/0/models/200000.pt
+ckpt_path=logs_longhua_b1/1101_longhua_b1_density_depth_hash22_instance_origin_sam_0.001/0/models/50000.pt
+# logs_longhua_b1/1029_longhua_b1_density_depth_hash22_car2_semantic_1028_fusion/0/models/200000.pt
 
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1

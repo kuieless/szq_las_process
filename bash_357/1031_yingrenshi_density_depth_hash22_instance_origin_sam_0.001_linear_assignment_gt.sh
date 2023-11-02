@@ -1,12 +1,12 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=6
 
 
 
 
-dataset_path=/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds
-config_file=configs/longhua.yaml
+dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
+config_file=configs/yingrenshi.yaml
 
 
 batch_size=8192
@@ -22,10 +22,9 @@ sampling_mesh_guidance=True
 
 enable_semantic=True
 freeze_geo=True
-label_name=1028_ml_fusion_0.3
+label_name=1018_ml_fusion_0.3
 separate_semantic=True
-ckpt_path=logs_longhua_b2/1101_longhua_b2_density_depth_hash22_instance_origin_sam_0.001/0/models/50000.pt
-# logs_longhua_b2/1029_longhua_b2_density_depth_hash22_car2_semantic_1028_fusion/0/models/200000.pt
+ckpt_path=logs_dji/1018_yingrenshi_density_depth_hash22_far0.3_car2/0/continue150k/0/models/160000.pt
 
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
@@ -34,11 +33,11 @@ lr=0.01
 log2_hashmap_size=22
 desired_resolution=8192
 
-instance_loss_mode=slow_fast
+instance_loss_mode=linear_assignment
 
 enable_instance=True
-exp_name=logs_longhua_b2/1101_longhua_b2_density_depth_hash22_instance_origin_sam_0.001
-instance_name=instances_mask_0.001
+exp_name=logs_dji/1031_yingrenshi_density_depth_hash22_instance_origin_sam_0.001_linear_assignment_gt
+instance_name=instances_gt
 
 
 
@@ -52,6 +51,5 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --freeze_geo=$freeze_geo  --ckpt_path=$ckpt_path  --wgt_sem_loss=1 \
     --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=3    --semantic_layer_dim=128 \
     --use_subset=True      --lr=$lr    --balance_weight=True   --num_semantic_classes=5   \
-    --train_scale_factor=1  --val_scale_factor=1  \
     --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name   \
-    --instance_loss_mode=$instance_loss_mode
+    --instance_loss_mode=$instance_loss_mode  --num_instance_classes=50

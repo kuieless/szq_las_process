@@ -400,8 +400,8 @@ class Runner:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             # # add by zyq : load the pretrain-gpnerf to train the semantic
             # if self.hparams.resume_ckpt_state:
-            if not (self.hparams.enable_semantic or self.hparams.enable_instance):
-            # if not (self.hparams.enable_semantic or self.hparams.enable_instance) or True:
+            # if not (self.hparams.enable_semantic or self.hparams.enable_instance):
+            if not (self.hparams.enable_semantic or self.hparams.enable_instance) or self.hparams.continue_train:
                 train_iterations = checkpoint['iteration']
                 for key, optimizer in optimizers.items():
                     optimizer_dict = optimizer.state_dict()
@@ -810,7 +810,8 @@ class Runner:
                         all_centroids_shape = val_metrics['all_centroids_shape']
                         self.writer.add_scalar('2_val_metric_average/all_centroids_shape', all_centroids_shape[0], train_iterations)
                         f.write('all_centroids_shape: {}\n'.format(all_centroids_shape))
-                        val_metrics['all_centroids_shape']
+                        del val_metrics['all_centroids_shape']
+
                     
                     metrics_each = val_metrics['metrics_each']
                     # f.write(f'panoptic metrics_each: {metrics_each} \n')  
@@ -822,6 +823,7 @@ class Runner:
                         print(message)
 
                     del val_metrics['pq'],val_metrics['sq'],val_metrics['rq'], val_metrics['metrics_each']
+                
                 for key in val_metrics:
                     avg_val = val_metrics[key] / len(self.val_items)
                     if key== 'val/psnr':
@@ -2065,7 +2067,7 @@ class Runner:
                                 val_metrics['sq'] = sq
                                 val_metrics['rq'] = rq
                                 val_metrics['metrics_each']=metrics_each
-                                if all_centroids != None:
+                                if all_centroids is not None:
                                     val_metrics['all_centroids_shape'] = all_centroids.shape
                                     print(f"all_centroids: {all_centroids.shape}")
                             
