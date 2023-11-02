@@ -217,33 +217,6 @@ class MemoryDataset(Dataset):
             project_instance = torch.zeros_like(instances_current)
             project_instance[y[mask_xyz], x[mask_xyz]] = instances_next[y_grid[mask_xyz], x_grid[mask_xyz]]
 
-            # if visualization:
-            if False:
-                uni_label_in_mask, count_label_in_mask = torch.unique(instances_next, return_counts=True)
-
-                color_project = torch.zeros_like(img_current)
-                color_next = torch.zeros_like(img_current)
-
-                for uni_2 in uni_label_in_mask:
-                    if uni_2 == 0:
-                        continue
-                    random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
-
-                    if (instances_next==uni_2).sum() != 0:
-                        color_next[instances_next==uni_2,:] = random_color
-                    if (project_instance==uni_2).sum() != 0:
-                        color_project[project_instance==uni_2,:] = random_color
-                
-                if color_project.nonzero().shape[0]> 0.05 * self.H * self.W:
-
-                    vis_img2 = 0.7 * color_next + 0.3 * img_next
-                    vis_img3 = 0.7 * color_project + 0.3 * img_current
-
-                    vis_img = np.concatenate([vis_img1.cpu().numpy(), vis_img2.cpu().numpy(), vis_img3.cpu().numpy()], axis=1)
-                    Path(f"zyq/1102_test/test_{overlap_threshold}/each_project").mkdir(exist_ok=True, parents=True)
-                    cv2.imwrite(f"zyq/1102_test/test_{overlap_threshold}/each_project/%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), int(Path(metadata_next.label_path).stem)), vis_img)
-            
-
             # 1102优化效率，  先获得所有投影
             project_instances.append(project_instance)
             instances_nexts.append(instances_next)

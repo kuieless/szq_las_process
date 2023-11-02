@@ -1398,8 +1398,11 @@ class Runner:
         self._setup_experiment_dir()
 
         if self.hparams.enable_instance:
-            with open(self.hparams.cached_centroids_path, 'rb') as f:
-                all_centroids = pickle.load(f)
+            if self.hparams.instance_loss_mode != 'linear_assignment':
+                with open(self.hparams.cached_centroids_path, 'rb') as f:
+                    all_centroids = pickle.load(f)
+            else:
+                all_centroids=None
             val_metrics = self._run_validation_render_zyq(train_iterations, all_centroids)
         else:
             val_metrics = self._run_validation_render_zyq(train_iterations)
@@ -1533,22 +1536,27 @@ class Runner:
                     del results
 
             if self.hparams.enable_instance:
-        
-                # instance clustering
-                all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
-                all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
-                output_dir = str(experiment_path_current / 'panoptic')
-                if not os.path.exists(output_dir):
-                    Path(output_dir).mkdir()
-                np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
-                if self.hparams.cached_centroids_type == 'all':
-                    all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
-                                                            device=self.device, num_images=len(indices_to_eval))
-                elif self.hparams.cached_centroids_type == 'test':
-                    all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
+                if self.hparams.instance_loss_mode == 'linear_assignment':
+                    all_points_instances = torch.stack(all_thing_features, dim=0) # N x d
+                    output_dir = str(experiment_path_current / 'panoptic')
+                    if not os.path.exists(output_dir):
+                        Path(output_dir).mkdir()
+                else:
+                    # instance clustering
+                    all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+                    all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                    output_dir = str(experiment_path_current / 'panoptic')
+                    if not os.path.exists(output_dir):
+                        Path(output_dir).mkdir()
+                    np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                    np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                    np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                    if self.hparams.cached_centroids_type == 'all':
+                        all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
+                                                                device=self.device, num_images=len(indices_to_eval))
+                    elif self.hparams.cached_centroids_type == 'test':
+                        all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                    num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
 
                 if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                     Path(str(experiment_path_current / 'pred_semantics')).mkdir()
