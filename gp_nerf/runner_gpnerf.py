@@ -470,7 +470,7 @@ class Runner:
             self.H = dataset.H
             self.W = dataset.W
         elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
-            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process_bk import MemoryDataset
+            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_process import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H

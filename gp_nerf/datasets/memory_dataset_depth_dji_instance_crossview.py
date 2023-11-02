@@ -153,7 +153,7 @@ class MemoryDataset(Dataset):
             results = label_to_color(instance.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             vis_img = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy(), results.cpu().numpy()], axis=1)
             Path(f"zyq/1031_crossview_train/viz").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1031_crossview_train/viz/{idx}.jpg", vis_img)
+            cv2.imwrite(f"zyq/1031_crossview_train/viz/{self._img_indices[idx]}.jpg", vis_img)
         
         if idx == len(self._rgbs) - 1:
             # torch.cuda.empty_cache()

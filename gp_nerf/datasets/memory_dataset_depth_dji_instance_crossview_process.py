@@ -48,7 +48,7 @@ class MemoryDataset(Dataset):
         main_print('Loading data')
         if hparams.debug:
             # metadata_items = metadata_items[::20]
-            metadata_items = metadata_items[170:200]
+            metadata_items = metadata_items[205:210]
             pass
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
@@ -76,7 +76,7 @@ class MemoryDataset(Dataset):
             if image_data is None:
                 continue
             #改成读取instance label
-            image_rgbs, image_indices, image_keep_mask, instance, depth_dji = image_data
+            image_rgbs, image_indices, image_keep_mask, labels, depth_dji, instance = image_data
             
             image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
             
@@ -108,9 +108,7 @@ class MemoryDataset(Dataset):
     
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        # device='cpu'
         device='cuda'
-
         overlap_threshold=0.5
         ###NOTE 需要将shuffle调成False, 不打乱，按照顺序处理
 
@@ -121,8 +119,10 @@ class MemoryDataset(Dataset):
         instances_current = self._labels[idx].clone().view(self.H, self.W).to(device)
         depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W).to(device)
         metadata_current = self.metadata_items[self._img_indices[idx]]
-        aaaaa = 250
-        if int(Path(metadata_current.image_path).stem) < aaaaa and int(Path(metadata_current.image_path).stem) > (aaaaa +50):
+        aaaaa = 0
+        # if int(Path(metadata_current.image_path).stem) < aaaaa or int(Path(metadata_current.image_path).stem) > (aaaaa +5):
+            # return None
+        if int(Path(metadata_current.image_path).stem) < 205:
             return None
         
         visualization = True
@@ -136,9 +136,8 @@ class MemoryDataset(Dataset):
                 if (instances_current==uni).sum() != 0:
                     color_current[instances_current==uni,:] = random_color
             vis_img1 = 0.7 * color_current + 0.3 * img_current
-            Path(f"zyq/1031_crossview_project/test_{overlap_threshold}/mask_vis").mkdir(exist_ok=True, parents=True)
-
-            # cv2.imwrite(f"zyq/1031_crossview_project/test_{overlap_threshold}/mask_vis/%06d.jpg" % (idx), color_current.cpu().numpy())
+            # Path(f"zyq/1102_test/test_{overlap_threshold}/mask_vis").mkdir(exist_ok=True, parents=True)
+            # cv2.imwrite(f"zyq/1102_test/test_{overlap_threshold}/mask_vis/%06d.jpg" % (self._img_indices[idx]), color_current.cpu().numpy())
 
 
 
@@ -152,6 +151,76 @@ class MemoryDataset(Dataset):
         sorted_indices = torch.argsort(counts, descending=True)
         sorted_labels = unique_labels[sorted_indices]
 
+
+        # 把投影结果先存储下来，避免重复投影
+        project_instances = [] 
+        instances_nexts = []
+        # 先进行投影
+        for idx_next in index_list:
+            img_next = self._rgbs[idx_next].clone().view(self.H, self.W, 3).to(device)
+            instances_next = self._labels[idx_next].clone().view(self.H, self.W).to(device)
+            depth_next = (self._depth_djis[idx_next] * self._depth_scales[idx_next]).to(device)
+            inf_mask = torch.isinf(depth_next)
+            depth_next[inf_mask] = depth_next[~inf_mask].max()
+            metadata_next = self.metadata_items[self._img_indices[idx_next]]
+
+            ###### 先投影， 这里采用把第二张图（其他图）投回第一张图
+
+            x_grid, y_grid = torch.meshgrid(torch.arange(self.W), torch.arange(self.H))
+            x_grid, y_grid = x_grid.T.flatten().to(device), y_grid.T.flatten().to(device)
+            ## 第二张图先得到点云
+            pixel_coordinates = torch.stack([x_grid, y_grid, torch.ones_like(x_grid)], dim=-1)
+            K1 = metadata_next.intrinsics
+            K1 = torch.tensor([[K1[0], 0, K1[2]], [0, K1[1], K1[3]], [0, 0, 1]]).to(device)
+            pt_3d = depth_next[:, None] * (torch.linalg.inv(K1) @ pixel_coordinates[:, :, None].float()).squeeze()
+            arr2 = torch.ones((pt_3d.shape[0], 1)).to(device)
+            pt_3d = torch.cat([pt_3d, arr2], dim=-1)
+            # pt_3d = pt_3d[valid_depth_mask]
+            pt_3d = pt_3d.view(-1, 4)
+            E1 = metadata_next.c2w.clone().detach()
+            E1 = torch.stack([E1[:, 0], -E1[:, 1], -E1[:, 2], E1[:, 3]], dim=1).to(device)
+            world_point = torch.mm(torch.cat([E1, torch.tensor([[0, 0, 0, 1]], device=device)], dim=0), pt_3d.t()).t()
+            world_point = world_point[:, :3] / world_point[:, 3:4]
+
+            ### 投影回第一张图
+            E2 = metadata_current.c2w.clone().detach()
+            E2 = torch.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1).to(device)
+            w2c = torch.inverse(torch.cat((E2, torch.tensor([[0, 0, 0, 1]], device=device)), dim=0))
+            points_homogeneous = torch.cat((world_point, torch.ones((world_point.shape[0], 1), dtype=torch.float32, device=device)), dim=1)
+            pt_3d_trans = torch.mm(w2c, points_homogeneous.t())
+            pt_2d_trans = torch.mm(K1, pt_3d_trans[:3])
+            pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
+            projected_points = pt_2d_trans[:2].t()
+
+            ########### 取得落在图像上的点 mask_x & mask_y ， 并考虑遮挡 mask_z
+            threshold= 0.02
+            image_width, image_height = self.W, self.H
+            mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] < image_width)
+            mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
+            mask = mask_x & mask_y
+            x = projected_points[:, 0].long()
+            y = projected_points[:, 1].long()
+            x[~mask] = 0
+            y[~mask] = 0
+            depth_map_current = depth_current[y, x]
+            depth_map_current[~mask] = -1e6
+            depth_z = pt_3d_trans[2]
+            mask_z = depth_z < (depth_map_current + threshold)
+            ## 这里拿到了投影的有效 pixel
+            mask_xyz = (mask & mask_z)
+
+            x[~mask_xyz] = 0
+            y[~mask_xyz] = 0
+            
+            # 获得了 第二张图投影到第一张图上的 instance label, 除了投影的区域，其他都是0
+            # 需要可视化看一下投影的对不对
+            project_instance = torch.zeros_like(instances_current)
+            project_instance[y[mask_xyz], x[mask_xyz]] = instances_next[y_grid[mask_xyz], x_grid[mask_xyz]]
+
+            # 1102优化效率，  先获得所有投影
+            project_instances.append(project_instance)
+            instances_nexts.append(instances_next)
+            
         ## 每一个mask进行操作
         for unique_label in unique_labels:
             ####  为每一个mask创建一个list， 存储 需要合并的mask和 overlap分数
@@ -165,78 +234,11 @@ class MemoryDataset(Dataset):
             if mask_idx_area < 0.005 * self.H * self.W:
                 continue
 
-            # 把投影结果先存储下来，避免重复投影
-            project_instances = [] 
-            # 先进行投影
-            for idx_next in index_list:
-                img_next = self._rgbs[idx_next].clone().view(self.H, self.W, 3).to(device)
-                instances_next = self._labels[idx_next].clone().view(self.H, self.W).to(device)
-                depth_next = (self._depth_djis[idx_next] * self._depth_scales[idx_next]).to(device)
-                inf_mask = torch.isinf(depth_next)
-                depth_next[inf_mask] = depth_next[~inf_mask].max()
-                metadata_next = self.metadata_items[self._img_indices[idx_next]]
-
-                ###### 先投影， 这里采用把第二张图（其他图）投回第一张图
-
-                x_grid, y_grid = torch.meshgrid(torch.arange(self.W), torch.arange(self.H))
-                x_grid, y_grid = x_grid.T.flatten().to(device), y_grid.T.flatten().to(device)
-                ## 第二张图先得到点云
-                pixel_coordinates = torch.stack([x_grid, y_grid, torch.ones_like(x_grid)], dim=-1)
-                K1 = metadata_next.intrinsics
-                K1 = torch.tensor([[K1[0], 0, K1[2]], [0, K1[1], K1[3]], [0, 0, 1]]).to(device)
-                pt_3d = depth_next[:, None] * (torch.linalg.inv(K1) @ pixel_coordinates[:, :, None].float()).squeeze()
-                arr2 = torch.ones((pt_3d.shape[0], 1)).to(device)
-                pt_3d = torch.cat([pt_3d, arr2], dim=-1)
-                # pt_3d = pt_3d[valid_depth_mask]
-                pt_3d = pt_3d.view(-1, 4)
-                E1 = metadata_next.c2w.clone().detach()
-                E1 = torch.stack([E1[:, 0], -E1[:, 1], -E1[:, 2], E1[:, 3]], dim=1).to(device)
-                world_point = torch.mm(torch.cat([E1, torch.tensor([[0, 0, 0, 1]], device=device)], dim=0), pt_3d.t()).t()
-                world_point = world_point[:, :3] / world_point[:, 3:4]
-
-                ### 投影回第一张图
-                E2 = metadata_current.c2w.clone().detach()
-                E2 = torch.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1).to(device)
-                w2c = torch.inverse(torch.cat((E2, torch.tensor([[0, 0, 0, 1]], device=device)), dim=0))
-                points_homogeneous = torch.cat((world_point, torch.ones((world_point.shape[0], 1), dtype=torch.float32, device=device)), dim=1)
-                pt_3d_trans = torch.mm(w2c, points_homogeneous.t())
-                pt_2d_trans = torch.mm(K1, pt_3d_trans[:3])
-                pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
-                projected_points = pt_2d_trans[:2].t()
-
-                ########### 取得落在图像上的点 mask_x & mask_y ， 并考虑遮挡 mask_z
-                threshold= 0.02
-                image_width, image_height = self.W, self.H
-                mask_x = (projected_points[:, 0] >= 0) & (projected_points[:, 0] < image_width)
-                mask_y = (projected_points[:, 1] >= 0) & (projected_points[:, 1] < image_height)
-                mask = mask_x & mask_y
-                x = projected_points[:, 0].long()
-                y = projected_points[:, 1].long()
-                x[~mask] = 0
-                y[~mask] = 0
-                depth_map_current = depth_current[y, x]
-                depth_map_current[~mask] = -1e6
-                depth_z = pt_3d_trans[2]
-                mask_z = depth_z < (depth_map_current + threshold)
-                ## 这里拿到了投影的有效 pixel
-                mask_xyz = (mask & mask_z)
-
-                x[~mask_xyz] = 0
-                y[~mask_xyz] = 0
+            
                 
-                # 获得了 第二张图投影到第一张图上的 instance label, 除了投影的区域，其他都是0
-                # 需要可视化看一下投影的对不对
-                project_instance = torch.zeros_like(instances_current)
-                project_instance[y[mask_xyz], x[mask_xyz]] = instances_next[y_grid[mask_xyz], x_grid[mask_xyz]]
-
-                ######接下来对每个mask进行cross view 操作
-                # project_instance.nonzero().shape[0]> 0.05 * self.H * self.W
-                project_instances.append(project_instance)
-                
-        
-            ## 这里改为800张图像的投影结束后， 进行overlap计算  
-            for idx_next_i, idx_next in enumerate(index_list):
-                project_instance=project_instances[idx_next_i]
+            ######接下来对每个mask进行cross view 操作
+            ## 以上投影结束后， 进行overlap计算
+            for project_instance, instances_next in zip(project_instances, instances_nexts):
                 label_in_mask = project_instance[mask_idx]
                 uni_label_in_mask, count_label_in_mask = torch.unique(label_in_mask, return_counts=True)
                 for uni_2 in uni_label_in_mask:
@@ -267,8 +269,8 @@ class MemoryDataset(Dataset):
 
                             # if project_instance.nonzero().shape[0]> 0.05 * self.H * self.W:
                             vis_img = np.concatenate([vis_img1.cpu().numpy(), vis_img2.cpu().numpy(), vis_img3.cpu().numpy()], axis=1)
-                            Path(f"zyq/1031_crossview_project/test_{overlap_threshold}/each").mkdir(exist_ok=True, parents=True)
-                            cv2.imwrite(f"zyq/1031_crossview_project/test_{overlap_threshold}/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
+                            Path(f"zyq/1102_test/test_{overlap_threshold}/each").mkdir(exist_ok=True, parents=True)
+                            cv2.imwrite(f"zyq/1102_test/test_{overlap_threshold}/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
                     
                             
 
@@ -286,7 +288,7 @@ class MemoryDataset(Dataset):
                 #     random_color = torch.randint(0, 256, (3,), dtype=torch.uint8)
 
                 #     color_result[iii_mask]=random_color
-                #     cv2.imwrite(f"zyq/1031_crossview_project/test_{overlap_threshold}/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
+                #     cv2.imwrite(f"zyq/1102_test/test_{overlap_threshold}/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
                 #     iiiii += 1
 
                 union_mask = reduce(torch.logical_or, merge_unique_label_list)
@@ -314,18 +316,16 @@ class MemoryDataset(Dataset):
             
             vis_img5 = np.concatenate([vis_img1.cpu().numpy(), vis_img4.cpu().numpy()], axis=1)
 
-            Path(f"zyq/1031_crossview_project/test_{overlap_threshold}/results").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1031_crossview_project/test_{overlap_threshold}/results/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img5)
-            Path(f"zyq/1031_crossview_project/test_{overlap_threshold}/crossview").mkdir(exist_ok=True, parents=True)
-            Image.fromarray(new_instance.cpu().numpy().astype(np.uint32)).save(f"zyq/1031_crossview_project/test_{overlap_threshold}/crossview/{Path(metadata_current.label_path).stem}.png")
+            Path(f"zyq/1102_test/test_{overlap_threshold}/results").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1102_test/test_{overlap_threshold}/results/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img5)
+            Path(f"zyq/1102_test/test_{overlap_threshold}/crossview").mkdir(exist_ok=True, parents=True)
+            Image.fromarray(new_instance.cpu().numpy().astype(np.uint32)).save(f"zyq/1102_test/test_{overlap_threshold}/crossview/{Path(metadata_current.label_path).stem}.png")
 
             
 
         if idx == len(self._rgbs) - 1:
-            # torch.cuda.empty_cache()
             return 'end'
         else:
-            # torch.cuda.empty_cache()
             print(f"process idx : {int(Path(metadata_current.label_path).stem)}")
             return None
     
