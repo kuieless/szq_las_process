@@ -132,6 +132,7 @@ def get_opts_base():
     parser.add_argument('--instance_name', type=str, default='instances_mask_0.001', choices=['instances_mask_0.001', 
                                                                                               'instances_mask_0.001_iou', 
                                                                                               'instances_mask_0.001_filter', 
+                                                                                              'instances_mask_0.001_depth', 
                                                                                               'instances_mask_0.001_crossview',
                                                                                               'instances_gt', 
                                                                                               'instances_gt_noremapping'], help='')
