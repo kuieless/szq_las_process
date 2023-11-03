@@ -78,15 +78,21 @@ def hello(hparams: Namespace) -> None:
     #     used_files.extend(glob(os.path.join(only_sam_m2f_far_project_path, ext)))
     # used_files.sort()
     # process_item = [Path(far_p).stem for far_p in used_files]
+    
+    used_files = []
+    for ext in ('*.png', '*.jpg'):
+        used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
+    used_files.sort()
+    process_item = [Path(far_p).stem for far_p in used_files]
 
-    process_item=[]
-    for metadata_item in tqdm(train_items):
-        gt_label = metadata_item.load_gt()
-        has_nonzero = (gt_label != 0).any()
-        non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
-        if has_nonzero and non_zero_ratio>0.1:
-            process_item.append(f"{metadata_item.image_path.stem}")
-    print(len(process_item))
+    # process_item=[]
+    # for metadata_item in tqdm(train_items):
+    #     gt_label = metadata_item.load_gt()
+    #     has_nonzero = (gt_label != 0).any()
+    #     non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
+    #     if has_nonzero and non_zero_ratio>0.1:
+    #         process_item.append(f"{metadata_item.image_path.stem}")
+    # print(len(process_item))
     
     for metadata_item in tqdm(train_items, desc="replace building"):
         file_name = Path(metadata_item.image_path).stem

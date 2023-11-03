@@ -56,6 +56,7 @@ def save_mask_anns_torch(colors, anns, img_name, hparams, id, output_path):
 
             exsit_max_label_mask = img==most_frequent_label
 
+            #####################################################
             # # 1. 根据IOU
             # intersection = torch.logical_and(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
             # union = torch.logical_or(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
@@ -66,7 +67,10 @@ def save_mask_anns_torch(colors, anns, img_name, hparams, id, output_path):
             # else:
             #     img[m]=id
             # id = id + 1
+            #####################################################
 
+
+            #####################################################
             ## 2. 根据交集与小的比例
             intersection = torch.logical_and(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
             if (intersection / torch.from_numpy(m).to(exsit_max_label_mask.device).sum()) > 0.9:  # 小的在大的上面，就不要了
@@ -74,6 +78,7 @@ def save_mask_anns_torch(colors, anns, img_name, hparams, id, output_path):
                 continue
             img[m] = id
             id = id + 1
+            #####################################################
 
         # viz_img = visualize_labels(img)
         # cv2.imwrite(os.path.join(output_path, 'instances_mask_vis_each', f"{img_name}_%06d.jpg" % id), viz_img)

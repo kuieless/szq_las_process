@@ -167,7 +167,7 @@ class MemoryDataset(Dataset):
             metadata_next = self.metadata_items[self._img_indices[idx_next]]
 
             ###### 先投影， 这里采用把第二张图（其他图）投回第一张图
-
+            
             x_grid, y_grid = torch.meshgrid(torch.arange(self.W), torch.arange(self.H))
             x_grid, y_grid = x_grid.T.flatten().to(device), y_grid.T.flatten().to(device)
             ## 第二张图先得到点云

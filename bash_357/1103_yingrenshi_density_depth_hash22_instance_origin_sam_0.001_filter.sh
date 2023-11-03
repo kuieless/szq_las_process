@@ -36,7 +36,7 @@ desired_resolution=8192
 instance_loss_mode=slow_fast
 
 enable_instance=True
-exp_name=logs_dji/1031_yingrenshi_density_depth_hash22_instance_origin_sam_0.001_filter
+exp_name=logs_dji/1103_yingrenshi_density_depth_hash22_instance_origin_sam_0.001_filter
 instance_name=instances_mask_0.001_filter
 
 
