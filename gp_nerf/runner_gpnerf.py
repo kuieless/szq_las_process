@@ -565,7 +565,7 @@ class Runner:
                     data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type =='memory_depth_dji_instance_crossview':
-                    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
+                    data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
                     data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
@@ -587,8 +587,8 @@ class Runner:
                 #     pbar.update(1)
                 #     continue
                 # torch.cuda.empty_cache()
-                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process' and self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
-                # if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
+                # if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process' and self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
+                if self.hparams.dataset_type == 'memory_depth_dji_instance_crossview_process':
                     if item == ['end']:
                         print('done')
                         raise TypeError
@@ -1470,8 +1470,7 @@ class Runner:
                     all_instance_features, all_thing_features = [], []
                     all_points_rgb, all_points_semantics = [], []
                     gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
-
-                indices_to_eval = indices_to_eval[:1]
+                    indices_to_eval = indices_to_eval[:1]
                 
                 for i in main_tqdm(indices_to_eval):
                     self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -2891,7 +2890,7 @@ class Runner:
 
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
             ###############3 . 俯视图，  render0.3视角下第一张图片
-            if self.hparams.render_zyq: # and self.hparams.enable_instance:
+            if self.hparams.render_zyq and self.hparams.enable_instance:
                 image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
                 ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
                 ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
@@ -2924,7 +2923,7 @@ class Runner:
 
             rays = rays.view(-1, 8).to(self.device, non_blocking=True).cuda()  # (H*W, 8)
             if self.hparams.render_zyq:
-                image_indices = 300 * torch.ones(rays.shape[0], device=rays.device)
+                image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device)
                 # image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device)
             else:
                 image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device) \

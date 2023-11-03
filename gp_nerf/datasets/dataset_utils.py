@@ -204,6 +204,13 @@ def get_rgb_index_mask_depth_dji_instance_crossview(metadata: ImageMetadata) -> 
         keep_mask = keep_mask.view(-1)
         rgbs = rgbs[keep_mask == True]
 
+    
+    labels = metadata.load_label()
+    if labels is not None:
+        labels = labels.view(-1)
+        if keep_mask is not None :
+            labels = labels[keep_mask == True]
+
     instance = metadata.load_instance()
     if instance is not None:
         instance = instance.view(-1)
@@ -227,7 +234,8 @@ def get_rgb_index_mask_depth_dji_instance_crossview(metadata: ImageMetadata) -> 
 
     assert metadata.image_index <= torch.iinfo(torch.int32).max
     # return rgbs, metadata.image_index * torch.ones(rgbs.shape[0], dtype=torch.int32), keep_mask, instance, depth_dji
-    return rgbs, metadata.image_index, keep_mask, instance, depth_dji, instance_crossview
+    # return rgbs, metadata.image_index, keep_mask, instance, depth_dji, instance_crossview
+    return rgbs, metadata.image_index, keep_mask, labels, depth_dji, instance, instance_crossview
 
 
 

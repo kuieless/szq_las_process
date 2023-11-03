@@ -20,10 +20,12 @@ from PIL import Image
 device= 'cuda'
 
 
-def save_mask_anns_torch(colors, anns, img_name, hparams, id):
+def save_mask_anns_torch(colors, anns, img_name, hparams, id, output_path):
     if len(anns) == 0:
         return
-    sorted_anns = sorted(anns, key=lambda x: x['area'], reverse=False)
+    
+    #  reverse=True， 从大到小排序
+    sorted_anns = sorted(anns, key=lambda x: x['area'], reverse=True)
 
     # 创建一个初始的图像张量
     img_shape = (sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1])
@@ -38,8 +40,44 @@ def save_mask_anns_torch(colors, anns, img_name, hparams, id):
             continue
         m = ann['segmentation']
 
-        img[m] = id
-        id = id + 1
+        # 加一个极大值抑制
+        label_in_exsit = img[m]
+        unique_label_in_exsit,counts_label_in_exsit = torch.unique(label_in_exsit, return_counts=True)
+        non_zero_indices = (unique_label_in_exsit != 0)
+        unique_label_in_exsit = unique_label_in_exsit[non_zero_indices]
+        counts_label_in_exsit = counts_label_in_exsit[non_zero_indices]
+        if counts_label_in_exsit.shape[0] == 0:
+            img[m] = id
+            id = id + 1
+
+        else:
+            max_count_index = torch.argmax(counts_label_in_exsit)
+            most_frequent_label = unique_label_in_exsit[max_count_index]
+
+            exsit_max_label_mask = img==most_frequent_label
+
+            # # 1. 根据IOU
+            # intersection = torch.logical_and(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
+            # union = torch.logical_or(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
+            # iou = intersection.float() / union.float()
+            # if iou > 0.9:
+            #     # img[exsit_max_label_mask]=id
+            #     img[m] = most_frequent_label
+            # else:
+            #     img[m]=id
+            # id = id + 1
+
+            ## 2. 根据交集与小的比例
+            intersection = torch.logical_and(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
+            if (intersection / torch.from_numpy(m).to(exsit_max_label_mask.device).sum()) > 0.9:  # 小的在大的上面，就不要了
+                # img[exsit_max_label_mask]=id
+                continue
+            img[m] = id
+            id = id + 1
+
+        # viz_img = visualize_labels(img)
+        # cv2.imwrite(os.path.join(output_path, 'instances_mask_vis_each', f"{img_name}_%06d.jpg" % id), viz_img)
+
 
     return img, id
 
@@ -120,6 +158,9 @@ def hello(hparams: Namespace) -> None:
     Path(os.path.join(output_path,'instances_mask')).mkdir(exist_ok=True)
     Path(os.path.join(output_path,'instances_mask_vis')).mkdir(exist_ok=True)
     Path(os.path.join(output_path,'image_cat')).mkdir(exist_ok=True)
+    Path(os.path.join(output_path,'instances_mask_vis_each')).mkdir(exist_ok=True)
+
+    
 
     used_files = []
     for ext in ('*.png', '*.jpg'):
@@ -133,8 +174,8 @@ def hello(hparams: Namespace) -> None:
         img_name = imgs[i].split('/')[-1][:6]
         if img_name not in process_item and 'val' not in hparams.image_path:
             continue
-        # if int(img_name) < 203 or int(img_name) > 239:
-        #     continue
+        # if int(img_name) < 207 or int(img_name) > 207:
+            # continue
         image = cv2.imread(imgs[i])
         # image_size = 
         w, h, _ = image.shape
@@ -148,7 +189,7 @@ def hello(hparams: Namespace) -> None:
         masks = mask_generator.generate(image1, feature[0])
         # masks = mask_generator.generate(image1, feature)
         
-        mask, id = save_mask_anns_torch(colors, masks, img_name, hparams, id)
+        mask, id = save_mask_anns_torch(colors, masks, img_name, hparams, id, output_path)
         mask_vis = visualize_labels(mask)
         
         Image.fromarray(mask.cpu().numpy().astype(np.uint32)).save(os.path.join(output_path, 'instances_mask', f"{img_name}.png"))

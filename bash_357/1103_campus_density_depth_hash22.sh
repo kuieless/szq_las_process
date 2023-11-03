@@ -1,9 +1,9 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=5
 
 
-dataset_path=/data/yuqi/Datasets/DJI/Campus
+dataset_path=/data/yuqi/Datasets/DJI/Campus_new
 config_file=configs/campus_new.yaml
 
 
@@ -25,7 +25,7 @@ enable_semantic=False
 depth_dji_loss=True
 wgt_depth_mse_loss=1
 
-exp_name=logs_campus/1102_campus_density_depth_hash22
+exp_name=logs_campus/1103_campus_density_depth_hash22
 
 log2_hashmap_size=22
 desired_resolution=8192
