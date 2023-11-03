@@ -124,8 +124,6 @@ class MemoryDataset(Dataset):
             # return None
         if int(Path(metadata_current.image_path).stem) != 207:
             return None
-        # if int(Path(metadata_current.image_path).stem) < 59:
-            # return None
         
         visualization = True
         if visualization:
@@ -138,8 +136,8 @@ class MemoryDataset(Dataset):
                 if (instances_current==uni).sum() != 0:
                     color_current[instances_current==uni,:] = random_color
             vis_img1 = 0.7 * color_current + 0.3 * img_current
-            # Path(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/mask_vis").mkdir(exist_ok=True, parents=True)
-            # cv2.imwrite(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/mask_vis/%06d.jpg" % (self._img_indices[idx]), color_current.cpu().numpy())
+            # Path(f"zyq/1103_crossview_process/test_{overlap_threshold}/mask_vis").mkdir(exist_ok=True, parents=True)
+            # cv2.imwrite(f"zyq/1103_crossview_process/test_{overlap_threshold}/mask_vis/%06d.jpg" % (self._img_indices[idx]), color_current.cpu().numpy())
 
 
 
@@ -219,8 +217,8 @@ class MemoryDataset(Dataset):
             project_instance = torch.zeros_like(instances_current)
             project_instance[y[mask_xyz], x[mask_xyz]] = instances_next[y_grid[mask_xyz], x_grid[mask_xyz]]
 
-            if visualization:
-            # if False:
+            # if visualization:
+            if False:
                 uni_label_in_mask, count_label_in_mask = torch.unique(instances_next, return_counts=True)
 
                 color_project = torch.zeros_like(img_current)
@@ -242,10 +240,8 @@ class MemoryDataset(Dataset):
                     vis_img3 = 0.7 * color_project + 0.3 * img_current
 
                     vis_img = np.concatenate([vis_img1.cpu().numpy(), vis_img2.cpu().numpy(), vis_img3.cpu().numpy()], axis=1)
-                    
-                    #### 800张图投到一张图上的结果
-                    Path(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/each_project").mkdir(exist_ok=True, parents=True)
-                    cv2.imwrite(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/each_project/%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), int(Path(metadata_next.label_path).stem)), vis_img)
+                    Path(f"zyq/1103_crossview_process/test_{overlap_threshold}/each_project").mkdir(exist_ok=True, parents=True)
+                    cv2.imwrite(f"zyq/1103_crossview_process/test_{overlap_threshold}/each_project/%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), int(Path(metadata_next.label_path).stem)), vis_img)
             
 
             # 1102优化效率，  先获得所有投影
@@ -288,8 +284,8 @@ class MemoryDataset(Dataset):
                         merge_unique_label_list.append(mask_2)
                         score_list.append(mask_area_2)
 
-                        if visualization:
-                        # if False:
+                        # if visualization:
+                        if False:
                             color_project = torch.zeros_like(img_current)
                             color_next = torch.zeros_like(img_current)
                             random_color = torch.randint(0, 256, (3,), dtype=torch.uint8).to(device)
@@ -303,8 +299,8 @@ class MemoryDataset(Dataset):
 
                             # if project_instance.nonzero().shape[0]> 0.05 * self.H * self.W:
                             vis_img = np.concatenate([vis_img1.cpu().numpy(), vis_img2.cpu().numpy(), vis_img3.cpu().numpy()], axis=1)
-                            Path(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/each").mkdir(exist_ok=True, parents=True)
-                            cv2.imwrite(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
+                            Path(f"zyq/1103_crossview_process/test_{overlap_threshold}/each").mkdir(exist_ok=True, parents=True)
+                            cv2.imwrite(f"zyq/1103_crossview_process/test_{overlap_threshold}/each/%06d_label%06d_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label, int(Path(metadata_next.label_path).stem)), vis_img)
                     
                             
 
@@ -322,7 +318,7 @@ class MemoryDataset(Dataset):
                 #     random_color = torch.randint(0, 256, (3,), dtype=torch.uint8)
 
                 #     color_result[iii_mask]=random_color
-                #     cv2.imwrite(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
+                #     cv2.imwrite(f"zyq/1103_crossview_process/test_{overlap_threshold}/results/%06d_vis.jpg" % (iiiii), color_result.cpu().numpy())
                 #     iiiii += 1
 
                 ## 1103 之前的做法
@@ -352,8 +348,8 @@ class MemoryDataset(Dataset):
                 color_current[union_mask] = random_color
                 color_result[union_mask] = random_color
                 vis_img1 = 0.7 * color_current + 0.3 * img_current
-                Path(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/union_mask_each").mkdir(exist_ok=True, parents=True)
-                cv2.imwrite(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/union_mask_each/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img1.cpu().numpy())
+                Path(f"zyq/1103_crossview_process/test_{overlap_threshold}/union_mask_each").mkdir(exist_ok=True, parents=True)
+                cv2.imwrite(f"zyq/1103_crossview_process/test_{overlap_threshold}/union_mask_each/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img1.cpu().numpy())
 
 
 
@@ -382,10 +378,10 @@ class MemoryDataset(Dataset):
             
             
 
-            Path(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/results").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/results/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img5)
-            Path(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/crossview_process").mkdir(exist_ok=True, parents=True)
-            Image.fromarray(new_instance.cpu().numpy().astype(np.uint32)).save(f"zyq/1103_crossview_process_filter207/test_{overlap_threshold}/crossview_process/{Path(metadata_current.label_path).stem}.png")
+            Path(f"zyq/1103_crossview_process/test_{overlap_threshold}/results").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1103_crossview_process/test_{overlap_threshold}/results/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img5)
+            Path(f"zyq/1103_crossview_process/test_{overlap_threshold}/crossview_process").mkdir(exist_ok=True, parents=True)
+            Image.fromarray(new_instance.cpu().numpy().astype(np.uint32)).save(f"zyq/1103_crossview_process/test_{overlap_threshold}/crossview_process/{Path(metadata_current.label_path).stem}.png")
 
             
 

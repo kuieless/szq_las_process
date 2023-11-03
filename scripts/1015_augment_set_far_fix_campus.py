@@ -54,7 +54,7 @@ from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Campus',required=False, help='')
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Campus_new',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
     
     return parser.parse_args()
@@ -70,7 +70,7 @@ def hello(hparams: Namespace) -> None:
 
     used_files = []
     for ext in ('*.png', '*.jpg'):
-        used_files.extend(glob(os.path.join('/data/yuqi/Datasets/DJI/Campus/subset/rgbs', ext)))
+        used_files.extend(glob(os.path.join('/data/yuqi/Datasets/DJI/Campus_new/subset/rgbs', ext)))
     used_files.sort()
     process_item = [Path(far_p).stem for far_p in used_files]
 

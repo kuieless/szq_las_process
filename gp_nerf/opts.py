@@ -13,7 +13,19 @@ def get_opts_base():
     
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
     parser.add_argument('--freeze_geo', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['memory_depth_dji_instance_crossview_process','memory_depth_dji_instance_crossview','memory_depth_dji_instance','memory_depth_dji','sam', 'sam_project','file_normal', 'memory_depth', 'filesystem', 'memory', 'llff', 'llff_sa3d', 'mega_sa3d'],
+    parser.add_argument('--dataset_type', type=str, default='filesystem', choices=['memory_depth_dji_instance_crossview_process',
+                                                                                   'memory_depth_dji_instance_crossview',
+                                                                                   'memory_depth_dji_instance',
+                                                                                   'memory_depth_dji',
+                                                                                   'sam', 
+                                                                                   'sam_project',
+                                                                                   'file_normal', 
+                                                                                   'memory_depth', 
+                                                                                   'filesystem', 
+                                                                                   'memory', 
+                                                                                   'llff', 
+                                                                                   'llff_sa3d', 
+                                                                                   'mega_sa3d'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
    
@@ -117,7 +129,12 @@ def get_opts_base():
     parser.add_argument('--num_instance_classes', type=int, default=25, help='')
     parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')
     parser.add_argument('--freeze_semantic', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
-    parser.add_argument('--instance_name', type=str, default='instances_mask_0.001', choices=['instances_mask_0','instances_mask_0.01', 'instances_mask_0.001', 'instances_mask_0.001_crossview','instances_gt', 'instances_gt_noremapping'], help='')
+    parser.add_argument('--instance_name', type=str, default='instances_mask_0.001', choices=['instances_mask_0.001', 
+                                                                                              'instances_mask_0.001_iou', 
+                                                                                              'instances_mask_0.001_filter', 
+                                                                                              'instances_mask_0.001_crossview',
+                                                                                              'instances_gt', 
+                                                                                              'instances_gt_noremapping'], help='')
     parser.add_argument('--instance_loss_mode', type=str, default='slow_fast', choices=['contrastive', 'linear_assignment', 'slow_fast'], help='')
     parser.add_argument('--cached_centroids_path', type=str, default=None, help='path towards serialized model checkpoint')
     parser.add_argument('--cached_centroids_type', type=str, default='test', choices=['test', 'all'], help='')

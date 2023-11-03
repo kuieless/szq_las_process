@@ -53,7 +53,7 @@ class MemoryDataset(Dataset):
         main_print('Loading data')
         if hparams.debug:
             metadata_items = metadata_items[::20]
-        metadata_items = metadata_items[207:208]
+        # metadata_items = metadata_items[207:208]
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
@@ -154,11 +154,11 @@ class MemoryDataset(Dataset):
         return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        visualization = True
+        visualization = False
 
-        metadata_current = self.metadata_items[self._img_indices[idx]]
-        if int(Path(metadata_current.image_path).stem) != 207:
-            return None
+        # metadata_current = self.metadata_items[self._img_indices[idx]]
+        # if int(Path(metadata_current.image_path).stem) != 207:
+            # return None
         
 
         selected_tensors = {}
@@ -170,7 +170,11 @@ class MemoryDataset(Dataset):
         tensor_list = list(selected_tensors.values())
         stacked_tensors = torch.stack(tensor_list)
         instance_new = torch.sum(stacked_tensors, dim=0)
-        
+
+
+
+
+
         if visualization:
             def label_to_color(label_tensor):
                 unique_labels = torch.unique(label_tensor)
@@ -189,8 +193,8 @@ class MemoryDataset(Dataset):
             Path(f"zyq/1102_crossview_train/viz").mkdir(exist_ok=True, parents=True)
             cv2.imwrite(f"zyq/1102_crossview_train/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
         
-        return None
-
+        # return None
+        
         # Path(f"zyq/1102_crossview_train/results").mkdir(exist_ok=True, parents=True)
         # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1102_crossview_train/results/%06d.png" % (self._img_indices[idx]))
         
@@ -198,7 +202,7 @@ class MemoryDataset(Dataset):
         # 找到非零值的索引
 
 
-        nonzero_indices = torch.nonzero(self._instances[idx]).squeeze()
+        nonzero_indices = torch.nonzero(instance_new).squeeze()
 
         
         #### 1. 若点不够，返回None,但这个在多个batch size会出问题
@@ -222,7 +226,7 @@ class MemoryDataset(Dataset):
             'rgbs': self._rgbs[idx][sampling_idx].float() / 255.,
             'rays': self._rays[idx][sampling_idx],
             'img_indices': self._img_indices[idx] * torch.ones(sampling_idx.shape[0], dtype=torch.int32),
-            'labels': self._instances[idx][sampling_idx].int(),
+            'labels': instance_new[sampling_idx].int(),
         }
         if self._depth_djis[idx] is not None:
             item['depth_dji'] = self._depth_djis[idx][sampling_idx]
