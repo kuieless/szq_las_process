@@ -147,7 +147,7 @@ def hello(hparams: Namespace) -> None:
         m2fs.extend(glob.glob(os.path.join(m2f_path, ext)))
     m2fs.sort()
     m2fs = m2fs[1:]
-    # m2fs = m2fs[250:]
+    # m2fs = m2fs[330:]
     
 
     for i in tqdm(range(len(m2fs))):

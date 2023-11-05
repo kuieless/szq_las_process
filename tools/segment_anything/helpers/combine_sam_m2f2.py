@@ -158,7 +158,7 @@ def hello(hparams: Namespace) -> None:
         img_p = os.path.join(img_path, img_name+'.jpg')
 
         image = cv2.imread(img_p)
-        # image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))
+        image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         sam_p = os.path.join(sam_path, img_name+'.npy')
@@ -168,6 +168,7 @@ def hello(hparams: Namespace) -> None:
         semantics = torch.from_numpy(np.array(m2f)).long().to(device)
 
         load_dict = mask_generator.generate(image1, feature[0])
+        # load_dict = mask_generator.generate(image1, feature)
 
 
         dict = [{'segmentation': torch.tensor(load_dict[k]['segmentation']).to(device), 'id': get_id(torch.tensor(load_dict[k]['segmentation']).to(device), semantics)} for k in range(len(load_dict))]

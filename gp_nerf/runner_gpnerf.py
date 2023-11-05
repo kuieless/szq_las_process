@@ -562,7 +562,7 @@ class Runner:
                     data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type == 'memory_depth_dji_instance':
-                    data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
+                    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0,
                                                 pin_memory=False, collate_fn=custom_collate)
                 elif self.hparams.dataset_type =='memory_depth_dji_instance_crossview':
                     data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0,
@@ -1423,7 +1423,7 @@ class Runner:
 
             # val_paths = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
 
-            val_paths = sorted(list((dataset_path / 'render_far0.3' / 'metadata').iterdir()))
+            val_paths = sorted(list((dataset_path / 'render_far0.3_val' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_far0.5' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_line' / 'metadata').iterdir()))
 
@@ -1985,14 +1985,15 @@ class Runner:
                                 output_dir = str(experiment_path_current / 'panoptic')
                                 if not os.path.exists(output_dir):
                                     Path(output_dir).mkdir()
-                                np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                                np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                                np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
-                                np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
-                                np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
-                                np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
+                                if train_index == self.hparams.train_iterations:
+                                    np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                                    np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                                    np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                                    np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
+                                    np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
+                                    np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
 
-                                
+                                    
                                 if self.hparams.cached_centroids_type == 'all':
                                     all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
                                                                             device=self.device, num_images=len(indices_to_eval))

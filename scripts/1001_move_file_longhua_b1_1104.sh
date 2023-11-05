@@ -1,9 +1,9 @@
 #!/bin/bash
 #  depth_mesh  rgbs     image_metadata    metadata     labels_m2f
 # .1npy        .1jpg   .1pt                             .1png
-source_dir="/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds/train/metadata"
-destination_dir="/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds/val/metadata"
-filenames=("000063.pt" "000217.pt" "000243.pt" "000483.pt" "000529.pt" "000711.pt" "000758.pt" "000872.pt")  # 在这里列出你想要移动的文件名
+source_dir="/data/yuqi/Datasets/DJI/Longhua_block1_20231009/train/depth_mesh"
+destination_dir="/data/yuqi/Datasets/DJI/Longhua_block1_20231009/val/depth_mesh"
+filenames=("000063.npy" "000217.npy" "000243.npy" "000483.npy" "000529.npy" "000711.npy" "000758.npy" "000872.npy")  # 在这里列出你想要移动的文件名
 
 
 # 进入源文件夹

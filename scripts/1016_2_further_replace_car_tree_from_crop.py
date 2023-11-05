@@ -44,6 +44,7 @@ def _get_train_opts() -> Namespace:
     
     parser.add_argument('--output_path', type=str, default='logs_dji/augument/1015_far0.3/project_to_ori_gt_only_sam/project_far_to_ori_replace_building_car_tree',required=False, help='experiment name')
     # parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='experiment name')
+    parser.add_argument('--eval', default=False, type=eval, choices=[True, False], help='')
     
     return parser.parse_args()
 
@@ -58,7 +59,13 @@ def hello(hparams: Namespace) -> None:
         hparams.train_scale_factor =1
         hparams.val_scale_factor =1
     runner = Runner(hparams)
-    train_items = runner.train_items
+
+
+    if not hparams.eval:
+        train_items = runner.train_items
+
+    else:
+        train_items = runner.val_items
 
     only_sam_m2f_far_project_path = hparams.only_sam_m2f_far_project_path
 
@@ -80,21 +87,29 @@ def hello(hparams: Namespace) -> None:
     #     used_files.extend(glob(os.path.join(only_sam_m2f_far_project_path, ext)))
     # used_files.sort()
     # process_item = [Path(far_p).stem for far_p in used_files]
+    if not hparams.eval:
 
+        used_files = []
+        for ext in ('*.png', '*.jpg'):
+            used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
+        used_files.sort()
+        process_item = [Path(far_p).stem for far_p in used_files]
 
-    process_item=[]
-    for metadata_item in tqdm(train_items):
-        gt_label = metadata_item.load_gt()
-        has_nonzero = (gt_label != 0).any()
-        non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
-        if has_nonzero and non_zero_ratio>0.1:
-            process_item.append(f"{metadata_item.image_path.stem}")
-    print(len(process_item))
+    # process_item=[]
+    # for metadata_item in tqdm(train_items):
+    #     gt_label = metadata_item.load_gt()
+    #     has_nonzero = (gt_label != 0).any()
+    #     non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
+    #     if has_nonzero and non_zero_ratio>0.1:
+    #         process_item.append(f"{metadata_item.image_path.stem}")
+    # print(len(process_item))
     
     for metadata_item in tqdm(train_items, desc="replace car tree"):
         file_name = Path(metadata_item.image_path).stem
-        if file_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
-            continue
+        if not hparams.eval:
+                    
+            if file_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
+                continue
         
         # 读取 replace building 的标签文件
         far_m2f = Image.open(os.path.join(only_sam_m2f_far_project_path, file_name+'.png'))    #.convert('RGB')

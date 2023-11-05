@@ -143,7 +143,12 @@ def get_opts_base():
     parser.add_argument('--wgt_concentration_loss', default=1, type=float, help='')
     
     
-    parser.add_argument('--eval_m2f_2d', default=False, type=eval, choices=[True, False], help='')
+    parser.add_argument('--eval_others', default=False, type=eval, choices=[True, False], help='')
+    parser.add_argument('--eval_others_name', type=str, default='labels_m2f', choices=['labels_m2f', 
+                                                                                       'labels_unetformer',
+                                                                                       'labels_1018_ml_fusion_0.3',
+                                                                                       'labels_1028_ml_fusion_0.3'], help='')
+
     
     
 

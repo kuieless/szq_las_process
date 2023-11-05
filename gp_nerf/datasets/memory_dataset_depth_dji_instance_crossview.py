@@ -52,8 +52,8 @@ class MemoryDataset(Dataset):
         
         main_print('Loading data')
         if hparams.debug:
-            metadata_items = metadata_items[::20]
-        # metadata_items = metadata_items[207:208]
+            # metadata_items = metadata_items[::20]
+            metadata_items = metadata_items[207:208]
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
@@ -123,8 +123,8 @@ class MemoryDataset(Dataset):
                     continue
                 max_count_index = torch.argmax(counts_label_in_crossview)
                 most_frequent_label = unique_label_in_crossview[max_count_index]
-                # if uni == 11913:
-                    # a = 1
+                if uni == 7027:
+                    a = 1
                 ##### 2023 1102  用most_frequent_label组成dict
                 if uni_mask.nonzero().shape[0] > 0.0005 * self.H * self.W:
                     
@@ -154,11 +154,15 @@ class MemoryDataset(Dataset):
         return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        visualization = False
+        if self.hparams.debug:
+            visualization = True
+            metadata_current = self.metadata_items[self._img_indices[idx]]
+            if int(Path(metadata_current.image_path).stem) != 207:
+                return None
+        else:
+            visualization = False
 
-        # metadata_current = self.metadata_items[self._img_indices[idx]]
-        # if int(Path(metadata_current.image_path).stem) != 207:
-            # return None
+        
         
 
         selected_tensors = {}
@@ -190,13 +194,13 @@ class MemoryDataset(Dataset):
             color_crossview = label_to_color(self._instance_crossview[idx].long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             results = label_to_color(instance_new.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             vis_img = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy(), results.cpu().numpy()], axis=1)
-            Path(f"zyq/1102_crossview_train/viz").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1102_crossview_train/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
+            Path(f"zyq/1104_crossview_train/viz").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1104_crossview_train/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
         
-        # return None
+            return None
         
-        # Path(f"zyq/1102_crossview_train/results").mkdir(exist_ok=True, parents=True)
-        # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1102_crossview_train/results/%06d.png" % (self._img_indices[idx]))
+        # Path(f"zyq/1104_crossview_train/results").mkdir(exist_ok=True, parents=True)
+        # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1104_crossview_train/results/%06d.png" % (self._img_indices[idx]))
         
         
         # 找到非零值的索引

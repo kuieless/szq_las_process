@@ -75,6 +75,8 @@ def _get_train_opts() -> Namespace:
     
     parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='experiment name')
     parser.add_argument('--render_type', type=str, default='render_far0.3',required=False, help='experiment name')
+
+    parser.add_argument('--eval', default=False, type=eval, choices=[True, False], help='')
     
 
     
@@ -107,7 +109,11 @@ def hello(hparams: Namespace) -> None:
         hparams.val_scale_factor =1
 
     runner = Runner(hparams)
-    train_items = runner.train_items
+
+    if not hparams.eval:
+        train_items = runner.train_items
+    else:
+        train_items = runner.val_items
 
 
 
@@ -117,19 +123,28 @@ def hello(hparams: Namespace) -> None:
     # used_files.sort()
     # process_item = [Path(far_p).stem for far_p in used_files]
 
-    process_item=[]
-    for metadata_item in tqdm(train_items):
-        gt_label = metadata_item.load_gt()
-        has_nonzero = (gt_label != 0).any()
-        non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
-        if has_nonzero and non_zero_ratio>0.1:
-            process_item.append(f"{metadata_item.image_path.stem}")
-    print(len(process_item))
+    # process_item=[]
+    # for metadata_item in tqdm(train_items):
+    #     gt_label = metadata_item.load_gt()
+    #     has_nonzero = (gt_label != 0).any()
+    #     non_zero_ratio = torch.sum(gt_label != 0).item() / gt_label.numel()
+    #     if has_nonzero and non_zero_ratio>0.1:
+    #         process_item.append(f"{metadata_item.image_path.stem}")
+    # print(len(process_item))
+
+    if not hparams.eval:
+        used_files = []
+        for ext in ('*.png', '*.jpg'):
+            used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
+        used_files.sort()
+        process_item = [Path(far_p).stem for far_p in used_files]
     
     for metadata_item in tqdm(train_items, desc="project to ori"):
         file_name = Path(metadata_item.image_path).stem
-        if file_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
-            continue
+        
+        if not hparams.eval:
+            if file_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
+                continue
         
         directions = get_ray_directions(metadata_item.W,
                                         metadata_item.H,
