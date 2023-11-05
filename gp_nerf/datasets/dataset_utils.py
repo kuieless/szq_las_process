@@ -100,6 +100,9 @@ def get_rgb_index_mask_depth_dji(metadata: ImageMetadata) -> Optional[
     assert metadata.image_index <= torch.iinfo(torch.int32).max
     return rgbs, metadata.image_index * torch.ones(rgbs.shape[0], dtype=torch.int32), keep_mask, labels, depth_dji
 
+
+
+#这里把keep masks 筛点的操作直接放到dataloader里面，根据semantic进行过滤，这样保证都是（H,W）
 def get_rgb_index_mask_depth_dji_instance(metadata: ImageMetadata) -> Optional[
     Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
     rgbs = metadata.load_image().view(-1, 3)
@@ -133,33 +136,32 @@ def get_rgb_index_mask_depth_dji_instance(metadata: ImageMetadata) -> Optional[
         elif metadata.left_or_right == 'right':
             keep_mask[:, -int(metadata.W/5):] = False
 
+
     if keep_mask is not None:
         if keep_mask[keep_mask == True].shape[0] == 0:
             return None
         keep_mask = keep_mask.view(-1)
-        rgbs = rgbs[keep_mask == True]
+        # rgbs = rgbs[keep_mask == True]
 
     labels = metadata.load_label()
     if labels is not None:
         labels = labels.view(-1)
-        if keep_mask is not None :
-            labels = labels[keep_mask == True]
+        # if keep_mask is not None :
+            # labels = labels[keep_mask == True]
 
     instance = metadata.load_instance()
     if instance is not None:
         instance = instance.view(-1)
-        if keep_mask is not None :
-            instance = instance[keep_mask == True]
+        # if keep_mask is not None :
+            # instance = instance[keep_mask == True]
 
     depth_dji = metadata.load_depth_dji()
     if depth_dji is not None:
         depth_dji = depth_dji.view(-1)
-        if keep_mask is not None :
-            depth_dji = depth_dji[keep_mask == True]
+        # if keep_mask is not None :
+            # depth_dji = depth_dji[keep_mask == True]
 
     
-
-
     assert metadata.image_index <= torch.iinfo(torch.int32).max
     # return rgbs, metadata.image_index * torch.ones(rgbs.shape[0], dtype=torch.int32), keep_mask, instance, depth_dji
     return rgbs, metadata.image_index, keep_mask, labels, depth_dji, instance
@@ -202,32 +204,32 @@ def get_rgb_index_mask_depth_dji_instance_crossview(metadata: ImageMetadata) -> 
         if keep_mask[keep_mask == True].shape[0] == 0:
             return None
         keep_mask = keep_mask.view(-1)
-        rgbs = rgbs[keep_mask == True]
+        # rgbs = rgbs[keep_mask == True]
 
     
     labels = metadata.load_label()
     if labels is not None:
         labels = labels.view(-1)
-        if keep_mask is not None :
-            labels = labels[keep_mask == True]
+        # if keep_mask is not None :
+            # labels = labels[keep_mask == True]
 
     instance = metadata.load_instance()
     if instance is not None:
         instance = instance.view(-1)
-        if keep_mask is not None :
-            instance = instance[keep_mask == True]
+        # if keep_mask is not None :
+            # instance = instance[keep_mask == True]
 
     instance_crossview = metadata.load_instance_crossview()
     if instance_crossview is not None:
         instance_crossview = instance_crossview.view(-1)
-        if keep_mask is not None :
-            instance_crossview = instance_crossview[keep_mask == True]
+        # if keep_mask is not None :
+            # instance_crossview = instance_crossview[keep_mask == True]
 
     depth_dji = metadata.load_depth_dji()
     if depth_dji is not None:
         depth_dji = depth_dji.view(-1)
-        if keep_mask is not None :
-            depth_dji = depth_dji[keep_mask == True]
+        # if keep_mask is not None :
+            # depth_dji = depth_dji[keep_mask == True]
 
     
 

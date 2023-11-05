@@ -78,8 +78,9 @@ class MemoryDataset(Dataset):
             
             depth_scale = self._depth_scale
             if image_keep_mask is not None:
-                image_rays = image_rays[image_keep_mask == True]
-                depth_scale = depth_scale[image_keep_mask == True]
+                label[image_keep_mask] = 0
+                # image_rays = image_rays[image_keep_mask == True]
+                # depth_scale = depth_scale[image_keep_mask == True]
 
             # 在instance 训练时只拿 semantic 中building的区域
             label = remapping(label)

@@ -82,9 +82,11 @@ class MemoryDataset(Dataset):
             
             depth_scale = depth_scale_full.clone()
             if image_keep_mask is not None:
-                image_rays = image_rays[image_keep_mask == True]
-                depth_scale = depth_scale[image_keep_mask == True]
-
+                ###  左右部分不做投影
+                instance[image_keep_mask]=0
+                # image_rays = image_rays[image_keep_mask == True]
+                # depth_scale = depth_scale[image_keep_mask == True]
+                depth_dji[image_keep_mask]=torch.inf
 
             rgbs.append(image_rgbs)
             rays.append(image_rays)
@@ -124,8 +126,8 @@ class MemoryDataset(Dataset):
             # return None
         # if int(Path(metadata_current.image_path).stem) != 207:
             # return None
-        if int(Path(metadata_current.image_path).stem) < 541:
-            return None
+        # if int(Path(metadata_current.image_path).stem) < 541:
+            # return None
         
         visualization = False
         if visualization:
