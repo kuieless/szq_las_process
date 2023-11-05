@@ -53,7 +53,10 @@ class MemoryDataset(Dataset):
         main_print('Loading data')
         if hparams.debug:
             # metadata_items = metadata_items[::20]
-            metadata_items = metadata_items[207:208]
+            # metadata_items = metadata_items[207:208]
+            # metadata_items = metadata_items[230:235]
+            metadata_items = metadata_items[203:217]
+
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
@@ -128,8 +131,8 @@ class MemoryDataset(Dataset):
                 ##### 2023 1102  用most_frequent_label组成dict
                 if uni_mask.nonzero().shape[0] > 0.0005 * self.H * self.W:
                     
-                    if counts_label_in_crossview[max_count_index]/label_in_crossview.shape[0] < 0.5:
-                        continue
+                    # if counts_label_in_crossview[max_count_index]/label_in_crossview.shape[0] < 0.5:
+                    #     continue
                     if f'{most_frequent_label}' not in sample_dict:
                         sample_dict[f'{most_frequent_label}'] = []
                     each_mask = torch.zeros_like(instance)
@@ -157,8 +160,8 @@ class MemoryDataset(Dataset):
         if self.hparams.debug:
             visualization = True
             metadata_current = self.metadata_items[self._img_indices[idx]]
-            if int(Path(metadata_current.image_path).stem) != 207:
-                return None
+            # if int(Path(metadata_current.image_path).stem) != 207:
+                # return None
         else:
             visualization = False
 
@@ -194,9 +197,29 @@ class MemoryDataset(Dataset):
             color_crossview = label_to_color(self._instance_crossview[idx].long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             results = label_to_color(instance_new.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             vis_img = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy(), results.cpu().numpy()], axis=1)
+            # Path(f"zyq/1104_crossview_train/viz").mkdir(exist_ok=True, parents=True)
+            # cv2.imwrite(f"zyq/1104_crossview_train/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
+
+            # Path(f"zyq/1104_crossview_train/compare_duo_crossview").mkdir(exist_ok=True, parents=True)
+            # instance_duo = Image.open(str(metadata_current.instance_path).replace(self.hparams.instance_name, 'instances_mask_0.001'))
+            # instance_duo = torch.tensor(np.asarray(instance_duo),dtype=torch.int32)
+            # results_duo = label_to_color(instance_duo.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
+            # cv2.imwrite(f"zyq/1104_crossview_train/compare_duo_crossview/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", 
+            #             np.concatenate([results_duo.cpu().numpy(), results.cpu().numpy()], axis=1))
+            
+            
+            
+            instance_duo = Image.open(str(metadata_current.instance_path).replace(self.hparams.instance_name, 'instances_mask_0.001'))
+            instance_duo = torch.tensor(np.asarray(instance_duo),dtype=torch.int32)
+            results_duo = label_to_color(instance_duo.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
+            vis_img1 = np.concatenate([results_duo.cpu().numpy(), results.cpu().numpy()], axis=1)
+            vis_img2 = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy()], axis=1)
+            vis_img3 = np.concatenate([vis_img1, vis_img2], axis=0)
+            
             Path(f"zyq/1104_crossview_train/viz").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1104_crossview_train/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
-        
+            cv2.imwrite(f"zyq/1104_crossview_train/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img3)
+
+
             return None
         
         # Path(f"zyq/1104_crossview_train/results").mkdir(exist_ok=True, parents=True)

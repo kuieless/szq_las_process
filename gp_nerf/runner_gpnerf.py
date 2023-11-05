@@ -818,10 +818,11 @@ class Runner:
                     
                     for key in metrics_each['all']:
                         avg_val = metrics_each['all'][key]
-                        message = ' {}: {}'.format(key, avg_val)
+                        message = '      {}: {}'.format(key, avg_val)
                         f.write('{}\n'.format(message))
                         print(message)
-
+                    f.write('{}\n')
+                    f.write(f"pq, rq, sq, mIoU, TP, FP, FN: {metrics_each['all']['pq'][0].item()},{metrics_each['all']['rq'][0].item()},{metrics_each['all']['sq'][0].item()},{metrics_each['all']['iou_sum'][0].item()},{metrics_each['all']['true_positives'][0].item()},{metrics_each['all']['false_positives'][0].item()},{metrics_each['all']['false_negatives'][0].item()}\n")
                     del val_metrics['pq'],val_metrics['sq'],val_metrics['rq'], val_metrics['metrics_each']
                 
                 for key in val_metrics:
@@ -2038,8 +2039,8 @@ class Runner:
 
                             for save_i in range(len(indices_to_eval)):
                                 p_rgb = all_points_rgb[save_i]
-                                # p_semantics = all_points_semantics[save_i]
-                                p_semantics = gt_points_semantic[save_i]
+                                p_semantics = all_points_semantics[save_i]
+                                # p_semantics = gt_points_semantic[save_i]
                                 p_instances = all_points_instances[save_i]
                                 gt_rgb = gt_points_rgb[save_i]
                                 gt_semantics = gt_points_semantic[save_i]

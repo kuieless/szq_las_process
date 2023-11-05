@@ -309,7 +309,10 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
             # all_slow_features.append(slow_features)
             instances = instances[...,0:hparams.num_instance_classes] # keep fast features only
         if not hparams.render_zyq:
-            p_instances = create_instances_from_semantics(instances, gt_label, thing_classes,device=device)
+            # p_instances = create_instances_from_semantics(instances, gt_label, thing_classes,device=device)
+            #1105晚上改的，改为用pred semantic进行instance的相关计算
+            p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
+
         else:
             p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
         
