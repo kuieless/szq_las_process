@@ -1,5 +1,6 @@
 
 # Byte-compiled / optimized / DLL files
+tools/segment_anything/sam_vit_l_0b3195.pth
 logs_*
 zyq_cluster*
 logs_old/

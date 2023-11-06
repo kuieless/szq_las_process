@@ -35,8 +35,17 @@ def main(hparams: Namespace) -> None:
         # hparams.log2_hashmap_size=20
         hparams.contract_new=True
         hparams.use_scaling=False
-
     
+    if 'Longhua' in hparams.dataset_path:
+        hparams.train_scale_factor = 1
+        hparams.val_scale_factor = 1
+
+    if 'linear_assignment' in hparams.instance_loss_mode:
+        assert hparams.num_instance_classes > 30
+    else:
+        hparams.num_instance_classes = 25
+        assert hparams.num_instance_classes < 30
+
 
     from gp_nerf.runner_gpnerf import Runner
     print(f"stop_semantic_grad:{hparams.stop_semantic_grad}")

@@ -16,7 +16,7 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 from PIL import Image
 
-# torch.cuda.set_device(7)
+torch.cuda.set_device(7)
 device= 'cuda'
 
 
@@ -56,29 +56,29 @@ def save_mask_anns_torch(colors, anns, img_name, hparams, id, output_path):
 
             exsit_max_label_mask = img==most_frequent_label
 
-            #####################################################
-            # # 1. 根据IOU
-            # intersection = torch.logical_and(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
-            # union = torch.logical_or(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
-            # iou = intersection.float() / union.float()
-            # if iou > 0.9:
-            #     # img[exsit_max_label_mask]=id
-            #     img[m] = most_frequent_label
-            # else:
-            #     img[m]=id
-            # id = id + 1
-            #####################################################
-
-
-            #####################################################
-            ## 2. 根据交集与小的比例
+            ####################################################
+            # 1. 根据IOU
             intersection = torch.logical_and(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
-            if (intersection / torch.from_numpy(m).to(exsit_max_label_mask.device).sum()) > 0.9:  # 小的在大的上面，就不要了
+            union = torch.logical_or(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
+            iou = intersection.float() / union.float()
+            if iou > 0.9:
                 # img[exsit_max_label_mask]=id
-                continue
-            img[m] = id
+                img[m] = most_frequent_label
+            else:
+                img[m]=id
             id = id + 1
-            #####################################################
+            ####################################################
+
+
+            # #####################################################
+            # ## 2. 根据交集与小的比例
+            # intersection = torch.logical_and(exsit_max_label_mask, torch.from_numpy(m).to(exsit_max_label_mask.device)).sum()
+            # if (intersection / torch.from_numpy(m).to(exsit_max_label_mask.device).sum()) > 0.9:  # 小的在大的上面，就不要了
+            #     # img[exsit_max_label_mask]=id
+            #     continue
+            # img[m] = id
+            # id = id + 1
+            # #####################################################
 
         # viz_img = visualize_labels(img)
         # cv2.imwrite(os.path.join(output_path, 'instances_mask_vis_each', f"{img_name}_%06d.jpg" % id), viz_img)
@@ -112,8 +112,8 @@ def _get_train_opts() -> Namespace:
     # parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/sam_viz',required=False, help='')
     
 
-    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds/train/rgbs',required=False, help='')
-    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds/train/sam_features',required=False, help='')
+    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
+    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
     parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='')
     parser.add_argument('--threshold', type=float, default=0.001,required=False, help='')
     
@@ -136,7 +136,7 @@ def hello(hparams: Namespace) -> None:
 
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
-    mask_generator = SamAutomaticMaskGenerator(sam, points_per_side=points_per_side)
+    mask_generator = SamAutomaticMaskGenerator(sam, points_per_side=points_per_side, pred_iou_thresh=0.86)
 
     imgs = []
     for ext in ('*.png'):
@@ -179,19 +179,21 @@ def hello(hparams: Namespace) -> None:
         img_name = imgs[i].split('/')[-1][:6]
         if img_name not in process_item and 'val' not in hparams.image_path:
             continue
-        # if int(img_name) < 207 or int(img_name) > 207:
-            # continue
+        if int(img_name) < 230:
+            continue
         image = cv2.imread(imgs[i])
         # image_size = 
         w, h, _ = image.shape
-        if w > 3000:
-            image = cv2.resize(image, (int(h/4), int(w/4)), cv2.INTER_AREA)
+        # if w > 3000:
+            # image = cv2.resize(image, (int(h/4), int(w/4)), cv2.INTER_AREA)
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         # print(features[i])
+        
         feature = torch.from_numpy(np.load(features[i]))
 
         ### NOTE: 有时候会报维度不匹配的错误，修改下面的代码
-        masks = mask_generator.generate(image1, feature[0])
+        # masks = mask_generator.generate(image1, feature[0])
+        masks = mask_generator.generate(image1)
         # masks = mask_generator.generate(image1, feature)
         
         mask, id = save_mask_anns_torch(colors, masks, img_name, hparams, id, output_path)

@@ -132,8 +132,8 @@ class MemoryDataset(Dataset):
                 ##### 2023 1102  用most_frequent_label组成dict
                 if uni_mask.nonzero().shape[0] > 0.0005 * self.H * self.W:
                     
-                    # if counts_label_in_crossview[max_count_index]/label_in_crossview.shape[0] < 0.5:
-                    #     continue
+                    if counts_label_in_crossview[max_count_index]/label_in_crossview.shape[0] < 0.5:
+                        continue
                     if f'{most_frequent_label}' not in sample_dict:
                         sample_dict[f'{most_frequent_label}'] = []
                     each_mask = torch.zeros_like(instance)
@@ -176,6 +176,8 @@ class MemoryDataset(Dataset):
                 selected_tensors[key] = tensor_list[random_index]
 
         tensor_list = list(selected_tensors.values())
+        if tensor_list == []:
+            return None
         stacked_tensors = torch.stack(tensor_list)
         instance_new = torch.sum(stacked_tensors, dim=0)
 

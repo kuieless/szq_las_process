@@ -1718,8 +1718,8 @@ class Runner:
                 if val_type == 'val':
                     if 'residence'in self.hparams.dataset_path:
                         self.val_items=self.val_items[:19]
-                    elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
-                        self.val_items=self.val_items[:10]
+                    # elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                        # self.val_items=self.val_items[:10]
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
                     # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
@@ -1808,10 +1808,10 @@ class Runner:
                     Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
 
         else:
-            if 'residence'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
-                from tools.unetformer.uavid2rgb import remapping_remove_ground as remapping
-            else:
-                from tools.unetformer.uavid2rgb import remapping
+            # if 'residence'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                # from tools.unetformer.uavid2rgb import remapping_remove_ground as remapping
+            # else:
+            from tools.unetformer.uavid2rgb import remapping
 
             
             if self.hparams.use_neus_gradient == False and self.hparams.nr3d_nablas == False:
@@ -1829,8 +1829,8 @@ class Runner:
                         if val_type == 'val':
                             if 'residence'in self.hparams.dataset_path:
                                 self.val_items=self.val_items[:19]
-                            elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
-                                self.val_items=self.val_items[:10]
+                            # elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                                # self.val_items=self.val_items[:10]
                             indices_to_eval = np.arange(len(self.val_items))
                         elif val_type == 'train':
                             indices_to_eval = np.arange(370,490)  
@@ -2109,8 +2109,8 @@ class Runner:
                         if val_type == 'val':
                             if 'residence'in self.hparams.dataset_path:
                                 self.val_items=self.val_items[:19]
-                            elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
-                                self.val_items=self.val_items[:10]
+                            # elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                                # self.val_items=self.val_items[:10]
                             indices_to_eval = np.arange(len(self.val_items))
                         elif val_type == 'train':
                             indices_to_eval = np.arange(800,1200)  
@@ -2248,8 +2248,8 @@ class Runner:
                 if val_type == 'val':
                     if 'residence'in self.hparams.dataset_path:
                         self.val_items=self.val_items[:19]
-                    elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
-                        self.val_items=self.val_items[:10]
+                    # elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                        # self.val_items=self.val_items[:10]
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
                     indices_to_eval = np.arange(370,490)  
