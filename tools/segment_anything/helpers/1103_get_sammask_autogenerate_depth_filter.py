@@ -315,7 +315,8 @@ def hello(hparams: Namespace) -> None:
 
         mask, id_depth = save_mask_anns_torch_depth(masks, img_name, hparams, id_depth, output_path, world_point[:,:,0])
         mask_vis = visualize_labels(mask)
-        Image.fromarray(mask.cpu().numpy().astype(np.uint32)).save(os.path.join(output_path, 'instances_mask', f"{img_name}.png"))
+        np.save(os.path.join(output_path, 'instances_mask', f"{img_name}.npy"), mask.cpu().numpy().astype(np.uint32))
+        # Image.fromarray(mask.cpu().numpy().astype(np.uint32)).save(os.path.join(output_path, 'instances_mask', f"{img_name}.png"))
         print(np.array(id_depth, dtype=np.uint32))
         
         cv2.imwrite(os.path.join(output_path, 'instances_mask_vis', f"{img_name}.png"), mask_vis)

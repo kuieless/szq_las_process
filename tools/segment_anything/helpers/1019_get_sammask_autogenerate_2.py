@@ -122,7 +122,7 @@ def _get_train_opts() -> Namespace:
     parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='')
     parser.add_argument('--threshold', type=float, default=0.001,required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
-    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds',required=False, help='')
     
 
     return parser.parse_args()
@@ -196,6 +196,7 @@ def hello(hparams: Namespace) -> None:
     process_item = [Path(far_p).stem for far_p in used_files]
 
     id = 1 
+    # id = 65537 
     for metadata_item in tqdm.tqdm(train_items):
         img_name = Path(metadata_item.image_path).stem
         if img_name not in process_item or metadata_item.is_val: # or int(img_name) < 190:
@@ -211,7 +212,11 @@ def hello(hparams: Namespace) -> None:
         mask, id = save_mask_anns_torch(masks, img_name, hparams, id, output_path)
         mask_vis = visualize_labels(mask)
         
-        Image.fromarray(mask.cpu().numpy().astype(np.uint32)).save(os.path.join(output_path, 'instances_mask', f"{img_name}.png"))
+        # Image.fromarray(mask.cpu().numpy().astype(np.uint32)).save(os.path.join(output_path, 'instances_mask', f"{img_name}.png"))
+
+        np.save(os.path.join(output_path, 'instances_mask', f"{img_name}.npy"), mask.cpu().numpy().astype(np.uint32))
+
+
         print(np.array(id, dtype=np.uint32))
 
         cv2.imwrite(os.path.join(output_path, 'instances_mask_vis', f"{img_name}.png"), mask_vis)

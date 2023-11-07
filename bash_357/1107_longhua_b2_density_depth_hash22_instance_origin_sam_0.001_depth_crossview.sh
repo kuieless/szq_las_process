@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=5
 
 
 
@@ -14,7 +14,7 @@ val_interval=20000
 ckpt_interval=20000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf
-dataset_type=memory_depth_dji_instance
+dataset_type=memory_depth_dji_instance_crossview
 
 use_scaling=False
 sampling_mesh_guidance=True
@@ -36,8 +36,8 @@ instance_loss_mode=slow_fast
 num_instance_classes=25
 
 enable_instance=True
-exp_name=logs_longhua_b2/1106_longhua_b2_density_depth_hash22_instance_origin_sam_0.001
-instance_name=instances_mask_0.001
+exp_name=logs_longhua_b2/1107_longhua_b2_density_depth_hash22_instance_origin_sam_0.001_depth_crossview
+instance_name=instances_mask_0.001_depth
 
 
 

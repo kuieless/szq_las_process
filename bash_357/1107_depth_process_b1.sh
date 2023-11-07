@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=32
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=2
 
 
 python gp_nerf/train.py \

@@ -3130,7 +3130,7 @@ class Runner:
                 break
         instance_path = None
         if self.hparams.enable_instance:
-            for extension in ['.jpg', '.JPG', '.png', '.PNG']:
+            for extension in ['.jpg', '.JPG', '.png', '.PNG', '.npy']:
                 
                 candidate = metadata_path.parent.parent / f'{self.hparams.instance_name}' / '{}{}'.format(metadata_path.stem, extension)
 

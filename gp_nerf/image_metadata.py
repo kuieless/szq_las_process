@@ -112,25 +112,36 @@ class ImageMetadata:
     def load_instance(self) -> torch.Tensor:
         if self.instance_path is None:
             return None
-        
-        labels = Image.open(self.instance_path)    #.convert('RGB')
-        size = labels.size
-        if size[0] != self.W or size[1] != self.H:
-            labels = labels.resize((self.W, self.H), Image.NEAREST)
+        if self.instance_path.suffix == '.npy':
+            labels = np.load(str(self.instance_path))
+            return torch.tensor(labels.astype(np.int32),dtype=torch.int32)
+
+        else:
+            labels = Image.open(self.instance_path)    #.convert('RGB')
+            # labels = cv2.imread(str(self.instance_path), cv2.IMREAD_UNCHANGED)
+            size = labels.size
+            if size[0] != self.W or size[1] != self.H:
+                labels = labels.resize((self.W, self.H), Image.NEAREST)
        
-        # return torch.ByteTensor(np.asarray(labels))
-        return torch.tensor(np.asarray(labels),dtype=torch.int32)
+            # return torch.ByteTensor(np.asarray(labels))
+            return torch.tensor(np.asarray(labels),dtype=torch.int32)
 
     def load_instance_crossview(self) -> torch.Tensor:
         if self.instance_path is None:
             return None
         crossview_path = str(self.instance_path).replace(self.hparams.instance_name, self.hparams.instance_name+'_crossview_process')
 
-        labels = Image.open(crossview_path)    #.convert('RGB')
-        size = labels.size
-        if size[0] != self.W or size[1] != self.H:
-            labels = labels.resize((self.W, self.H), Image.NEAREST)
-        return torch.tensor(np.asarray(labels),dtype=torch.int32)
+        if self.instance_path.suffix == '.npy':
+            labels = np.load(crossview_path)
+            return torch.tensor(labels.astype(np.int32),dtype=torch.int32)
+
+        else:
+            labels = Image.open(crossview_path)    #.convert('RGB')
+            size = labels.size
+            if size[0] != self.W or size[1] != self.H:
+                labels = labels.resize((self.W, self.H), Image.NEAREST)
+
+            return torch.tensor(np.asarray(labels),dtype=torch.int32)
     
     
     def load_instance_gt(self) -> torch.Tensor:

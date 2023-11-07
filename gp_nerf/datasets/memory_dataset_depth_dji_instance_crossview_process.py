@@ -50,6 +50,8 @@ class MemoryDataset(Dataset):
             # metadata_items = metadata_items[::20]
             metadata_items = metadata_items[205:210]
             pass
+        # metadata_items = metadata_items[994:]
+
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
         # for metadata_item in main_tqdm(metadata_items[:40]):
@@ -121,8 +123,8 @@ class MemoryDataset(Dataset):
         instances_current = self._labels[idx].clone().view(self.H, self.W).to(device)
         depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W).to(device)
         metadata_current = self.metadata_items[self._img_indices[idx]]
-        aaaaa = 530
-        if int(Path(metadata_current.image_path).stem) < aaaaa or int(Path(metadata_current.image_path).stem) > (aaaaa +150):
+        aaaaa = 900
+        if int(Path(metadata_current.image_path).stem) < aaaaa or int(Path(metadata_current.image_path).stem) > (aaaaa +300):
             return None
         # if int(Path(metadata_current.image_path).stem) != 207:
             # return None
@@ -387,7 +389,8 @@ class MemoryDataset(Dataset):
             Path(f"zyq/{self.hparams.crossview_process_path}/test_{overlap_threshold}/results").mkdir(exist_ok=True, parents=True)
             cv2.imwrite(f"zyq/{self.hparams.crossview_process_path}/test_{overlap_threshold}/results/%06d_results_%06d.jpg" % (int(Path(metadata_current.label_path).stem), unique_label), vis_img5)
             Path(f"zyq/{self.hparams.crossview_process_path}/test_{overlap_threshold}/crossview_process").mkdir(exist_ok=True, parents=True)
-            Image.fromarray(new_instance.cpu().numpy().astype(np.uint32)).save(f"zyq/{self.hparams.crossview_process_path}/test_{overlap_threshold}/crossview_process/{Path(metadata_current.label_path).stem}.png")
+            # Image.fromarray().save()
+            np.save(f"zyq/{self.hparams.crossview_process_path}/test_{overlap_threshold}/crossview_process/{Path(metadata_current.label_path).stem}.npy", new_instance.cpu().numpy().astype(np.uint32))
 
             
 
