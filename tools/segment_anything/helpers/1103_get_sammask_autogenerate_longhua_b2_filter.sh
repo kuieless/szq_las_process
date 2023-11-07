@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=5
 
 
 python /data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/1103_get_sammask_autogenerate_depth_filter.py  \

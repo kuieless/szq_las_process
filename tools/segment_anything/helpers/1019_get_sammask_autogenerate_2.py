@@ -15,12 +15,15 @@ import configargparse
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 from PIL import Image
+from gp_nerf.runner_gpnerf import Runner
+from gp_nerf.opts import get_opts_base
+from mega_nerf.ray_utils import get_rays, get_ray_directions
 
-torch.cuda.set_device(7)
+# torch.cuda.set_device(7)
 device= 'cuda'
 
 
-def save_mask_anns_torch(colors, anns, img_name, hparams, id, output_path):
+def save_mask_anns_torch(anns, img_name, hparams, id, output_path):
     if len(anns) == 0:
         return
     
@@ -105,24 +108,42 @@ def visualize_labels(labels_tensor):
     return colored_image_np
 
 def _get_train_opts() -> Namespace:
-    parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
+    parser = get_opts_base()
+
+    # parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
 
     # parser.add_argument('--image_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/pred_rgb',required=False, help='')
     # parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/sam_features',required=False, help='')
     # parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/sam_viz',required=False, help='')
     
 
-    parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
-    parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
+    # parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
+    # parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
     parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='')
     parser.add_argument('--threshold', type=float, default=0.001,required=False, help='')
+    parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     
 
     return parser.parse_args()
 
 
 def hello(hparams: Namespace) -> None:
-    file_name='DJi'
+    if 'Longhua' in hparams.dataset_path:
+        hparams.train_scale_factor = 1
+        hparams.val_scale_factor = 1
+
+    hparams.ray_altitude_range = [-95, 54]
+    hparams.dataset_type='memory_depth_dji'
+    device = 'cpu'
+    hparams.label_name = 'm2f' # ['m2f', 'merge', 'gt']
+    if 'Longhua' in hparams.dataset_path:
+        hparams.train_scale_factor =1
+        hparams.val_scale_factor =1
+    runner = Runner(hparams)
+    train_items = runner.train_items
+
+
     points_per_side=32
     if points_per_side ==32:
         output_path = hparams.output_path + f'_{hparams.threshold}'
@@ -138,25 +159,25 @@ def hello(hparams: Namespace) -> None:
     sam.to(device=device)
     mask_generator = SamAutomaticMaskGenerator(sam, points_per_side=points_per_side, pred_iou_thresh=0.86)
 
-    imgs = []
-    for ext in ('*.png'):
-        imgs.extend(glob.glob(os.path.join(hparams.image_path, ext)))
-    imgs.sort()
-    imgs = imgs[1:]
+    # imgs = []
+    # for ext in ('*.png'):
+    #     imgs.extend(glob.glob(os.path.join(hparams.image_path, ext)))
+    # imgs.sort()
+    # imgs = imgs[1:]
 
 
-    features = []
-    for ext in ('*.npy'):
-        features.extend(glob.glob(os.path.join(hparams.sam_feat_path, ext)))
-    features.sort()
-    features = features[1:]
+    # features = []
+    # for ext in ('*.npy'):
+    #     features.extend(glob.glob(os.path.join(hparams.sam_feat_path, ext)))
+    # features.sort()
+    # features = features[1:]
 
 
 
-    colors = []
-    for i in range(len(imgs)):
-        colors.append(np.random.random((1,3)).tolist()[0])
-    colors = np.clip(colors, 0, 0.95)
+    # colors = []
+    # for i in range(len(imgs)):
+    #     colors.append(np.random.random((1,3)).tolist()[0])
+    # colors = np.clip(colors, 0, 0.95)
     
     
     Path(output_path).mkdir(exist_ok=True)
@@ -166,45 +187,36 @@ def hello(hparams: Namespace) -> None:
     Path(os.path.join(output_path,'instances_mask_vis_each')).mkdir(exist_ok=True)
 
     
-
     used_files = []
     for ext in ('*.png', '*.jpg'):
-        used_files.extend(glob.glob(os.path.join(str(Path(hparams.image_path).parent.parent), 'subset','rgbs', ext)))
+        # used_files.extend(glob.glob(os.path.join(str(Path(hparams.image_path).parent.parent), 'subset','rgbs', ext)))
+        used_files.extend(glob.glob(os.path.join(hparams.dataset_path, 'subset','rgbs', ext)))
+        
     used_files.sort()
     process_item = [Path(far_p).stem for far_p in used_files]
-    # process_item = process_item[350:]
 
     id = 1 
-    for i in tqdm.tqdm(range(len(imgs))):
-        img_name = imgs[i].split('/')[-1][:6]
-        if img_name not in process_item and 'val' not in hparams.image_path:
+    for metadata_item in tqdm.tqdm(train_items):
+        img_name = Path(metadata_item.image_path).stem
+        if img_name not in process_item or metadata_item.is_val: # or int(img_name) < 190:
             continue
-        if int(img_name) < 230:
-            continue
-        image = cv2.imread(imgs[i])
-        # image_size = 
-        w, h, _ = image.shape
-        # if w > 3000:
-            # image = cv2.resize(image, (int(h/4), int(w/4)), cv2.INTER_AREA)
-        image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        # print(features[i])
+        image = metadata_item.load_image()
+        feature = torch.from_numpy(np.load(str(metadata_item.depth_dji_path).replace('depth_mesh', 'sam_features')))
         
-        feature = torch.from_numpy(np.load(features[i]))
 
         ### NOTE: 有时候会报维度不匹配的错误，修改下面的代码
-        # masks = mask_generator.generate(image1, feature[0])
-        masks = mask_generator.generate(image1)
-        # masks = mask_generator.generate(image1, feature)
+        masks = mask_generator.generate(image, feature[0])
+        # masks = mask_generator.generate(image, feature)
         
-        mask, id = save_mask_anns_torch(colors, masks, img_name, hparams, id, output_path)
+        mask, id = save_mask_anns_torch(masks, img_name, hparams, id, output_path)
         mask_vis = visualize_labels(mask)
         
         Image.fromarray(mask.cpu().numpy().astype(np.uint32)).save(os.path.join(output_path, 'instances_mask', f"{img_name}.png"))
-        
+        print(np.array(id, dtype=np.uint32))
 
         cv2.imwrite(os.path.join(output_path, 'instances_mask_vis', f"{img_name}.png"), mask_vis)
 
-        image_cat = image*0.6+ mask_vis*0.4
+        image_cat = image.cpu().numpy()*0.6+ mask_vis*0.4
         cv2.imwrite(os.path.join(output_path,'image_cat', f"{img_name}.png"), image_cat)
                     
     print('done')
