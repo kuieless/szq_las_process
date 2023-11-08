@@ -112,7 +112,7 @@ class MemoryDataset(Dataset):
     
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        device='cpu'
+        device='cuda'
         overlap_threshold=0.5
         ###NOTE 需要将shuffle调成False, 不打乱，按照顺序处理
 
@@ -123,13 +123,13 @@ class MemoryDataset(Dataset):
         instances_current = self._labels[idx].clone().view(self.H, self.W).to(device)
         depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W).to(device)
         metadata_current = self.metadata_items[self._img_indices[idx]]
-        # aaaaa = 680
-        # if int(Path(metadata_current.image_path).stem) < aaaaa or int(Path(metadata_current.image_path).stem) > (aaaaa +340):
+        aaaaa = 0
+        # if int(Path(metadata_current.image_path).stem) < aaaaa or int(Path(metadata_current.image_path).stem) > (aaaaa +109):
             # return None
         # if int(Path(metadata_current.image_path).stem) != 207:
             # return None
-        # if int(Path(metadata_current.image_path).stem) < 638:
-            # return None
+        if int(Path(metadata_current.image_path).stem) < 638:
+            return None
         
         visualization = False
         if visualization:
@@ -317,7 +317,7 @@ class MemoryDataset(Dataset):
 
                 merge_unique_label_list, score_list = zip(*sorted_data)
                 merge_unique_label_list = list(merge_unique_label_list)
-                merge_unique_label_list.append(mask_idx)
+                # merge_unique_label_list.append(mask_idx)
 
                 ###得到一个mask 在所有图像上需要融合的区域后， 对所有的mask求并集
                 # iiiii=1
@@ -341,10 +341,8 @@ class MemoryDataset(Dataset):
                 union_mask_label_list.append(unique_label)
 
 
-        #### reverse=False 从小到大
+        # reverse=False 从小到大
         sorted_data = sorted(zip(union_masks, union_masks_score_list, union_mask_label_list), key=lambda x: x[1], reverse=False)
-        ####   1108 改成从大到小
-        # sorted_data = sorted(zip(union_masks, union_masks_score_list, union_mask_label_list), key=lambda x: x[1], reverse=True)
 
         union_masks, union_masks_score_list, union_mask_label_list = zip(*sorted_data)
         union_masks, union_mask_label_list = list(union_masks), list(union_mask_label_list)

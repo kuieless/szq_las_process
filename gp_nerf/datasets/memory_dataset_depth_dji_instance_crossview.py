@@ -200,14 +200,14 @@ class MemoryDataset(Dataset):
             color_crossview = label_to_color(self._instance_crossview[idx].long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             results = label_to_color(instance_new.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             vis_img = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy(), results.cpu().numpy()], axis=1)
-            # Path(f"zyq/1104_crossview_train/viz").mkdir(exist_ok=True, parents=True)
-            # cv2.imwrite(f"zyq/1104_crossview_train/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
+            # Path(f"zyq/1108_b2_cv/viz").mkdir(exist_ok=True, parents=True)
+            # cv2.imwrite(f"zyq/1108_b2_cv/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
 
-            # Path(f"zyq/1104_crossview_train/compare_duo_crossview").mkdir(exist_ok=True, parents=True)
+            # Path(f"zyq/1108_b2_cv/compare_duo_crossview").mkdir(exist_ok=True, parents=True)
             # instance_duo = Image.open(str(metadata_current.instance_path).replace(self.hparams.instance_name, 'instances_mask_0.001'))
             # instance_duo = torch.tensor(np.asarray(instance_duo),dtype=torch.int32)
             # results_duo = label_to_color(instance_duo.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
-            # cv2.imwrite(f"zyq/1104_crossview_train/compare_duo_crossview/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", 
+            # cv2.imwrite(f"zyq/1108_b2_cv/compare_duo_crossview/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", 
             #             np.concatenate([results_duo.cpu().numpy(), results.cpu().numpy()], axis=1))
             
             
@@ -219,14 +219,14 @@ class MemoryDataset(Dataset):
             vis_img2 = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy()], axis=1)
             vis_img3 = np.concatenate([vis_img1, vis_img2], axis=0)
             
-            Path(f"zyq/1104_crossview_train/viz").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1104_crossview_train/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img3)
+            Path(f"zyq/1108_b2_cv/viz").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1108_b2_cv/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img3)
 
 
             return None
         
-        # Path(f"zyq/1104_crossview_train/results").mkdir(exist_ok=True, parents=True)
-        # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1104_crossview_train/results/%06d.png" % (self._img_indices[idx]))
+        # Path(f"zyq/1108_b2_cv/results").mkdir(exist_ok=True, parents=True)
+        # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1108_b2_cv/results/%06d.png" % (self._img_indices[idx]))
         
         
         # 找到非零值的索引

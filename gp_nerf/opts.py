@@ -134,6 +134,7 @@ def get_opts_base():
                                                                                               'instances_mask_0.001_filter', 
                                                                                               'instances_mask_0.001_depth', 
                                                                                             #   'instances_mask_0.001_crossview',
+                                                                                              "instances_mask_0.001_depth_project",
                                                                                               'instances_gt', 
                                                                                               'instances_gt_noremapping'], help='')
     parser.add_argument('--instance_loss_mode', type=str, default='slow_fast', choices=['contrastive', 'linear_assignment', 'slow_fast'], help='')

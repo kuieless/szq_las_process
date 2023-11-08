@@ -1471,7 +1471,11 @@ class Runner:
                     all_instance_features, all_thing_features = [], []
                     all_points_rgb, all_points_semantics = [], []
                     gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
-                    indices_to_eval = indices_to_eval[:1]
+                    if 'Yingrenshi' in self.hparams.dataset_path:
+                        indices_to_eval = indices_to_eval[:1]
+                    elif 'Longhua_block2' in self.hparams.dataset_path:
+                        indices_to_eval = indices_to_eval[4:5]
+
                 
                 for i in main_tqdm(indices_to_eval):
                     self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -2893,31 +2897,44 @@ class Runner:
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
             ###############3 . 俯视图，  render0.3视角下第一张图片
             if self.hparams.render_zyq and self.hparams.enable_instance:
-                image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
-                ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
-                ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
+                if 'Yingrenshi' in self.hparams.dataset_path:
+                    image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+                    ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
+                    ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
 
-                z_vals_inbound = 1
-                new_o = ray_o - ray_d * z_vals_inbound
-                metadata.c2w[:,3]= new_o
-                metadata.c2w[1:3,3]=self.sphere_center[1:3]
-                def rad(x):
-                    return math.radians(x)
-                angle=30
-                cosine = math.cos(rad(angle))
-                sine = math.sin(rad(angle))
-                rotation_matrix_x = torch.tensor([[1, 0, 0],
-                                [0, cosine, sine],
-                                [0, -sine, cosine]])
-                angle=-40
-                cosine = math.cos(rad(angle))
-                sine = math.sin(rad(angle))
-                rotation_matrix_y = torch.tensor([[cosine, 0, sine],
-                                [0, 1, 0],
-                                [-sine, 0, cosine]])
-                metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
-                metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
-                metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
+                    z_vals_inbound = 1
+                    new_o = ray_o - ray_d * z_vals_inbound
+                    metadata.c2w[:,3]= new_o
+                    metadata.c2w[1:3,3]=self.sphere_center[1:3]
+                    def rad(x):
+                        return math.radians(x)
+                    angle=30
+                    cosine = math.cos(rad(angle))
+                    sine = math.sin(rad(angle))
+                    rotation_matrix_x = torch.tensor([[1, 0, 0],
+                                    [0, cosine, sine],
+                                    [0, -sine, cosine]])
+                    angle=-40
+                    cosine = math.cos(rad(angle))
+                    sine = math.sin(rad(angle))
+                    rotation_matrix_y = torch.tensor([[cosine, 0, sine],
+                                    [0, 1, 0],
+                                    [-sine, 0, cosine]])
+                    metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
+                    metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
+                    metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
+                elif 'Longhua_block2' in self.hparams.dataset_path:
+
+                    image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+                    ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
+                    ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
+
+                    z_vals_inbound = 1
+                    new_o = ray_o - ray_d * z_vals_inbound
+                    metadata.c2w[:,3]= new_o
+                    metadata.c2w[1:3,3]=self.sphere_center[1:3]
+                    
+                    
             #########################################################
 
 
