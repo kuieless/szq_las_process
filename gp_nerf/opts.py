@@ -151,7 +151,9 @@ def get_opts_base():
                                                                                        'labels_1018_ml_fusion_0.3_covercar',
                                                                                        'labels_1028_ml_fusion_0.3'], help='')
     parser.add_argument('--crossview_process_path', type=str, default='zyq/test', help='')
+    parser.add_argument('--crossview_all', default=False, type=eval, choices=[True, False], help='')
 
+    
     
     
 

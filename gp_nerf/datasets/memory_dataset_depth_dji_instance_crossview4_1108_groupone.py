@@ -56,9 +56,7 @@ class MemoryDataset(Dataset):
             # metadata_items = metadata_items[207:208]
             # metadata_items = metadata_items[230:235]
             # metadata_items = metadata_items[388:389]
-            # metadata_items = metadata_items[::50]
-            # metadata_items = metadata_items[239:240]
-            metadata_items = metadata_items[::10]
+            metadata_items = metadata_items[::50]
 
         load_subset = 0
         for metadata_item in main_tqdm(metadata_items):
@@ -170,19 +168,13 @@ class MemoryDataset(Dataset):
             visualization = False
 
         
+        
 
         selected_tensors = {}
-        if self.hparams.crossview_all:
-            for key, tensor_list in self._sample_dicts[idx].items():
-                if tensor_list:
-                    modified_masks = [mask.masked_fill(mask != 0, int(key)) for mask in tensor_list]
-                    union_modified_masks = torch.stack(modified_masks).sum(0)
-                    selected_tensors[key] = union_modified_masks
-        else:
-            for key, tensor_list in self._sample_dicts[idx].items():
-                if tensor_list:
-                    random_index = np.random.randint(0, len(tensor_list))
-                    selected_tensors[key] = tensor_list[random_index]
+        for key, tensor_list in self._sample_dicts[idx].items():
+            if tensor_list:
+                random_index = np.random.randint(0, len(tensor_list))
+                selected_tensors[key] = tensor_list[random_index]
 
         tensor_list = list(selected_tensors.values())
         if tensor_list == []:

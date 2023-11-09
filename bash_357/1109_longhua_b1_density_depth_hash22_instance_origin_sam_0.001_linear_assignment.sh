@@ -1,11 +1,13 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=5
+##两个放一起跑
 
 
 
-dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
-config_file=configs/yingrenshi.yaml
+
+dataset_path=/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds
+config_file=configs/longhua.yaml
 
 
 batch_size=16384
@@ -21,9 +23,9 @@ sampling_mesh_guidance=True
 
 enable_semantic=True
 freeze_geo=True
-label_name=1018_ml_fusion_0.3
+label_name=1028_ml_fusion_0.3
 separate_semantic=True
-ckpt_path=logs_dji/1018_yingrenshi_density_depth_hash22_far0.3_car2/0/continue150k/0/models/160000.pt
+ckpt_path=logs_longhua_b1/1029_longhua_b1_density_depth_hash22_car2_semantic_1028_fusion/0/models/200000.pt
 
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
@@ -32,12 +34,12 @@ lr=0.01
 log2_hashmap_size=22
 desired_resolution=8192
 
-instance_loss_mode=slow_fast
-num_instance_classes=25
+instance_loss_mode=linear_assignment
+num_instance_classes=100
 
 enable_instance=True
-exp_name=logs_dji/1108_yingrenshi_density_depth_hash22_instance_origin_sam_0.001_depth_project
-instance_name=instances_mask_0.001_depth_project
+exp_name=logs_longhua_b1/1109_longhua_b1_density_depth_hash22_instance_origin_sam_0.001_linear_assignment
+instance_name=instances_mask_0.001
 
 
 
@@ -53,3 +55,7 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --use_subset=True      --lr=$lr    --balance_weight=True   --num_semantic_classes=5   \
     --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name   \
     --instance_loss_mode=$instance_loss_mode  --num_instance_classes=$num_instance_classes
+
+
+
+
