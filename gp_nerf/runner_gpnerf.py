@@ -135,7 +135,7 @@ class Runner:
         if hparams.only_train_building:
             self.thing_classes=[1]
         else:
-            self.thing_classes=[1,2,3,4]
+            self.thing_classes=[0,1,2,3,4]
         # use when instance_loss_mode == 'linear_assignment'
         self.loss_instances_cluster = torch.nn.CrossEntropyLoss(reduction='none')
 
@@ -1528,7 +1528,7 @@ class Runner:
                                         self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
                     
                     if self.hparams.enable_instance:
-                        instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
+                        instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
                                         results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping, img_list, 
                                         experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
                                         all_points_rgb, all_points_semantics, gt_points_semantic)
@@ -1868,6 +1868,7 @@ class Runner:
 
                             if self.hparams.enable_instance:
                                 all_instance_features, all_thing_features = [], []
+                                all_thing_features_building = [], []
                                 all_points_rgb, all_points_semantics = [], []
                                 gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
                             if self.hparams.debug:
@@ -1926,13 +1927,16 @@ class Runner:
                                 
                                 
                                 if self.hparams.enable_instance:
-                                    instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
+                                    instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
                                         results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
                                         experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
                                         all_points_rgb, all_points_semantics, gt_points_semantic)
                                     
                                     all_instance_features.append(instances)
                                     all_thing_features.append(p_instances)
+                                    if not self.hparams.only_train_building:
+                                        all_thing_features_building.append(p_instances_building)
+
                                     gt_points_rgb.append(viz_rgbs.view(-1,3))
 
 
@@ -1996,6 +2000,8 @@ class Runner:
                                 # instance clustering
                                 all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
                                 all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                                if not self.hparams.only_train_building:
+                                    all_thing_features_building = torch.cat(all_thing_features_building, dim=0).cpu().numpy()
                                 output_dir = str(experiment_path_current / 'panoptic')
                                 if not os.path.exists(output_dir):
                                     Path(output_dir).mkdir()
@@ -2029,6 +2035,10 @@ class Runner:
                                             pickle.dump(all_centroids, file)
                                         print(f"save all_centroids_cache to : {all_centroids_path}")
                                     
+                                    if not self.hparams.only_train_building:
+                                        all_points_instances_building, _ = cluster(all_thing_features_building, bandwidth=0.2, device=self.device, 
+                                                                    num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
+                                        
                             if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
                                 Path(str(experiment_path_current / 'pred_semantics')).mkdir()
                             if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
@@ -2055,6 +2065,8 @@ class Runner:
                                 p_semantics = all_points_semantics[save_i]
                                 # p_semantics = gt_points_semantic[save_i]
                                 p_instances = all_points_instances[save_i]
+                                if not self.hparams.only_train_building:
+                                    p_instances_building = all_points_instances_building[save_i]
                                 gt_rgb = gt_points_rgb[save_i]
                                 gt_semantics = gt_points_semantic[save_i]
                                 gt_instances = gt_points_instance[save_i]
@@ -2063,14 +2075,19 @@ class Runner:
                                 output_semantics_with_invalid = p_semantics.detach()
                                 Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
                                         str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
-                                
-                                Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-                                        str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                if not self.hparams.only_train_building:
+                                    Image.fromarray(p_instances_building.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                                            str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                else:
+                                    Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                                            str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                    
                                 
                                 stack = visualize_panoptic_outputs(
                                     p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
                                     self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
                                 )
+
                                 grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
                                 grid = (grid * 255).cpu().numpy().astype(np.uint8)
                                 
@@ -2342,7 +2359,7 @@ class Runner:
                         
                         
                         if self.hparams.enable_instance:
-                            instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic = get_instance_pred(
+                            instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
                                 results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
                                 experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
                                 all_points_rgb, all_points_semantics, gt_points_semantic)

@@ -308,20 +308,22 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
             slow_features = instances[...,hparams.num_instance_classes:] 
             # all_slow_features.append(slow_features)
             instances = instances[...,0:hparams.num_instance_classes] # keep fast features only
+        p_instances_building = None
         if not hparams.render_zyq:
             # p_instances = create_instances_from_semantics(instances, gt_label, thing_classes,device=device)
             #1105晚上改的，改为用pred semantic进行instance的相关计算
             p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
-
+            if not hparams.only_train_building:
+                p_instances_building = create_instances_from_semantics(instances, sem_label, [1],device=device)
         else:
             p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
         
         # pred_instances = cluster(padded_instances, device)
         all_points_rgb.append(viz_result_rgbs.view(-1,3))
         all_points_semantics.append(sem_label.view(-1))
-        return instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic
+        return instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building
     else:
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
 def get_sdf_normal_map(metadata_item, results, typ, viz_rgbs):
     #  NSR  SDF ------------------------------------  save the normal_map

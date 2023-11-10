@@ -224,6 +224,12 @@ def get_rgb_index_mask_depth_dji_instance_crossview(metadata: ImageMetadata) -> 
         instance_crossview = instance_crossview.view(-1)
         # if keep_mask is not None :
             # instance_crossview = instance_crossview[keep_mask == True]
+    
+    instance_64 = metadata.load_instance_64()
+    if instance_64 is not None:
+        instance_64 = instance_64.view(-1)
+        # if keep_mask is not None :
+            # instance_64 = instance_64[keep_mask == True]
 
     depth_dji = metadata.load_depth_dji()
     if depth_dji is not None:
@@ -237,7 +243,7 @@ def get_rgb_index_mask_depth_dji_instance_crossview(metadata: ImageMetadata) -> 
     assert metadata.image_index <= torch.iinfo(torch.int32).max
     # return rgbs, metadata.image_index * torch.ones(rgbs.shape[0], dtype=torch.int32), keep_mask, instance, depth_dji
     # return rgbs, metadata.image_index, keep_mask, instance, depth_dji, instance_crossview
-    return rgbs, metadata.image_index, keep_mask, labels, depth_dji, instance, instance_crossview
+    return rgbs, metadata.image_index, keep_mask, labels, depth_dji, instance, instance_crossview, instance_64
 
 
 

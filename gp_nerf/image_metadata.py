@@ -142,6 +142,16 @@ class ImageMetadata:
                 labels = labels.resize((self.W, self.H), Image.NEAREST)
 
             return torch.tensor(np.asarray(labels),dtype=torch.int32)
+        
+    def load_instance_64(self) -> torch.Tensor:
+        crossview_path = str(self.instance_path).replace(self.hparams.instance_name, 'instances_mask_64')
+
+        if self.instance_path.suffix == '.npy':
+            labels = np.load(crossview_path)
+            labels = labels.astype(np.int32)
+            labels = torch.tensor(labels,dtype=torch.int32)
+            labels[labels != 0] += 200000
+            return labels
     
     
     def load_instance_gt(self) -> torch.Tensor:

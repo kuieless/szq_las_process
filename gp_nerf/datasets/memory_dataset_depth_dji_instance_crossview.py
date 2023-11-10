@@ -23,11 +23,17 @@ class MemoryDataset(Dataset):
     def __init__(self, metadata_items: List[ImageMetadata], near: float, far: float, ray_altitude_range: List[float],
                  center_pixels: bool, device: torch.device, hparams=None):
         super(MemoryDataset, self).__init__()
+        if hparams.debug:
+            self.visualization=True
+        else:
+            self.visualization=False
+
         self.hparams = hparams
         rgbs = []
         rays = []
         indices = []
         instances = []
+        instances_64 = []
         instances_crossview = []
         labels = []
         sample_dicts = []
@@ -86,7 +92,7 @@ class MemoryDataset(Dataset):
             if image_data is None:
                 continue
             #改成读取instance label
-            image_rgbs, image_indices, image_keep_mask, label, depth_dji, instance, instance_crossview = image_data
+            image_rgbs, image_indices, image_keep_mask, label, depth_dji, instance, instance_crossview, instance_64 = image_data
             
             image_rays = get_rays(self._directions, metadata_item.c2w.to(device), near, far, ray_altitude_range).view(-1, 8).cpu()
             
@@ -100,13 +106,18 @@ class MemoryDataset(Dataset):
             label = remapping(label)
             building_mask = label==1
             instance[~building_mask] = 0
+            if not hparams.only_train_building:
+                instance_64[building_mask] =0
+                instances_64.append(torch.tensor(instance_64, dtype=torch.int))
+
 
             rgbs.append(image_rgbs)
             rays.append(image_rays)
             indices.append(image_indices)
-            instances.append(torch.tensor(instance, dtype=torch.int))
             labels.append(label)
-            instances_crossview.append(torch.tensor(instance_crossview, dtype=torch.int))
+            if self.visualization:
+                instances.append(torch.tensor(instance, dtype=torch.int))
+                instances_crossview.append(torch.tensor(instance_crossview, dtype=torch.int))
             depth_djis.append(depth_dji / depth_scale)
 
             ### 下面提取croview的dict
@@ -151,23 +162,23 @@ class MemoryDataset(Dataset):
         self._rgbs = rgbs
         self._rays = rays
         self._img_indices = indices  #  这个代码只存了一个
-        self._instances = instances
         self._labels = labels
-        self._instance_crossview = instances_crossview
         self._depth_djis = depth_djis 
         self._sample_dicts = sample_dicts
+
+        if not hparams.only_train_building:
+            self._instances_64 = instances_64
+        if self.visualization:
+            self._instances = instances
+            self._instance_crossview = instances_crossview
+
 
     def __len__(self) -> int:
         return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
-        if self.hparams.debug:
-            visualization = True
-            metadata_current = self.metadata_items[self._img_indices[idx]]
-            # if int(Path(metadata_current.image_path).stem) != 207:
-                # return None
-        else:
-            visualization = False
+        visualization = self.visualization
+        metadata_current = self.metadata_items[self._img_indices[idx]]
 
         
 
@@ -191,14 +202,15 @@ class MemoryDataset(Dataset):
         instance_new = torch.sum(stacked_tensors, dim=0)
 
 
-
+        if not self.hparams.only_train_building:
+            instance_new = instance_new + self._instances_64[idx]
 
 
         if visualization:
             def label_to_color(label_tensor):
                 unique_labels = torch.unique(label_tensor)
                 color_image = torch.zeros(label_tensor.shape[0], label_tensor.shape[1],3).to(torch.uint8)
-
+            
                 for i in unique_labels:
                     if i ==0:
                         continue
@@ -209,14 +221,14 @@ class MemoryDataset(Dataset):
             color_crossview = label_to_color(self._instance_crossview[idx].long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             results = label_to_color(instance_new.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
             vis_img = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy(), results.cpu().numpy()], axis=1)
-            # Path(f"zyq/1108_b2_cv/viz").mkdir(exist_ok=True, parents=True)
-            # cv2.imwrite(f"zyq/1108_b2_cv/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
+            # Path(f"zyq/1110_campus_64/viz").mkdir(exist_ok=True, parents=True)
+            # cv2.imwrite(f"zyq/1110_campus_64/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
 
-            # Path(f"zyq/1108_b2_cv/compare_duo_crossview").mkdir(exist_ok=True, parents=True)
+            # Path(f"zyq/1110_campus_64/compare_duo_crossview").mkdir(exist_ok=True, parents=True)
             # instance_duo = Image.open(str(metadata_current.instance_path).replace(self.hparams.instance_name, 'instances_mask_0.001'))
             # instance_duo = torch.tensor(np.asarray(instance_duo),dtype=torch.int32)
             # results_duo = label_to_color(instance_duo.long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
-            # cv2.imwrite(f"zyq/1108_b2_cv/compare_duo_crossview/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", 
+            # cv2.imwrite(f"zyq/1110_campus_64/compare_duo_crossview/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", 
             #             np.concatenate([results_duo.cpu().numpy(), results.cpu().numpy()], axis=1))
             
             
@@ -232,14 +244,14 @@ class MemoryDataset(Dataset):
             vis_img2 = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy()], axis=1)
             vis_img3 = np.concatenate([vis_img1, vis_img2], axis=0)
             
-            Path(f"zyq/1108_b2_cv/viz").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1108_b2_cv/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img3)
+            Path(f"zyq/1110_campus_64/viz").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1110_campus_64/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img3)
 
 
             return None
         
-        # Path(f"zyq/1108_b2_cv/results").mkdir(exist_ok=True, parents=True)
-        # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1108_b2_cv/results/%06d.png" % (self._img_indices[idx]))
+        # Path(f"zyq/1110_campus_64/results").mkdir(exist_ok=True, parents=True)
+        # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1110_campus_64/results/%06d.png" % (self._img_indices[idx]))
         
         
         # 找到非零值的索引

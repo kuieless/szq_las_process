@@ -130,8 +130,7 @@ def get_opts_base():
     parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')
     parser.add_argument('--freeze_semantic', default=False, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf')
     parser.add_argument('--instance_name', type=str, default='instances_mask_0.001', choices=['instances_mask_0.001', 
-                                                                                              'instances_mask_0.001_iou', 
-                                                                                              'instances_mask_0.001_filter', 
+                                                                                              'instances_mask_64',
                                                                                               'instances_mask_0.001_depth', 
                                                                                             #   'instances_mask_0.001_crossview',
                                                                                               "instances_mask_0.001_depth_project",
