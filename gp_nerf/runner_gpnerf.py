@@ -132,7 +132,10 @@ class Runner:
         faulthandler.register(signal.SIGUSR1)
         print(f"ignore_index: {hparams.ignore_index}")
         self.temperature = 100
-        self.thing_classes=[1]
+        if hparams.only_train_building:
+            self.thing_classes=[1]
+        else:
+            self.thing_classes=[1,2,3,4]
         # use when instance_loss_mode == 'linear_assignment'
         self.loss_instances_cluster = torch.nn.CrossEntropyLoss(reduction='none')
 
@@ -1475,6 +1478,12 @@ class Runner:
                         indices_to_eval = indices_to_eval[:1]
                     elif 'Longhua_block2' in self.hparams.dataset_path:
                         indices_to_eval = indices_to_eval[4:5]
+                    elif 'Longhua_block1' in self.hparams.dataset_path:
+                        indices_to_eval = indices_to_eval[5:6]
+                    elif 'Campus_new' in self.hparams.dataset_path:
+                        # indices_to_eval = indices_to_eval[3:4]
+                        indices_to_eval = indices_to_eval[7:8]
+                        # indices_to_eval = indices_to_eval[7:8]
 
                 
                 for i in main_tqdm(indices_to_eval):
@@ -2923,7 +2932,7 @@ class Runner:
                     metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
                     metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
                     metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
-                elif 'Longhua_block2' in self.hparams.dataset_path:
+                elif 'Longhua_block' in self.hparams.dataset_path:
 
                     image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
                     ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
@@ -2933,6 +2942,34 @@ class Runner:
                     new_o = ray_o - ray_d * z_vals_inbound
                     metadata.c2w[:,3]= new_o
                     metadata.c2w[1:3,3]=self.sphere_center[1:3]
+                elif 'Campus_new' in self.hparams.dataset_path:
+
+                    image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
+                    ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
+                    ray_o = image_rays[int(metadata.H/2), int(metadata.W/2), :3]
+
+                    z_vals_inbound = 0.6
+                    new_o = ray_o - ray_d * z_vals_inbound
+                    metadata.c2w[:,3]= new_o
+                    # metadata.c2w[1:3,3]=self.sphere_center[1:3]
+                    def rad(x):
+                        return math.radians(x)
+                    angle=0 #-10
+                    cosine = math.cos(rad(angle))
+                    sine = math.sin(rad(angle))
+                    rotation_matrix_x = torch.tensor([[1, 0, 0],
+                                    [0, cosine, sine],
+                                    [0, -sine, cosine]])
+                    angle=0
+                    cosine = math.cos(rad(angle))
+                    sine = math.sin(rad(angle))
+                    rotation_matrix_y = torch.tensor([[cosine, 0, sine],
+                                    [0, 1, 0],
+                                    [-sine, 0, cosine]])
+                    metadata.c2w[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ metadata.c2w[:3,:3])
+                    # metadata.c2w[1,3]=metadata.c2w[1,3]-0.4
+                    # metadata.c2w[2,3]=metadata.c2w[2,3]+0.05
+
                     
                     
             #########################################################

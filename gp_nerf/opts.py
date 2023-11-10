@@ -152,6 +152,7 @@ def get_opts_base():
                                                                                        'labels_1028_ml_fusion_0.3'], help='')
     parser.add_argument('--crossview_process_path', type=str, default='zyq/test', help='')
     parser.add_argument('--crossview_all', default=False, type=eval, choices=[True, False], help='')
+    parser.add_argument('--only_train_building', default=True, type=eval, choices=[True, False], help='')
 
     
     

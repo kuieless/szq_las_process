@@ -111,18 +111,17 @@ def _get_train_opts() -> Namespace:
     parser = get_opts_base()
 
     # parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
-
     # parser.add_argument('--image_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/pred_rgb',required=False, help='')
     # parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/sam_features',required=False, help='')
     # parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/logs_dji/1003_yingrenshi_density_depth_hash22_semantic/9/eval_200000_near/sam_viz',required=False, help='')
-    
-
     # parser.add_argument('--image_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/rgbs',required=False, help='')
     # parser.add_argument('--sam_feat_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/sam_features',required=False, help='')
+
     parser.add_argument('--output_path', type=str, default='zyq/test',required=False, help='')
     parser.add_argument('--threshold', type=float, default=0.001,required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds',required=False, help='')
+    parser.add_argument('--points_per_side', type=int, default=32,required=False, help='')
     
 
     return parser.parse_args()
@@ -144,7 +143,7 @@ def hello(hparams: Namespace) -> None:
     train_items = runner.train_items
 
 
-    points_per_side=32
+    points_per_side=hparams.points_per_side
     if points_per_side ==32:
         output_path = hparams.output_path + f'_{hparams.threshold}'
     else:

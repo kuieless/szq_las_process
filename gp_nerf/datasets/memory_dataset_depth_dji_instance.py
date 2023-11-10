@@ -83,9 +83,10 @@ class MemoryDataset(Dataset):
                 # depth_scale = depth_scale[image_keep_mask == True]
 
             # 在instance 训练时只拿 semantic 中building的区域
-            label = remapping(label)
-            building_mask = label==1
-            instance[~building_mask] = 0
+            if hparams.only_train_building:
+                label = remapping(label)
+                building_mask = label==1
+                instance[~building_mask] = 0
 
             rgbs.append(image_rgbs)
             rays.append(image_rays)
