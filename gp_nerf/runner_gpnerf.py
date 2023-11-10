@@ -68,6 +68,8 @@ from scipy.spatial import Delaunay
 from scipy.spatial import cKDTree
 import pickle
 
+from tools.contrastive_lift.utils import create_instances_from_semantics
+
 
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
 
@@ -1848,7 +1850,11 @@ class Runner:
                         elif val_type == 'train':
                             indices_to_eval = np.arange(370,490)  
                             
-                        
+                        if self.hparams.enable_instance:
+                            all_instance_features, all_thing_features = [], []
+                            all_thing_features_building = []
+                            all_points_rgb, all_points_semantics = [], []
+                            gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
                         experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
                         if self.hparams.cached_centroids_path is None and self.hparams.enable_instance:
                             Path(str(experiment_path_current)).mkdir(exist_ok=True)
@@ -1866,11 +1872,7 @@ class Runner:
                             samantic_each_value['F1'] = []
                             # samantic_each_value['OA'] = []
 
-                            if self.hparams.enable_instance:
-                                all_instance_features, all_thing_features = [], []
-                                all_thing_features_building = [], []
-                                all_points_rgb, all_points_semantics = [], []
-                                gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
+                            
                             if self.hparams.debug:
                                 indices_to_eval = indices_to_eval[:2]
                                 # indices_to_eval = indices_to_eval[:2]
@@ -1988,6 +1990,43 @@ class Runner:
                                 del results
                         
                         if self.hparams.enable_instance:
+                            
+                            # 这里先加一些训练图像
+                            if self.hparams.add_train_image and self.hparams.instance_loss_mode != 'linear_assignment':
+                                indices_to_train = np.arange(len(self.train_items))
+                                indices_to_train = indices_to_train[::40]
+
+                                # indices_to_train = indices_to_train[:1]
+
+                                for k in main_tqdm(indices_to_train):
+                                    metadata_item = self.train_items[k]
+                                    results, _ = self.render_image(metadata_item, train_index)
+                                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+
+                                if f'instance_map_{typ}' in results:
+                                    instances = results[f'instance_map_{typ}']
+                                    device = instances.device
+
+                                    # 如果pred semantic存在，则使用
+                                    # 若不存在， 则创建一个全是things的semantic
+                                    if f'sem_map_{typ}' in results:
+                                        sem_logits = results[f'sem_map_{typ}']
+                                        sem_label = self.logits_2_label(sem_logits)
+                                        sem_label = remapping(sem_label)
+                                    else:
+                                        sem_label = torch.ones_like(instances)
+                                    
+                                    if self.hparams.instance_loss_mode == 'slow_fast':
+                                        slow_features = instances[...,self.hparams.num_instance_classes:] 
+                                        # all_slow_features.append(slow_features)
+                                        instances = instances[...,0:self.hparams.num_instance_classes] # keep fast features only
+                                    if not self.hparams.render_zyq:
+                                        p_instances = create_instances_from_semantics(instances, sem_label, self.thing_classes,device=device)
+                                    all_thing_features.append(p_instances)
+
+
+
+
 
                             # 'linear_assignment' 是直接得到一个伪标签
                             if self.hparams.instance_loss_mode == 'linear_assignment':
@@ -2020,12 +2059,16 @@ class Runner:
                                 elif self.hparams.cached_centroids_type == 'test':
                                     if all_centroids is not None:
                                         
-                                        all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                        all_points_instances, _ = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
                                                                     num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
                     
                                     else:
-                                        all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                                    num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
+                                        if self.hparams.add_train_image:
+                                            all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                                        num_images=len(indices_to_eval)+len(indices_to_train), use_dbscan=self.hparams.use_dbscan)
+                                        else:
+                                            all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                                        num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
                                         output_dir = str(experiment_path_current)
                                         if not os.path.exists(output_dir):
                                             Path(output_dir).mkdir(parents=True)
@@ -2100,8 +2143,29 @@ class Runner:
                             path_pred_sem = str(experiment_path_current / 'pred_semantics')
                             path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
                             if Path(path_target_inst).exists():
-                                pq, sq, rq, metrics_each = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                                pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
                                              path_target_sem, path_target_inst, image_size=[self.W, self.H])
+                                with (experiment_path_current / 'instance.txt').open('w') as f:
+                                    f.write(f'\n\npred_areas\n')  
+
+                                    for key, value in pred_areas.items():
+                                        f.write(f"    {key}: {value}\n")
+                                    f.write(f'\n\ntarget_areas\n')  
+                                    for key, value in target_areas.items():
+                                        f.write(f"    {key}: {value}\n")
+                                    
+                                    f.write(f'\n\nTP\n')  
+                                    for item in zyq_TP:
+                                        f.write(    f"{item}\n")
+                                    
+                                    f.write(f'\n\nFP\n')  
+                                    for item in zyq_FP:
+                                        f.write(    f"{item}\n")
+                                    
+                                    f.write(f'\n\nFN\n')  
+                                    for item in zyq_FN:
+                                        f.write(f"    {item}\n")
+
                                 val_metrics['pq'] = pq
                                 val_metrics['sq'] = sq
                                 val_metrics['rq'] = rq
@@ -2506,7 +2570,7 @@ class Runner:
                     path_pred_sem = str(experiment_path_current / 'pred_semantics')
                     path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
                     if Path(path_target_inst).exists():
-                        pq, sq, rq, metrics_each = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                        pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
                                         path_target_sem, path_target_inst, image_size=[self.W, self.H])
                         val_metrics['pq'] = pq
                         val_metrics['sq'] = sq

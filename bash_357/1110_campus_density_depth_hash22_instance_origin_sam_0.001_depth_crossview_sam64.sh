@@ -38,7 +38,7 @@ instance_loss_mode=slow_fast
 num_instance_classes=25
 
 enable_instance=True
-exp_name=logs_campus/1110_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview_sam64
+exp_name=logs_campus/1110_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview
 instance_name=instances_mask_0.001_depth
 only_train_building=False
 
@@ -55,7 +55,7 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --separate_semantic=$separate_semantic   --label_name=$label_name  --num_layers_semantic_hidden=3    --semantic_layer_dim=128 \
     --use_subset=True      --lr=$lr    --balance_weight=True   --num_semantic_classes=5   \
     --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name   \
-    --instance_loss_mode=$instance_loss_mode  --num_instance_classes=$num_instance_classes \
+    --instance_loss_mode=$instance_loss_mode  --num_instance_classes=$num_instance_classes\
     --only_train_building=$only_train_building
 
 

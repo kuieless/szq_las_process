@@ -41,13 +41,17 @@ torch.cuda.set_device(7)
 
 
 def hello() -> None:
+    H, W = 912, 1368
+    eval_num = 11
+    train_num = 24
+
     device='cuda'
     bandwidth=0.2
     num_points=500000
     use_dbscan=True
     use_silverman=False
     cluster_size=2000
-    output=f'1025_panoptic'
+    output=f'1110_debug_campus_cluster'
     Path(os.path.join('zyq',output)).mkdir(exist_ok=True)
     Path(os.path.join('zyq',output,'pred_semantics')).mkdir(exist_ok=True)
     Path(os.path.join('zyq',output,'pred_surrogateid')).mkdir(exist_ok=True)
@@ -55,34 +59,33 @@ def hello() -> None:
     Path(os.path.join('zyq',output,'gt_surrogateid')).mkdir(exist_ok=True)
 
 
-    output_dir = 'logs_campus/1107_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview/5/eval_100000/panoptic'
+    output_dir = 'logs_campus/1107_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview/4/eval_100000/panoptic'
     all_thing_features = np.load(os.path.join(output_dir, "all_thing_features.npy"))
     all_points_semantics = np.load(os.path.join(output_dir, "all_points_semantics.npy"))
     all_points_rgb = np.load(os.path.join(output_dir, "all_points_rgb.npy"))
-    all_points_semantics=torch.from_numpy(all_points_semantics).to(device).view(15, 912*1368)
-    all_points_rgb=torch.from_numpy(all_points_rgb).to(device).view(15, 912*1368, -1)
+    all_points_semantics=torch.from_numpy(all_points_semantics).to(device).view(eval_num, H*W)
+    all_points_rgb=torch.from_numpy(all_points_rgb).to(device).view(eval_num, H*W, -1)
     gt_points_rgb = np.load(os.path.join(output_dir, "gt_points_rgb.npy"))
     gt_points_semantic = np.load(os.path.join(output_dir, "gt_points_semantic.npy"))
     gt_points_instance = np.load(os.path.join(output_dir, "gt_points_instance.npy"))
-    gt_points_semantic=torch.from_numpy(gt_points_semantic).to(device).view(15, 912*1368)
-    gt_points_rgb=torch.from_numpy(gt_points_rgb).to(device).view(15, 912*1368, -1)
-    gt_points_instance=torch.from_numpy(gt_points_instance).to(device).view(15, 912*1368)
+    gt_points_semantic=torch.from_numpy(gt_points_semantic).to(device).view(eval_num, H*W)
+    gt_points_rgb=torch.from_numpy(gt_points_rgb).to(device).view(eval_num, H*W, -1)
+    gt_points_instance=torch.from_numpy(gt_points_instance).to(device).view(eval_num, H*W)
 
-    H, W = 912, 1368
     thing_classes = [1]
     
     all_centroids=None
     
-    with open('logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/test_centroids.npy', 'rb') as f:
-        all_centroids = pickle.load(f)
+    # with open('logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/test_centroids.npy', 'rb') as f:
+    #     all_centroids = pickle.load(f)
     
     
-    all_points_instances, centroids = cluster(all_thing_features, bandwidth=bandwidth, device=device, num_images=15, 
+    all_points_instances, centroids = cluster(all_thing_features, bandwidth=bandwidth, device=device, num_images=eval_num+train_num, 
                                    num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan,cluster_size=cluster_size, all_centroids=all_centroids)
     print(f"centroids shape: {centroids.shape}")
     save_i=0
     # for p_rgb, p_semantics, p_instances in zip(all_points_rgb, all_points_semantics, all_points_instances)
-    for save_i in range(15):
+    for save_i in range(eval_num):
         p_rgb = all_points_rgb[save_i]
         # p_semantics = all_points_semantics[save_i]
         p_semantics = gt_points_semantic[save_i]

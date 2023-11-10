@@ -25,7 +25,7 @@ enable_semantic=True
 freeze_geo=True
 label_name=1018_ml_fusion_0.3
 separate_semantic=True
-ckpt_path=logs_dji/1018_yingrenshi_density_depth_hash22_far0.3_car2/0/continue150k/0/models/160000.pt
+ckpt_path=logs_dji/1110_yingrenshi_density_depth_hash22_instance_origin_sam64/0/models/20000.pt
 
 # depth_dji_loss=True
 # wgt_depth_mse_loss=1
@@ -56,6 +56,6 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --use_subset=True      --lr=$lr    --balance_weight=True   --num_semantic_classes=5   \
     --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name   \
     --instance_loss_mode=$instance_loss_mode  --num_instance_classes=$num_instance_classes \
-    --only_train_building=$only_train_building
+    --only_train_building=$only_train_building  --continue_train=True
 
 

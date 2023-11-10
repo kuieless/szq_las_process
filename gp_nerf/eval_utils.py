@@ -41,8 +41,8 @@ def calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, path_targe
         target_ = torch.cat([img_target_sem, img_target_inst], dim=1).reshape(-1, 2)
         pred.append(pred_)
         target.append(target_)
-    pq, sq, rq, metrics_each,  = panoptic_quality(torch.cat(pred, dim=0).cuda(), torch.cat(target, dim=0).cuda(), things, stuff, allow_unknown_preds_category=True)
-    return pq.item(), sq.item(), rq.item(), metrics_each
+    pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN  = panoptic_quality(torch.cat(pred, dim=0).cuda(), torch.cat(target, dim=0).cuda(), things, stuff, allow_unknown_preds_category=True)
+    return pq.item(), sq.item(), rq.item(), metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN
 
 
 
@@ -314,7 +314,7 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
             #1105晚上改的，改为用pred semantic进行instance的相关计算
             p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
             if not hparams.only_train_building:
-                p_instances_building = create_instances_from_semantics(instances, sem_label, [1],device=device)
+                p_instances_building = create_instances_from_semantics(instances.clone().detach(), sem_label.clone().detach(), [1], device=device)
         else:
             p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
         
