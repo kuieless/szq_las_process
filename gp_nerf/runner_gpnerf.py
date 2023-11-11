@@ -1994,7 +1994,7 @@ class Runner:
                             # 这里先加一些训练图像
                             if self.hparams.add_train_image and self.hparams.instance_loss_mode != 'linear_assignment':
                                 indices_to_train = np.arange(len(self.train_items))
-                                indices_to_train = indices_to_train[::40]
+                                indices_to_train = indices_to_train[::20]
 
                                 # indices_to_train = indices_to_train[:1]
 
@@ -2003,26 +2003,26 @@ class Runner:
                                     results, _ = self.render_image(metadata_item, train_index)
                                     typ = 'fine' if 'rgb_fine' in results else 'coarse'
 
-                                if f'instance_map_{typ}' in results:
-                                    instances = results[f'instance_map_{typ}']
-                                    device = instances.device
+                                    if f'instance_map_{typ}' in results:
+                                        instances = results[f'instance_map_{typ}']
+                                        device = instances.device
 
-                                    # 如果pred semantic存在，则使用
-                                    # 若不存在， 则创建一个全是things的semantic
-                                    if f'sem_map_{typ}' in results:
-                                        sem_logits = results[f'sem_map_{typ}']
-                                        sem_label = self.logits_2_label(sem_logits)
-                                        sem_label = remapping(sem_label)
-                                    else:
-                                        sem_label = torch.ones_like(instances)
-                                    
-                                    if self.hparams.instance_loss_mode == 'slow_fast':
-                                        slow_features = instances[...,self.hparams.num_instance_classes:] 
-                                        # all_slow_features.append(slow_features)
-                                        instances = instances[...,0:self.hparams.num_instance_classes] # keep fast features only
-                                    if not self.hparams.render_zyq:
-                                        p_instances = create_instances_from_semantics(instances, sem_label, self.thing_classes,device=device)
-                                    all_thing_features.append(p_instances)
+                                        # 如果pred semantic存在，则使用
+                                        # 若不存在， 则创建一个全是things的semantic
+                                        if f'sem_map_{typ}' in results:
+                                            sem_logits = results[f'sem_map_{typ}']
+                                            sem_label = self.logits_2_label(sem_logits)
+                                            sem_label = remapping(sem_label)
+                                        else:
+                                            sem_label = torch.ones_like(instances)
+                                        
+                                        if self.hparams.instance_loss_mode == 'slow_fast':
+                                            slow_features = instances[...,self.hparams.num_instance_classes:] 
+                                            # all_slow_features.append(slow_features)
+                                            instances = instances[...,0:self.hparams.num_instance_classes] # keep fast features only
+                                        if not self.hparams.render_zyq:
+                                            p_instances = create_instances_from_semantics(instances, sem_label, self.thing_classes,device=device)
+                                        all_thing_features.append(p_instances)
 
 
 

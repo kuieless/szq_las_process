@@ -34,7 +34,7 @@ from torchvision.utils import make_grid
 from gp_nerf.eval_utils import calculate_panoptic_quality_folders
 
 
-torch.cuda.set_device(7)
+# torch.cuda.set_device(7)
 
 
 
@@ -43,15 +43,15 @@ torch.cuda.set_device(7)
 def hello() -> None:
     H, W = 912, 1368
     eval_num = 11
-    train_num = 24
+    train_num = 0
 
     device='cuda'
     bandwidth=0.2
-    num_points=500000
+    num_points=200000
     use_dbscan=True
     use_silverman=False
-    cluster_size=2000
-    output=f'1110_debug_campus_cluster'
+    cluster_size=100
+    output=f'1111_debug_campus_cluster'
     Path(os.path.join('zyq',output)).mkdir(exist_ok=True)
     Path(os.path.join('zyq',output,'pred_semantics')).mkdir(exist_ok=True)
     Path(os.path.join('zyq',output,'pred_surrogateid')).mkdir(exist_ok=True)
@@ -59,7 +59,8 @@ def hello() -> None:
     Path(os.path.join('zyq',output,'gt_surrogateid')).mkdir(exist_ok=True)
 
 
-    output_dir = 'logs_campus/1107_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview/4/eval_100000/panoptic'
+    # output_dir = 'logs_campus/1110_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview_sam64/1/eval_100000/panoptic'
+    output_dir = '/data/yuqi/code/GP-NeRF-semantic/logs_campus/1110_campus_density_depth_hash22_instance_origin_sam64/0/eval_100000/panoptic'
     all_thing_features = np.load(os.path.join(output_dir, "all_thing_features.npy"))
     all_points_semantics = np.load(os.path.join(output_dir, "all_points_semantics.npy"))
     all_points_rgb = np.load(os.path.join(output_dir, "all_points_rgb.npy"))
@@ -72,7 +73,7 @@ def hello() -> None:
     gt_points_rgb=torch.from_numpy(gt_points_rgb).to(device).view(eval_num, H*W, -1)
     gt_points_instance=torch.from_numpy(gt_points_instance).to(device).view(eval_num, H*W)
 
-    thing_classes = [1]
+    thing_classes = [0,1,2,3,4]
     
     all_centroids=None
     
@@ -127,7 +128,7 @@ def hello() -> None:
     path_pred_sem = os.path.join('zyq',output,'pred_semantics')
     path_pred_inst = os.path.join('zyq',output,'pred_surrogateid')
     if Path(path_target_inst).exists():
-        pq, sq, rq, metrics_each = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+        pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN  = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
                         path_target_sem, path_target_inst, image_size=[W,H])
         # val_metrics['pq'] = pq
         # val_metrics['sq'] = sq

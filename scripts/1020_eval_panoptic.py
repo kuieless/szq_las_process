@@ -34,7 +34,7 @@ from torchvision.utils import make_grid
 from gp_nerf.eval_utils import calculate_panoptic_quality_folders
 
 
-torch.cuda.set_device(6)
+# torch.cuda.set_device(6)
 
 
 
@@ -46,8 +46,8 @@ def hello() -> None:
     # dataset_path='/data/yuqi/Datasets/DJI/Yingrenshi_20230926'
 
     H,W = 1024,1536
-    dataset_path='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds'
-    # dataset_path='/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds'
+    # dataset_path='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds'
+    dataset_path='/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds'
 
 
 
@@ -56,7 +56,7 @@ def hello() -> None:
     # path_target_inst = os.path.join(dataset_path, 'val', 'instances_gt_noremapping')
     path_target_inst = os.path.join(dataset_path, 'val', 'instances_gt')
 
-    experiment_path_current = 'logs_longhua_b1/1108_longhua_b1_density_depth_hash22_instance_origin_sam_0.001_depth_crossview_all/0/eval_100000'
+    experiment_path_current = 'logs_longhua_b2/1107_longhua_b2_density_depth_hash22_instance_origin_sam_0.001_depth_crossview/0/eval_100000'
     path_pred_sem = os.path.join(experiment_path_current, 'pred_semantics')
     path_pred_inst = os.path.join(experiment_path_current, 'pred_surrogateid')
 

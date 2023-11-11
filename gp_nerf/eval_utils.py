@@ -198,6 +198,9 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
             # gt_label[mask_gt] = 0
             sem_label = remapping(sem_label)
 
+            invalid_mask = gt_label==0
+            sem_label[invalid_mask.view(sem_label.shape)] = 0
+
         gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         if hparams.remove_cluster:
@@ -301,6 +304,9 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
             sem_logits = results[f'sem_map_{typ}']
             sem_label = logits_2_label(sem_logits)
             sem_label = remapping(sem_label)
+            if not hparams.render_zyq:
+                invalid_mask = gt_label==0
+                sem_label[invalid_mask.view(sem_label.shape)] = 0
         else:
             sem_label = torch.ones_like(instances)
         

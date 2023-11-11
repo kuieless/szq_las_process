@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image
-
+import os
 import cv2
 class ImageMetadata:
     def __init__(self, image_path: Path, c2w: torch.Tensor, W: int, H: int, intrinsics: torch.Tensor, image_index: int,
@@ -144,13 +144,16 @@ class ImageMetadata:
             return torch.tensor(np.asarray(labels),dtype=torch.int32)
         
     def load_instance_64(self) -> torch.Tensor:
-        crossview_path = str(self.instance_path).replace(self.hparams.instance_name, 'instances_mask_64')[:-4]+'.npy'
 
-        labels = np.load(crossview_path)
-        labels = labels.astype(np.int32)
-        labels = torch.tensor(labels,dtype=torch.int32)
-        labels[labels != 0] += 200000
-        return labels
+        crossview_path = str(self.instance_path).replace(self.hparams.instance_name, 'instances_mask_64')[:-4]+'.npy'
+        if os.path.exists(crossview_path):
+            labels = np.load(crossview_path)
+            labels = labels.astype(np.int32)
+            labels = torch.tensor(labels,dtype=torch.int32)
+            labels[labels != 0] += 200000
+            return labels
+        else:
+            return None
 
     
     def load_instance_gt(self) -> torch.Tensor:
