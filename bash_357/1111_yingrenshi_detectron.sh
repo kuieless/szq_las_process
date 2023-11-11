@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=7
 ##两个放一起跑
 
 
@@ -10,8 +10,8 @@ config_file=configs/yingrenshi.yaml
 
 batch_size=16384
 train_iterations=100000
-val_interval=20000
-ckpt_interval=20000
+val_interval=50000
+ckpt_interval=50000
 
 use_subset=True
 enable_semantic=True

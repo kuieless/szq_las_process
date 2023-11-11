@@ -1794,6 +1794,16 @@ class Runner:
                                     str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
                             
                         
+                        stack = visualize_panoptic_outputs(
+                            p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
+                            self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
+                        )
+                        
+                        grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
+                        grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                        
+                        Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % save_i)))
+                    
                     # calculate the panoptic quality
                     
                     path_target_sem = os.path.join(self.hparams.dataset_path, 'val', 'labels_gt')
@@ -1831,35 +1841,9 @@ class Runner:
                         if all_centroids is not None:
                             val_metrics['all_centroids_shape'] = all_centroids.shape
                             print(f"all_centroids: {all_centroids.shape}")
-
-                        # 对TP进行处理
-                        TP = torch.tensor([value[1] for value in zyq_TP if value[0] == 1])
-                        FP = torch.tensor([value[1] for value in zyq_FP if value[0] == 1])
-                        FN = torch.tensor([value[1] for value in zyq_FN if value[0] == 1])
-
-                        for save_i in range(len(indices_to_eval)):
-                            p_rgb = all_points_rgb[save_i]
-                            p_semantics = all_points_semantics[save_i]
-                            p_instances = all_points_instances[save_i]
-                            if not self.hparams.only_train_building:
-                                p_instances_building = all_points_instances_building[save_i]
-                            gt_rgb = gt_points_rgb[save_i]
-                            gt_semantics = gt_points_semantic[save_i]
-                            gt_instances = gt_points_instance[save_i]
-                            stack = visualize_panoptic_outputs(
-                                p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
-                                self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False,
-                                TP=TP, FP=FP, FN=FN
-                            )
-                            
-                            grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
-                            grid = (grid * 255).cpu().numpy().astype(np.uint8)
-                            
-                            Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % save_i)))
-                        
-
+                    
                     ## 对分类结果进行可视化
-
+                    
                     
 
                 # logger

@@ -15,6 +15,7 @@ from pathlib import Path
 import random
 from PIL import Image
 from tools.unetformer.uavid2rgb import remapping
+import cv2
 
 class MemoryDataset(Dataset):
 
@@ -107,6 +108,8 @@ class MemoryDataset(Dataset):
         return len(self._rgbs)
 
     def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+        
+            
         # 找到非零值的索引
         nonzero_indices = torch.nonzero(self._instances[idx]).squeeze()
 
@@ -126,6 +129,23 @@ class MemoryDataset(Dataset):
             return item
 
         sampling_idx = nonzero_indices[torch.randperm(nonzero_indices.size(0))[:self.hparams.batch_size]]
+
+        visualization=False
+        if visualization:
+            def label_to_color(label_tensor):
+                unique_labels = torch.unique(label_tensor)
+                color_image = torch.zeros(label_tensor.shape[0], label_tensor.shape[1],3).to(torch.uint8)
+            
+                for i in unique_labels:
+                    if i ==0:
+                        continue
+                    color_image[label_tensor==i]=torch.randint(0, 256, (3,), dtype=torch.uint8)
+                return color_image
+            
+            color = label_to_color(self._instances[idx].long().view(self.H, self.W)) *0.7 + 0.3 * self._rgbs[idx].clone().view(self.H, self.W, 3)
+            vis_img = np.concatenate([color.cpu().numpy()], axis=1)
+            # cv2.imwrite(f"zyq/1110_campus_64/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img3)
+            cv2.imwrite(f"1111.jpg", vis_img)
 
 
         item = {

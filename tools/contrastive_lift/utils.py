@@ -28,7 +28,7 @@ def create_instances_from_semantics(instances, semantics, thing_classes, device)
 # copy from contrastive-lift
 
 def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=False,
-            use_silverman=False, cluster_size=1000, num_points=500000, all_centroids=None):
+            use_silverman=False, cluster_size=1000, num_points=500000, all_centroids=None, use_mean=False):
     thing_mask = all_thing_features[...,0] == -float('inf')
     features = all_thing_features[thing_mask]
     features = features[:,1:]
@@ -53,6 +53,8 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
         fps_points_rescaled = centers_rescaled[fps_points_indices]
     else:
     # ##### NOTE: 2. 不需要rescale， 但变量保留原始名称 'fps_points_rescaled'
+        # num_points = min(centers_filtered.shape[0], num_points)
+        # print(f'the setting num_point_size > larger than  the centers_filtered(input):{num_points}')
         fps_points_indices = np.random.choice(centers_filtered.shape[0], num_points, replace=False)
         fps_points_rescaled = centers_filtered[fps_points_indices]
 
@@ -124,8 +126,12 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
     all_labels = all_labels + 1 # -1,0,...,K-1 -> 0,1,...,K
     all_labels_onehot = np.zeros((all_labels.shape[0], centroids.shape[0]+1))
     all_labels_onehot[np.arange(all_labels.shape[0]), all_labels] = 1
-    all_points_instances = torch.from_numpy(all_labels_onehot).view(num_images, -1, centroids.shape[0]+1).to(device)
-    return all_points_instances, centroids
+    if use_mean:
+        return all_labels_onehot, centroids
+    else:
+        all_points_instances = torch.from_numpy(all_labels_onehot).view(num_images, -1, centroids.shape[0]+1).to(device)
+        return all_points_instances, centroids
+
 
 
 
@@ -189,7 +195,7 @@ def assign_clusters(all_thing_features, all_points_semantics, all_centroids, dev
 
 
 def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, semantics, instances, H, W, thing_classes, visualize_entropy=True,
-                               m2f_semantics=None, m2f_instances=None):
+                               m2f_semantics=None, m2f_instances=None, TP=None, FP=None, FN=None):
     alpha = 0.65
     distinct_colors = DistinctColors()
     distinct_colors_semantic = DistinctColors_semantic()
@@ -232,7 +238,25 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
         img_instances_gt = colored_img_instance_gt.view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
         img_instances_gt[:, boundaries_img_instances_gt > 0] = 0
         # stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt, torch.zeros_like(img_gt), torch.zeros_like(img_gt)]), torch.stack([img, img_semantics, img_instances, depth, img_sem_entropy])], dim=0)
-        stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt]), torch.stack([img, img_semantics, img_instances])], dim=0)
+        if TP is not None:
+            mask_TP = torch.isin(instances, TP).view(H,W).cpu()
+            mask_FN = torch.isin(instances, FN).view(H,W).cpu()
+            mask_FP = torch.isin(p_instances.cpu(), FP).view(H,W).cpu()
+            viz_gt = torch.zeros_like(img_semantics_gt)
+            viz_pred = torch.zeros_like(img_semantics_gt)
+
+            thing_mask_pred = ~(thing_mask.view(H,W).cpu())
+            thing_mask_gt = ~(torch.logical_not(sum(semantics == s for s in thing_classes).bool()).cpu().view(H,W).cpu())
+            viz_gt[1,mask_TP*thing_mask_gt] = 1
+            viz_pred[:,mask_FP*thing_mask_pred] = (colored_img_instance.view(H, W, 3).permute(2, 0, 1))[:,mask_FP*thing_mask_pred].to(torch.float64)
+            viz_gt[0,mask_FN*thing_mask_gt] = 1
+            
+            beta = 0.65
+            viz_gt = viz_gt * beta + img_gt * (1 - beta)
+            viz_pred = viz_pred * beta + img_gt * (1 - beta)
+            stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt, viz_gt]), torch.stack([img, img_semantics, img_instances, viz_pred])], dim=0)
+        else:
+            stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt]), torch.stack([img, img_semantics, img_instances])], dim=0)
         if m2f_semantics is not None and m2f_instances is not None:
             img_semantics_m2f = distinct_colors_semantic.apply_colors_fast_torch(m2f_semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
             boundaries_img_semantics_m2f = get_boundary_mask(m2f_semantics.cpu().view(H, W))

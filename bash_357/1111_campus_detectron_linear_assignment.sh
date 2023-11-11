@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=4
 ##两个放一起跑
 
 
@@ -21,13 +21,13 @@ lr=0.01
 
 enable_instance=True
 
-instance_loss_mode=slow_fast
+instance_loss_mode=linear_assignment
 instance_name=instances_detectron
 dataset_type=memory_depth_dji_instance
-num_instance_classes=25
+num_instance_classes=100
 
 ckpt_path=logs_campus/1104_campus_density_depth_hash22_fusion1018_car2_semantic/0/models/200000.pt
-exp_name=logs_campus/1111_campus_detectron
+exp_name=logs_campus/1111_campus_detectron_linear_assignment
 
 # only_train_building=False
 
