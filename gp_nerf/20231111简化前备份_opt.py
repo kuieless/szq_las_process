@@ -17,9 +17,15 @@ def get_opts_base():
                                                                                    'memory_depth_dji_instance_crossview',
                                                                                    'memory_depth_dji_instance',
                                                                                    'memory_depth_dji',
+                                                                                   'sam', 
+                                                                                   'sam_project',
+                                                                                   'file_normal', 
+                                                                                   'memory_depth', 
                                                                                    'filesystem', 
-                                                                                   'memory',
-                                                                                   ],
+                                                                                   'memory', 
+                                                                                   'llff', 
+                                                                                   'llff_sa3d', 
+                                                                                   'mega_sa3d'],
                         help="""specifies whether to hold all images in CPU memory during training, or whether to write randomized
                         batches or pixels/rays to disk""")
    

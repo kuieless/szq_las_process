@@ -480,6 +480,55 @@ class Runner:
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
             self.W = dataset.W
+        
+        elif self.hparams.dataset_type == 'sam':
+            if self.hparams.add_random_rays:
+                from gp_nerf.datasets.memory_dataset_sam_random import MemoryDataset_SAM
+            else:
+                from gp_nerf.datasets.memory_dataset_sam import MemoryDataset_SAM
+            dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
+        elif self.hparams.dataset_type == 'sam_project':
+            from gp_nerf.datasets.memory_dataset_sam_project import MemoryDataset_SAM
+            dataset = MemoryDataset_SAM(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
+        elif self.hparams.dataset_type == 'file_normal':
+            from gp_nerf.datasets.filesystem_dataset_normal import FilesystemDatasetNormal
+            dataset = FilesystemDatasetNormal(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                        self.hparams.center_pixels, self.device,
+                                        [Path(x) for x in sorted(self.hparams.chunk_paths)], self.hparams.num_chunks,
+                                        self.hparams.train_scale_factor, self.hparams.disk_flush_size,self.hparams.desired_chunks)
+            # Transform world normal to camera normal
+            w2c_rots = torch.linalg.inv(dataset._c2ws[:, :3, :3]).to(self.device, non_blocking=True)
+
+        elif self.hparams.dataset_type == 'memory_depth':
+            if self.hparams.add_random_rays:
+                from gp_nerf.datasets.memory_dataset_depth_random import MemoryDataset
+            else:
+                from gp_nerf.datasets.memory_dataset_depth import MemoryDataset
+            dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams)
+        elif self.hparams.dataset_type == 'llff':
+            from gp_nerf.datasets.llff import NeRFDataset
+            dataset = NeRFDataset(self.hparams, device=self.device, type='train')
+            self.H = dataset.H
+            self.W = dataset.W
+        elif self.hparams.dataset_type == 'llff_sa3d':
+            self.predictor = init_predictor(self.device)
+            if self.hparams.sa3d_whole_image:
+                from gp_nerf.datasets.llff_sa3d_whole_image import NeRFDataset
+            else:
+                from gp_nerf.datasets.llff_sa3d_N import NeRFDataset
+            dataset = NeRFDataset(self.hparams, device=self.device, type='train', predictor=self.predictor)
+            self.H = dataset.H
+            self.W = dataset.W
+        elif self.hparams.dataset_type == 'mega_sa3d':
+            self.predictor = init_predictor(self.device)
+            from gp_nerf.datasets.mega_sa3d_whole_image import MemoryDataset_SAM_sa3d
+            dataset = MemoryDataset_SAM_sa3d(self.train_items, self.near, self.far, self.ray_altitude_range,
+                                    self.hparams.center_pixels, self.device, self.hparams, predictor=self.predictor)
+            self.H = dataset.H
+            self.W = dataset.W
         else:
             raise Exception('Unrecognized dataset type: {}'.format(self.hparams.dataset_type))
 
@@ -496,6 +545,10 @@ class Runner:
             # If discard_index >= 0, we already set to the right chunk through set_state
             if self.hparams.dataset_type == 'filesystem' and discard_index == -1:
                 dataset.load_chunk()
+                # for i in  range(30):
+                #     dataset.load_chunk()
+                #     chunk_id += 1
+                #     print(f"chunk_id: {chunk_id}")
 
             if 'RANK' in os.environ:
                 world_size = int(os.environ['WORLD_SIZE'])
@@ -570,6 +623,19 @@ class Runner:
 
                 # amp: Automatic mixed precision
                 with torch.cuda.amp.autocast(enabled=self.hparams.amp):
+
+                    # normal loss
+                    if self.hparams.normal_loss:
+                        item['c2w_rots'] = c2w_rots
+                    # depth loss
+                    if self.hparams.dataset_type == 'memory_depth':
+                        # print(item['rays'].size())
+                        self.train_img_num = item['rgbs'].shape[0]
+                    # add random_rays when depth
+                    if self.hparams.add_random_rays:
+                        self.sample_random_num_current = item['rays'].shape[0] * self.hparams.sample_random_num_each
+                    
+
                     # 调整shape
                     if self.hparams.enable_semantic or self.hparams.enable_instance:
                         for key in item.keys():
@@ -1173,6 +1239,47 @@ class Runner:
                         metrics['sam_group_loss'] = group_loss
                         metrics['loss'] += self.hparams.wgt_group_loss * group_loss
             
+                
+        if self.hparams.depth_loss or self.hparams.normal_loss:
+            decay_min = 0.00 # arrive decay_min in 1/4 training iterationsc
+            nloss_decay = (1 - decay_min) * (1 - train_iterations / (self.hparams.train_iterations/4.)) + decay_min
+            nloss_decay = max(nloss_decay, 0)
+            fg_mask = (results['bg_lambda_fine'].detach() < 0.01)
+            if self.hparams.add_random_rays:
+                fg_mask = fg_mask[:-self.sample_random_num_current]
+
+            if self.hparams.depth_loss:
+                batch_size = self.train_img_num # batch_size is the number of image
+                # TODO: add depth scale
+                gt_depths = item['depths'].to(self.device, non_blocking=True)
+                if self.hparams.add_random_rays:
+                    pred_depths = results['depth_fine'][:-self.sample_random_num_current] * item['depth_scale']
+                else:
+                    pred_depths = results['depth_fine'] * item['depth_scale']
+                ray_num = pred_depths.shape[0] // batch_size# + self.hparams.sample_random_num
+                sqrt_num = int(np.sqrt(ray_num))
+                if sqrt_num**2 != int(ray_num):
+                    raise Exception('ray_num not N*N, %d %d' % (ray_num, sqrt_num))
+                depth_loss = self.depth_loss(pred_depths.reshape(batch_size, sqrt_num, sqrt_num), 
+                                            (gt_depths * 50 + 0.5).reshape(batch_size, sqrt_num, sqrt_num), 
+                                            fg_mask.reshape(batch_size, sqrt_num, sqrt_num))
+                metrics['depth_loss'] = depth_loss
+                metrics['loss'] += nloss_decay * self.hparams.wgt_depth_loss * depth_loss
+
+            if self.hparams.normal_loss:
+                gt_normals = item['normals'].to(self.device, non_blocking=True)
+                w2c_rots = item['w2c_rots']
+                w2c_rot = w2c_rots[image_indices.long()]
+                pred_normals = results[f'normal_map_fine']
+                cam_normals = torch.bmm(w2c_rot, pred_normals[:,:,None])[:, :, 0]
+                if 'sdf' not in self.hparams.network_type:
+                    cam_normals = cam_normals * -1 # flip x, y, z axis
+                if fg_mask.sum() > 0:
+                    normal_l1 = get_normal_loss(cam_normals[fg_mask], gt_normals[fg_mask])
+                    metrics['n_l1_loss'] = normal_l1
+                    metrics['loss'] += nloss_decay * self.hparams.wgt_nl1_loss * normal_l1
+                else:
+                    metrics['n_l1_loss'] = metrics['n_cos_loss'] = 0
 
             if self.writer is not None:
                 self.writer.add_scalar('1_train/nloss_decay', nloss_decay, train_iterations)
@@ -1497,18 +1604,132 @@ class Runner:
             
     
     def _run_validation(self, train_index=-1, all_centroids=None) -> Dict[str, float]:
-        from tools.unetformer.uavid2rgb import remapping
-        with torch.inference_mode():
-            #semantic 
-            self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
-            CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
-            self.nerf.eval()
-            val_metrics = defaultdict(float)
-            base_tmp_path = None
-            
-            val_type = self.hparams.val_type  # train  val
-            print('val_type: ', val_type)
-            try:
+
+        if 'llff' in self.hparams.dataset_type:
+            from gp_nerf.rendering_gpnerf import render_rays
+            with torch.inference_mode():
+                
+                from gp_nerf.datasets.llff import NeRFDataset
+                dataset = NeRFDataset(self.hparams, device=self.device, type='test')
+                data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
+                                                pin_memory=False)
+                
+                
+                experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                Path(str(experiment_path_current)).mkdir()
+                Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+                for dataset_index, item in enumerate(data_loader): #, start=10462):
+                    #semantic 
+                    if self.hparams.enable_semantic or self.hparams.enable_instance:
+                        for key in item.keys():
+                            if item[key].dim() == 2:
+                                item[key] = item[key].reshape(-1)
+                            elif item[key].dim() == 3:
+                                item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                        for key in item.keys():
+                            if 'random' in key:
+                                continue
+                            elif 'random_'+key in item.keys():
+                                item[key] = torch.cat((item[key], item['random_'+key]))
+                    
+                    
+
+                    
+                    rgbs = item['rgbs'].to(self.device, non_blocking=True)
+                    groups = None
+                    
+                    results = {}
+
+                    rays = item['rays'].to(self.device, non_blocking=True)
+                    image_indices = item['img_indices'].to(self.device, non_blocking=True)
+                    # print(labels.shape[0])
+                    for i in range(0, rays.shape[0], self.hparams.image_pixel_batch_size):
+                        result_batch, _ = render_rays(nerf=self.nerf, bg_nerf=self.bg_nerf,
+                                        rays=rays[i:i + self.hparams.image_pixel_batch_size],
+                                        image_indices=image_indices[i:i + self.hparams.image_pixel_batch_size] if self.hparams.appearance_dim > 0 else None,
+                                        hparams=self.hparams,
+                                        sphere_center=self.sphere_center,
+                                        sphere_radius=self.sphere_radius,
+                                        get_depth=True,
+                                        get_depth_variance=False,
+                                        get_bg_fg_rgb=True,
+                                        train_iterations=train_index)
+                                        
+
+                        for key, value in result_batch.items():
+                            if key not in results:
+                                results[key] = []
+                            results[key].append(value.cpu())
+
+                    for key, value in results.items():
+                        results[key] = torch.cat(value)
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    viz_result_rgbs = results[f'rgb_{typ}'].view(dataset.H, dataset.W, 3).cpu()
+                    # Image.fromarray(viz_result_rgbs*255).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % dataset_index)))
+                    # viz_result_rgbs = (viz_result_rgbs.numpy()*255)[:,:,::-1]
+                    # viz_result_rgbs = viz_result_rgbs[:,:,::-1]
+                    if 'rgbs' in item:
+                        viz_rgbs = item['rgbs'].view(*viz_result_rgbs.shape)
+                        img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+
+                        image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
+                        image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
+                        image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
+                        img_list.append(torch.from_numpy(image_diff_color))
+                    else:
+                        img_list = [viz_result_rgbs * 255]
+
+                    
+                    
+                    # cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % dataset_index)), viz_result_rgbs)
+                    # cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_gt.jpg" % dataset_index)), (item['rgbs'].view(*viz_result_rgbs.shape).numpy()*255)[:,:,::-1])
+                    
+                    if self.hparams.enable_semantic:
+                        if f'sem_map_{typ}' in results:
+                            sem_logits = results[f'sem_map_{typ}']
+                            if self.hparams.use_mask_type == 'hashgrid_mlp':
+                                sem_logits = self.nerf.mask_fc_hash(sem_logits.to(self.device)).cpu()
+                            elif self.hparams.use_mask_type == 'densegrid_mlp':
+                                sem_logits = self.nerf.mask_fc_dense(sem_logits.to(self.device)).cpu()
+
+                            if self.hparams.dataset_type == 'llff':
+                                sem_label = self.logits_2_label(sem_logits)
+                                visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
+                                img_list.append(torch.from_numpy(visualize_sem))
+                            else:
+                                colorize_mask = torch.zeros((self.H, self.W, 3))
+                                for seg_idx in range(sem_logits.shape[-1]):
+                                    if self.hparams.num_semantic_classes <5:
+                                        img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+                                    colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = self.color_list[seg_idx] #torch.randint(0, 255,(3,)).to(torch.float32)
+                                img_list.append(colorize_mask)
+                    if f'depth_{typ}' in results:
+                        depth_map = results[f'depth_{typ}']
+                        # if f'fg_depth_{typ}' in results:
+                        #     to_use = results[f'fg_depth_{typ}'].view(-1)
+                        #     while to_use.shape[0] > 2 ** 24:
+                        #         to_use = to_use[::2]
+                        #     ma = torch.quantile(to_use, 0.95)
+                        #     depth_clamp = depth_map.clamp_max(ma)
+                        # else:
+                        #     depth_clamp = depth_map
+                        depth_clamp = depth_map
+
+                        depth_vis = torch.from_numpy(Runner.visualize_scalars(
+                            torch.log(depth_clamp + 1e-8).view(*viz_result_rgbs.shape[:-1]).cpu()))
+                        img_list.append(depth_vis)
+                    
+                    
+                    img_list = [torch.zeros_like(viz_result_rgbs) if element is None else element for element in img_list]
+                    img_list = torch.stack(img_list).permute(0,3,1,2)
+                    img = make_grid(img_list, nrow=3)
+                    img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % dataset_index)))
+
+        elif self.hparams.dataset_type == 'mega_sa3d':
+            with torch.inference_mode():
+                val_type = self.hparams.val_type  # train  val
+                print('val_type: ', val_type)
                 if val_type == 'val':
                     if 'residence'in self.hparams.dataset_path:
                         self.val_items=self.val_items[:19]
@@ -1516,346 +1737,593 @@ class Runner:
                         # self.val_items=self.val_items[:10]
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
-                    indices_to_eval = np.arange(370,490)  
-                    
-                if self.hparams.enable_instance:
-                    all_instance_features, all_thing_features = [], []
-                    all_thing_features_building = []
-                    all_points_rgb, all_points_semantics = [], []
-                    gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
+                    # #indices_to_eval = np.arange(0, len(self.train_items), 100)  
+                    # indices_to_eval = [0] #np.arange(len(self.train_items)) 
+                    indices_to_eval = np.arange(415,490)  
+                
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
-                if self.hparams.cached_centroids_path is None and self.hparams.enable_instance:
-                    Path(str(experiment_path_current)).mkdir(exist_ok=True)
-                    Path(str(experiment_path_current / 'val_rgbs')).mkdir(exist_ok=True)
-                else:
-                    Path(str(experiment_path_current)).mkdir()
-                    Path(str(experiment_path_current / 'val_rgbs')).mkdir()
-                with (experiment_path_current / 'psnr.txt').open('w') as f:
-                    
-                    samantic_each_value = {}
-                    for class_name in CLASSES:
-                        samantic_each_value[f'{class_name}_iou'] = []
-                    samantic_each_value['mIoU'] = []
-                    samantic_each_value['FW_IoU'] = []
-                    samantic_each_value['F1'] = []
-                    # samantic_each_value['OA'] = []
+                Path(str(experiment_path_current)).mkdir()
+                Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+
+                for i in main_tqdm(indices_to_eval):
+                    if val_type == 'val':
+                        metadata_item = self.val_items[i]
+                    elif val_type == 'train':
+                        metadata_item = self.train_items[i]
+
+                    results, _ = self.render_image(metadata_item, train_index)
+
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    viz_rgbs = metadata_item.load_image().float() / 255.
+                    self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
+                    viz_result_rgbs = results[f'rgb_{typ}'].view(self.H, self.W, 3).cpu()
+                    # viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
+
+                    # Image.fromarray(viz_result_rgbs*255).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+                    # viz_result_rgbs = (viz_result_rgbs.numpy()*255)[:,:,::-1]
+                    # viz_result_rgbs = viz_result_rgbs[:,:,::-1]
+                    img_list = [viz_result_rgbs * 255]
 
                     
-                    if self.hparams.debug:
-                        indices_to_eval = indices_to_eval[:2]
-                        # indices_to_eval = indices_to_eval[:2]
                     
-                    for i in main_tqdm(indices_to_eval):
-                        self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
-                        # if i != 0:
-                        #     break
-                        if val_type == 'val':
-                            metadata_item = self.val_items[i]
-                        elif val_type == 'train':
-                            metadata_item = self.train_items[i]
-
-                        if self.hparams.enable_instance:
-                            gt_instance_label = metadata_item.load_instance_gt()
-                            gt_points_instance.append(gt_instance_label.view(-1))
-                        
-                        results, _ = self.render_image(metadata_item, train_index)
-
-
-                        typ = 'fine' if 'rgb_fine' in results else 'coarse'
-                        
-                        viz_rgbs = metadata_item.load_image().float() / 255.
-                        self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
-                        if self.hparams.save_depth:
-                            save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
-                            if not os.path.exists(save_depth_dir):
-                                os.makedirs(save_depth_dir)
-                            depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy().astype(np.float16)
-                            np.save(os.path.join(save_depth_dir, metadata_item.image_path.stem + '.npy'), depth_map)
-                            continue
-                        
-                        # get rendering rgbs and depth
-                        viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
-                        viz_result_rgbs = viz_result_rgbs.clamp(0,1)
-                        if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
-                            val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
-                        
-                        viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
-                        
-                        # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
-                        img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
-
-                        image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
-                        image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
-                        image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
-                        img_list.append(torch.from_numpy(image_diff_color))
-                        
-                        
-                        prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
-                        
-                        get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
-                                            i, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each)
-                        
-                        
-                        if self.hparams.enable_instance:
-                            instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
-                                results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
-                                experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
-                                all_points_rgb, all_points_semantics, gt_points_semantic)
-                            
-                            all_instance_features.append(instances)
-                            all_thing_features.append(p_instances)
-                            if not self.hparams.only_train_building:
-                                all_thing_features_building.append(p_instances_building)
-
-                            gt_points_rgb.append(viz_rgbs.view(-1,3))
-
-
-
-                        # NOTE: 对需要可视化的list进行处理
-                        # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
-                        # 将None元素转换为zeros矩阵
-                        img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
-                        img_list = torch.stack(img_list).permute(0,3,1,2)
-                        img = make_grid(img_list, nrow=3)
-                        img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                        Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
-
-                        if self.writer is not None and (train_index % 50000 == 0):
-                            self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
-                        if self.wandb is not None and (train_index % 50000 == 0):
-                            Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
-                            self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
-                        
-
-                        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
-                            Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
-                        Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                            str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
-                        
-                        
-                        if val_type == 'val':
-                            #save  [pred_label, pred_rgb, fg_bg] to the folder 
-
-                            if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')) and self.hparams.save_individual:
-                                Path(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')).mkdir()
-                            if self.hparams.save_individual:
-                                Image.fromarray((viz_rgbs.numpy() * 255).astype(np.uint8)).save(
-                                    str(experiment_path_current / 'val_rgbs' / 'gt_rgb' / ("%06d_gt_rgb.jpg" % i)))
-
-
-                            if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
-                                img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
-                                                                results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
-                                
-                                if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')):
-                                    Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
-                                
-                                img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
-                            
-                            # logger
-                            samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
-                            self.metrics_val_each.reset()
-                        del results
-                
-                if self.hparams.enable_instance:
+                    # cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)), viz_result_rgbs)
+                    # cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_gt.jpg" % i)), (item['rgbs'].view(*viz_result_rgbs.shape).numpy()*255)[:,:,::-1])
                     
-                    # 这里先加一些训练图像
-                    if self.hparams.add_train_image and self.hparams.instance_loss_mode != 'linear_assignment':
-                        indices_to_train = np.arange(len(self.train_items))
-                        indices_to_train = indices_to_train[::20]
+                    if self.hparams.enable_semantic:
+                        if f'sem_map_{typ}' in results:
+                            sem_logits = results[f'sem_map_{typ}']
 
-                        # indices_to_train = indices_to_train[:1]
-
-                        for k in main_tqdm(indices_to_train):
-                            metadata_item = self.train_items[k]
-                            results, _ = self.render_image(metadata_item, train_index)
-                            typ = 'fine' if 'rgb_fine' in results else 'coarse'
-
-                            if f'instance_map_{typ}' in results:
-                                instances = results[f'instance_map_{typ}']
-                                device = instances.device
-
-                                # 如果pred semantic存在，则使用
-                                # 若不存在， 则创建一个全是things的semantic
-                                if f'sem_map_{typ}' in results:
-                                    sem_logits = results[f'sem_map_{typ}']
-                                    sem_label = self.logits_2_label(sem_logits)
-                                    sem_label = remapping(sem_label)
-                                else:
-                                    sem_label = torch.ones_like(instances)
-                                
-                                if self.hparams.instance_loss_mode == 'slow_fast':
-                                    slow_features = instances[...,self.hparams.num_instance_classes:] 
-                                    # all_slow_features.append(slow_features)
-                                    instances = instances[...,0:self.hparams.num_instance_classes] # keep fast features only
-                                if not self.hparams.render_zyq:
-                                    p_instances = create_instances_from_semantics(instances, sem_label, self.thing_classes,device=device)
-                                all_thing_features.append(p_instances)
-
-
-
-
-
-                    # 'linear_assignment' 是直接得到一个伪标签
-                    if self.hparams.instance_loss_mode == 'linear_assignment':
-                        all_points_instances = torch.stack(all_thing_features, dim=0) # N x d
-                        output_dir = str(experiment_path_current / 'panoptic')
-                        if not os.path.exists(output_dir):
-                            Path(output_dir).mkdir()
-                    else:
-                            
-                        # instance clustering
-                        all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
-                        all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
-                        if not self.hparams.only_train_building:
-                            all_thing_features_building = torch.cat(all_thing_features_building, dim=0).cpu().numpy()
-                        output_dir = str(experiment_path_current / 'panoptic')
-                        if not os.path.exists(output_dir):
-                            Path(output_dir).mkdir()
-                        if train_index == self.hparams.train_iterations:
-                            np.save(os.path.join(output_dir, "all_instance_features.npy"), all_instance_features)
-                            np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                            np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
-                            np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
-                            np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
-                            np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
-
-                            
-                        if self.hparams.cached_centroids_type == 'all':
-                            all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
-                                                                    device=self.device, num_images=len(indices_to_eval))
-                        elif self.hparams.cached_centroids_type == 'test':
-                            if all_centroids is not None:
-                                
-                                all_points_instances, _ = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                            num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
-            
+                            if self.hparams.use_mask_type == 'hashgrid_mlp':
+                                sem_logits = self.nerf.mask_fc_hash(sem_logits.to(self.device)).cpu()
+                            elif self.hparams.use_mask_type == 'densegrid_mlp':
+                                sem_logits = self.nerf.mask_fc_dense(sem_logits.to(self.device)).cpu()
+                            if self.hparams.dataset_type == 'llff':
+                                sem_label = self.logits_2_label(sem_logits)
+                                visualize_sem = custom2rgb(sem_label.view(*viz_result_rgbs.shape[:-1]).cpu().numpy())
+                                img_list.append(torch.from_numpy(visualize_sem))
                             else:
-                                if self.hparams.add_train_image:
-                                    all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                                num_images=len(indices_to_eval)+len(indices_to_train), use_dbscan=self.hparams.use_dbscan)
-                                else:
-                                    all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                                num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
-                                output_dir = str(experiment_path_current)
-                                if not os.path.exists(output_dir):
-                                    Path(output_dir).mkdir(parents=True)
+                                colorize_mask = torch.zeros((self.H, self.W, 3))
+                                for seg_idx in range(sem_logits.shape[-1]):
+                                    if self.hparams.num_semantic_classes <10:
+                                        img_list.append((sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1],1).repeat(1,1,3).cpu()*255)
+                                    colorize_mask[(sem_logits[:,seg_idx]>0).view(*viz_result_rgbs.shape[:-1])] = self.color_list[seg_idx]  # torch.randint(0, 255,(3,)).to(torch.float32)
+                                    # if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'each')):
+                                    #     Path(str(experiment_path_current / 'val_rgbs' / 'each')).mkdir()
+                                    # Image.fromarray((colorize_mask.numpy() * 255).astype(np.uint8)).save(
+                                    #     str(experiment_path_current / 'val_rgbs' / 'each' / ("%06d_colorize_mask_%01d.jpg" % (i, seg_idx))))
                                     
-                                all_centroids_path = os.path.join(output_dir, f"test_centroids.npy")
-                                with open(all_centroids_path, "wb") as file:
-                                    pickle.dump(all_centroids, file)
-                                print(f"save all_centroids_cache to : {all_centroids_path}")
-                            
-                            if not self.hparams.only_train_building:
-                                all_points_instances_building, _ = cluster(all_thing_features_building, bandwidth=0.2, device=self.device, 
-                                                            num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
+                                img_list.append(colorize_mask)
+                                if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'colorize_mask')):
+                                    Path(str(experiment_path_current / 'val_rgbs' / 'colorize_mask')).mkdir()
+                                Image.fromarray((colorize_mask.numpy() * 255).astype(np.uint8)).save(
+                                    str(experiment_path_current / 'val_rgbs' / 'colorize_mask' / ("%06d_colorize_mask.jpg" % i)))
                                 
-                    if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
-                        Path(str(experiment_path_current / 'pred_semantics')).mkdir()
-                    if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
-                        Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
 
+                    if f'depth_{typ}' in results:
+                        depth_map = results[f'depth_{typ}']
+                        # if f'fg_depth_{typ}' in results:
+                        #     to_use = results[f'fg_depth_{typ}'].view(-1)
+                        #     while to_use.shape[0] > 2 ** 24:
+                        #         to_use = to_use[::2]
+                        #     ma = torch.quantile(to_use, 0.95)
+                        #     depth_clamp = depth_map.clamp_max(ma)
+                        # else:
+                        #     depth_clamp = depth_map
+                        depth_clamp = depth_map
 
+                        depth_vis = torch.from_numpy(Runner.visualize_scalars(
+                            torch.log(depth_clamp + 1e-8).view(*viz_result_rgbs.shape[:-1]).cpu()))
+                        img_list.append(depth_vis)
+                    
+                    
+                    img_list = [torch.zeros_like(viz_result_rgbs) if element is None else element for element in img_list]
+                    img_list = torch.stack(img_list).permute(0,3,1,2)
+                    img = make_grid(img_list, nrow=3)
+                    img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                    Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
 
-                    # from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-                    # import matplotlib.pyplot as plt
-                    # lda = LinearDiscriminantAnalysis(n_components=2)
-                    # lda_result = lda.fit_transform(all_thing_features[:,1:], all_points_instances.view(-1,all_points_instances.shape[-1]).argmax(dim=1).cpu().numpy())
-                    # plt.scatter(lda_result[:, 0], lda_result[:, 1], c=p_instances.argmax(dim=1).cpu().numpy(), cmap='viridis')
-                    # plt.xlabel('LDA Component 1')
-                    # plt.ylabel('LDA Component 2')
-                    # plt.title('LDA Visualization')
-                    # # 保存图像为文件（例如，PNG格式）
-                    # plt.savefig(os.path.join(str(experiment_path_current / 'panoptic' / ("lda_visualization.jpg"))))
-                    # # 关闭图形窗口（如果不需要显示图形界面）
-                    # plt.close()
+        else:
+            # if 'residence'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                # from tools.unetformer.uavid2rgb import remapping_remove_ground as remapping
+            # else:
+            from tools.unetformer.uavid2rgb import remapping
 
-
-                    for save_i in range(len(indices_to_eval)):
-                        p_rgb = all_points_rgb[save_i]
-                        p_semantics = all_points_semantics[save_i]
-                        # p_semantics = gt_points_semantic[save_i]
-                        p_instances = all_points_instances[save_i]
-                        if not self.hparams.only_train_building:
-                            p_instances_building = all_points_instances_building[save_i]
-                        gt_rgb = gt_points_rgb[save_i]
-                        gt_semantics = gt_points_semantic[save_i]
-                        gt_instances = gt_points_instance[save_i]
-
-                        
-                        output_semantics_with_invalid = p_semantics.detach()
-                        Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
-                                str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
-                        if not self.hparams.only_train_building:
-                            Image.fromarray(p_instances_building.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-                                    str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+            
+            if self.hparams.use_neus_gradient == False and self.hparams.nr3d_nablas == False:
+                with torch.inference_mode():
+                    #semantic 
+                    self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+                    CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
+                    self.nerf.eval()
+                    val_metrics = defaultdict(float)
+                    base_tmp_path = None
+                    
+                    val_type = self.hparams.val_type  # train  val
+                    print('val_type: ', val_type)
+                    try:
+                        if val_type == 'val':
+                            if 'residence'in self.hparams.dataset_path:
+                                self.val_items=self.val_items[:19]
+                            # elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                                # self.val_items=self.val_items[:10]
+                            indices_to_eval = np.arange(len(self.val_items))
+                        elif val_type == 'train':
+                            indices_to_eval = np.arange(370,490)  
+                            
+                        if self.hparams.enable_instance:
+                            all_instance_features, all_thing_features = [], []
+                            all_thing_features_building = []
+                            all_points_rgb, all_points_semantics = [], []
+                            gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
+                        experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                        if self.hparams.cached_centroids_path is None and self.hparams.enable_instance:
+                            Path(str(experiment_path_current)).mkdir(exist_ok=True)
+                            Path(str(experiment_path_current / 'val_rgbs')).mkdir(exist_ok=True)
                         else:
-                            Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-                                    str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                            Path(str(experiment_path_current)).mkdir()
+                            Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+                        with (experiment_path_current / 'psnr.txt').open('w') as f:
                             
+                            samantic_each_value = {}
+                            for class_name in CLASSES:
+                                samantic_each_value[f'{class_name}_iou'] = []
+                            samantic_each_value['mIoU'] = []
+                            samantic_each_value['FW_IoU'] = []
+                            samantic_each_value['F1'] = []
+                            # samantic_each_value['OA'] = []
+
+                            
+                            if self.hparams.debug:
+                                indices_to_eval = indices_to_eval[:2]
+                                # indices_to_eval = indices_to_eval[:2]
+                            
+                            for i in main_tqdm(indices_to_eval):
+                                self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
+                                # if i != 0:
+                                #     break
+                                if val_type == 'val':
+                                    metadata_item = self.val_items[i]
+                                elif val_type == 'train':
+                                    metadata_item = self.train_items[i]
+
+                                if self.hparams.enable_instance:
+                                    gt_instance_label = metadata_item.load_instance_gt()
+                                    gt_points_instance.append(gt_instance_label.view(-1))
+                                
+                                results, _ = self.render_image(metadata_item, train_index)
+
+
+                                typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                                
+                                viz_rgbs = metadata_item.load_image().float() / 255.
+                                self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
+                                if self.hparams.save_depth:
+                                    save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
+                                    if not os.path.exists(save_depth_dir):
+                                        os.makedirs(save_depth_dir)
+                                    depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy().astype(np.float16)
+                                    np.save(os.path.join(save_depth_dir, metadata_item.image_path.stem + '.npy'), depth_map)
+                                    continue
+                                
+                                # get rendering rgbs and depth
+                                viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
+                                viz_result_rgbs = viz_result_rgbs.clamp(0,1)
+                                if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
+                                    val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
+                                
+                                viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                                
+                                # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                                img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+
+                                image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
+                                image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
+                                image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
+                                img_list.append(torch.from_numpy(image_diff_color))
+                                
+                                
+                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
+                                
+                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
+                                                    i, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each)
+                                
+                                
+                                if self.hparams.enable_instance:
+                                    instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
+                                        results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
+                                        experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
+                                        all_points_rgb, all_points_semantics, gt_points_semantic)
+                                    
+                                    all_instance_features.append(instances)
+                                    all_thing_features.append(p_instances)
+                                    if not self.hparams.only_train_building:
+                                        all_thing_features_building.append(p_instances_building)
+
+                                    gt_points_rgb.append(viz_rgbs.view(-1,3))
+
+
+
+                                # NOTE: 对需要可视化的list进行处理
+                                # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                                # 将None元素转换为zeros矩阵
+                                img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                                img_list = torch.stack(img_list).permute(0,3,1,2)
+                                img = make_grid(img_list, nrow=3)
+                                img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                                Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+
+                                if self.writer is not None and (train_index % 50000 == 0):
+                                    self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
+                                if self.wandb is not None and (train_index % 50000 == 0):
+                                    Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
+                                    self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
+                                
+
+                                if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
+                                    Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
+                                Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                    str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
+                                
+                                
+                                if val_type == 'val':
+                                    #save  [pred_label, pred_rgb, fg_bg] to the folder 
+
+                                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')) and self.hparams.save_individual:
+                                        Path(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')).mkdir()
+                                    if self.hparams.save_individual:
+                                        Image.fromarray((viz_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                            str(experiment_path_current / 'val_rgbs' / 'gt_rgb' / ("%06d_gt_rgb.jpg" % i)))
+
+
+                                    if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
+                                        img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
+                                                                        results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
+                                        
+                                        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')):
+                                            Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
+                                        
+                                        img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
+                                    
+                                    # logger
+                                    samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
+                                    self.metrics_val_each.reset()
+                                del results
                         
-                        stack = visualize_panoptic_outputs(
-                            p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
-                            self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
-                        )
+                        if self.hparams.enable_instance:
+                            
+                            # 这里先加一些训练图像
+                            if self.hparams.add_train_image and self.hparams.instance_loss_mode != 'linear_assignment':
+                                indices_to_train = np.arange(len(self.train_items))
+                                indices_to_train = indices_to_train[::20]
 
-                        grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
-                        grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                                # indices_to_train = indices_to_train[:1]
+
+                                for k in main_tqdm(indices_to_train):
+                                    metadata_item = self.train_items[k]
+                                    results, _ = self.render_image(metadata_item, train_index)
+                                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+
+                                    if f'instance_map_{typ}' in results:
+                                        instances = results[f'instance_map_{typ}']
+                                        device = instances.device
+
+                                        # 如果pred semantic存在，则使用
+                                        # 若不存在， 则创建一个全是things的semantic
+                                        if f'sem_map_{typ}' in results:
+                                            sem_logits = results[f'sem_map_{typ}']
+                                            sem_label = self.logits_2_label(sem_logits)
+                                            sem_label = remapping(sem_label)
+                                        else:
+                                            sem_label = torch.ones_like(instances)
+                                        
+                                        if self.hparams.instance_loss_mode == 'slow_fast':
+                                            slow_features = instances[...,self.hparams.num_instance_classes:] 
+                                            # all_slow_features.append(slow_features)
+                                            instances = instances[...,0:self.hparams.num_instance_classes] # keep fast features only
+                                        if not self.hparams.render_zyq:
+                                            p_instances = create_instances_from_semantics(instances, sem_label, self.thing_classes,device=device)
+                                        all_thing_features.append(p_instances)
+
+
+
+
+
+                            # 'linear_assignment' 是直接得到一个伪标签
+                            if self.hparams.instance_loss_mode == 'linear_assignment':
+                                all_points_instances = torch.stack(all_thing_features, dim=0) # N x d
+                                output_dir = str(experiment_path_current / 'panoptic')
+                                if not os.path.exists(output_dir):
+                                    Path(output_dir).mkdir()
+                            else:
+                                    
+                                # instance clustering
+                                all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+                                all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                                if not self.hparams.only_train_building:
+                                    all_thing_features_building = torch.cat(all_thing_features_building, dim=0).cpu().numpy()
+                                output_dir = str(experiment_path_current / 'panoptic')
+                                if not os.path.exists(output_dir):
+                                    Path(output_dir).mkdir()
+                                if train_index == self.hparams.train_iterations:
+                                    np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                                    np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                                    np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                                    np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
+                                    np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
+                                    np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
+
+                                    
+                                if self.hparams.cached_centroids_type == 'all':
+                                    all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
+                                                                            device=self.device, num_images=len(indices_to_eval))
+                                elif self.hparams.cached_centroids_type == 'test':
+                                    if all_centroids is not None:
+                                        
+                                        all_points_instances, _ = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                                    num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
+                    
+                                    else:
+                                        if self.hparams.add_train_image:
+                                            all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                                        num_images=len(indices_to_eval)+len(indices_to_train), use_dbscan=self.hparams.use_dbscan)
+                                        else:
+                                            all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                                                                        num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
+                                        output_dir = str(experiment_path_current)
+                                        if not os.path.exists(output_dir):
+                                            Path(output_dir).mkdir(parents=True)
+                                            
+                                        all_centroids_path = os.path.join(output_dir, f"test_centroids.npy")
+                                        with open(all_centroids_path, "wb") as file:
+                                            pickle.dump(all_centroids, file)
+                                        print(f"save all_centroids_cache to : {all_centroids_path}")
+                                    
+                                    if not self.hparams.only_train_building:
+                                        all_points_instances_building, _ = cluster(all_thing_features_building, bandwidth=0.2, device=self.device, 
+                                                                    num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
+                                        
+                            if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
+                                Path(str(experiment_path_current / 'pred_semantics')).mkdir()
+                            if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
+                                Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
+
+
+
+                            # from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+                            # import matplotlib.pyplot as plt
+                            # lda = LinearDiscriminantAnalysis(n_components=2)
+                            # lda_result = lda.fit_transform(all_thing_features[:,1:], all_points_instances.view(-1,all_points_instances.shape[-1]).argmax(dim=1).cpu().numpy())
+                            # plt.scatter(lda_result[:, 0], lda_result[:, 1], c=p_instances.argmax(dim=1).cpu().numpy(), cmap='viridis')
+                            # plt.xlabel('LDA Component 1')
+                            # plt.ylabel('LDA Component 2')
+                            # plt.title('LDA Visualization')
+                            # # 保存图像为文件（例如，PNG格式）
+                            # plt.savefig(os.path.join(str(experiment_path_current / 'panoptic' / ("lda_visualization.jpg"))))
+                            # # 关闭图形窗口（如果不需要显示图形界面）
+                            # plt.close()
+
+
+                            for save_i in range(len(indices_to_eval)):
+                                p_rgb = all_points_rgb[save_i]
+                                p_semantics = all_points_semantics[save_i]
+                                # p_semantics = gt_points_semantic[save_i]
+                                p_instances = all_points_instances[save_i]
+                                if not self.hparams.only_train_building:
+                                    p_instances_building = all_points_instances_building[save_i]
+                                gt_rgb = gt_points_rgb[save_i]
+                                gt_semantics = gt_points_semantic[save_i]
+                                gt_instances = gt_points_instance[save_i]
+
+                                
+                                output_semantics_with_invalid = p_semantics.detach()
+                                Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
+                                        str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                if not self.hparams.only_train_building:
+                                    Image.fromarray(p_instances_building.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                                            str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                else:
+                                    Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                                            str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                    
+                                
+                                stack = visualize_panoptic_outputs(
+                                    p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
+                                    self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
+                                )
+
+                                grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
+                                grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                                
+                                Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % save_i)))
+                            
+                            # calculate the panoptic quality
+                            
+                            path_target_sem = os.path.join(self.hparams.dataset_path, 'val', 'labels_gt')
+                            path_target_inst = os.path.join(self.hparams.dataset_path, 'val', 'instances_gt')
+                            path_pred_sem = str(experiment_path_current / 'pred_semantics')
+                            path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
+                            if Path(path_target_inst).exists():
+                                pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                                             path_target_sem, path_target_inst, image_size=[self.W, self.H])
+                                with (experiment_path_current / 'instance.txt').open('w') as f:
+                                    f.write(f'\n\npred_areas\n')  
+
+                                    for key, value in pred_areas.items():
+                                        f.write(f"    {key}: {value}\n")
+                                    f.write(f'\n\ntarget_areas\n')  
+                                    for key, value in target_areas.items():
+                                        f.write(f"    {key}: {value}\n")
+                                    
+                                    f.write(f'\n\nTP\n')  
+                                    for item in zyq_TP:
+                                        f.write(    f"{item}\n")
+                                    
+                                    f.write(f'\n\nFP\n')  
+                                    for item in zyq_FP:
+                                        f.write(    f"{item}\n")
+                                    
+                                    f.write(f'\n\nFN\n')  
+                                    for item in zyq_FN:
+                                        f.write(f"    {item}\n")
+
+                                val_metrics['pq'] = pq
+                                val_metrics['sq'] = sq
+                                val_metrics['rq'] = rq
+                                val_metrics['metrics_each']=metrics_each
+                                if all_centroids is not None:
+                                    val_metrics['all_centroids_shape'] = all_centroids.shape
+                                    print(f"all_centroids: {all_centroids.shape}")
+                            
+
+                        # logger
+                        write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index, self.hparams)
+                        self.metrics_val.reset()
                         
-                        Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % save_i)))
+                        self.writer.flush()
+                        self.writer.close()
+                        self.nerf.train()
+                    finally:
+                        if self.is_master and base_tmp_path is not None:
+                            shutil.rmtree(base_tmp_path)
                     
-                    # calculate the panoptic quality
+                    return val_metrics
+            else:
+                # with torch.inference_mode():
+                with torch.no_grad():
+                    #semantic 
+                    self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+                    CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
+                    self.nerf.eval()
+                    val_metrics = defaultdict(float)
+                    base_tmp_path = None
                     
-                    path_target_sem = os.path.join(self.hparams.dataset_path, 'val', 'labels_gt')
-                    path_target_inst = os.path.join(self.hparams.dataset_path, 'val', 'instances_gt')
-                    path_pred_sem = str(experiment_path_current / 'pred_semantics')
-                    path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
-                    if Path(path_target_inst).exists():
-                        pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
-                                        path_target_sem, path_target_inst, image_size=[self.W, self.H])
-                        with (experiment_path_current / 'instance.txt').open('w') as f:
-                            f.write(f'\n\npred_areas\n')  
+                    val_type = self.hparams.val_type  # train  val
+                    print('val_type: ', val_type)
+                    try:
+                        if val_type == 'val':
+                            if 'residence'in self.hparams.dataset_path:
+                                self.val_items=self.val_items[:19]
+                            # elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
+                                # self.val_items=self.val_items[:10]
+                            indices_to_eval = np.arange(len(self.val_items))
+                        elif val_type == 'train':
+                            indices_to_eval = np.arange(800,1200)  
 
-                            for key, value in pred_areas.items():
-                                f.write(f"    {key}: {value}\n")
-                            f.write(f'\n\ntarget_areas\n')  
-                            for key, value in target_areas.items():
-                                f.write(f"    {key}: {value}\n")
-                            
-                            f.write(f'\n\nTP\n')  
-                            for item in zyq_TP:
-                                f.write(    f"{item}\n")
-                            
-                            f.write(f'\n\nFP\n')  
-                            for item in zyq_FP:
-                                f.write(    f"{item}\n")
-                            
-                            f.write(f'\n\nFN\n')  
-                            for item in zyq_FN:
-                                f.write(f"    {item}\n")
 
-                        val_metrics['pq'] = pq
-                        val_metrics['sq'] = sq
-                        val_metrics['rq'] = rq
-                        val_metrics['metrics_each']=metrics_each
-                        if all_centroids is not None:
-                            val_metrics['all_centroids_shape'] = all_centroids.shape
-                            print(f"all_centroids: {all_centroids.shape}")
-                    
+                        experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                        Path(str(experiment_path_current)).mkdir()
+                        Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+                        with (experiment_path_current / 'psnr.txt').open('w') as f:
+                            
+                            samantic_each_value = {}
+                            for class_name in CLASSES:
+                                samantic_each_value[f'{class_name}_iou'] = []
+                            samantic_each_value['mIoU'] = []
+                            samantic_each_value['FW_IoU'] = []
+                            samantic_each_value['F1'] = []
+                            # samantic_each_value['OA'] = []
 
-                # logger
-                write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index, self.hparams)
-                self.metrics_val.reset()
-                
-                self.writer.flush()
-                self.writer.close()
-                self.nerf.train()
-            finally:
-                if self.is_master and base_tmp_path is not None:
-                    shutil.rmtree(base_tmp_path)
-            
-            return val_metrics
-            
+                            
+                            for i in main_tqdm(indices_to_eval):
+                                self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
+                                # if i != 0:
+                                #     break
+                                if val_type == 'val':
+                                    metadata_item = self.val_items[i]
+                                elif val_type == 'train':
+                                    metadata_item = self.train_items[i]
+                                viz_rgbs = metadata_item.load_image().float() / 255.
+                                
+                                results, _ = self.render_image(metadata_item, train_index)
+                                typ = 'fine' if 'rgb_fine' in results else 'coarse'
+
+                                if self.hparams.save_depth:
+                                    save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
+                                    if not os.path.exists(save_depth_dir):
+                                        os.makedirs(save_depth_dir)
+                                    depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy().astype(np.float16)
+                                    np.save(os.path.join(save_depth_dir, metadata_item.image_path.stem + '.npy'), depth_map)
+                                    continue
+                                
+                                # get rendering rgbs and depth
+                                viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
+                                viz_result_rgbs = viz_result_rgbs.clamp(0,1)
+                                if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
+                                    val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
+                                    
+                                viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                                
+                                # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                                img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+                                
+                                image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
+                                image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
+                                image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
+                                img_list.append(torch.from_numpy(image_diff_color))
+                                 
+                                prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
+                                
+
+                                get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
+                                                    i, self.writer, self.hparams, self.metrics_val, self.metrics_val_each)
+                                   
+                                # NOTE: 对需要可视化的list进行处理
+                                # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                                # 将None元素转换为zeros矩阵
+                                img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                                img_list = torch.stack(img_list).permute(0,3,1,2)
+                                img = make_grid(img_list, nrow=3)
+                                img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                                Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
+
+                                if self.writer is not None and (train_index % 50000 == 0):
+                                    self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
+                                if self.wandb is not None and (train_index % 50000 == 0):
+                                    Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
+                                    self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
+                                
+
+                                if val_type == 'val':
+                                    #save  [pred_label, pred_rgb, fg_bg] to the folder 
+
+                                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')) and self.hparams.save_individual:
+                                        Path(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')).mkdir()
+                                    if self.hparams.save_individual:
+                                        Image.fromarray((viz_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                            str(experiment_path_current / 'val_rgbs' / 'gt_rgb' / ("%06d_gt_rgb.jpg" % i)))
+
+                                    if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
+                                        Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
+                                    Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                                        str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
+                                    
+
+                                    if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
+                                        img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
+                                                                        results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
+                                        
+                                        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')) and self.hparams.save_individual:
+                                            Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
+                                        if self.hparams.save_individual:
+                                        
+                                            img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
+                                    
+                                    # logger
+                                    samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
+                                    self.metrics_val_each.reset()
+                                del results
+                        # logger
+                        write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index)
+                        self.metrics_val.reset()
+                        
+                        self.writer.flush()
+                        self.writer.close()
+                        self.nerf.train()
+                    finally:
+                        if self.is_master and base_tmp_path is not None:
+                            shutil.rmtree(base_tmp_path)
+
+                    return val_metrics
     
     def _run_validation_eval_m2f(self, train_index=-1, all_centroids=None) -> Dict[str, float]:
         from tools.unetformer.uavid2rgb import remapping
@@ -1899,7 +2367,7 @@ class Runner:
                     # samantic_each_value['OA'] = []
 
                     if self.hparams.enable_instance:
-                        all_thing_features = [], []
+                        all_instance_features, all_thing_features = [], []
                         all_points_rgb, all_points_semantics = [], []
                         gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
                     if self.hparams.debug:
@@ -1960,6 +2428,7 @@ class Runner:
                                 experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
                                 all_points_rgb, all_points_semantics, gt_points_semantic)
                             
+                            all_instance_features.append(instances)
                             all_thing_features.append(p_instances)
                             gt_points_rgb.append(viz_rgbs.view(-1,3))
 
@@ -2013,6 +2482,7 @@ class Runner:
                 
                 if self.hparams.enable_instance:
                     # instance clustering
+                    all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
                     all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
                     output_dir = str(experiment_path_current / 'panoptic')
                     if not os.path.exists(output_dir):
@@ -2239,6 +2709,241 @@ class Runner:
 
         return val_metrics
     
+
+    def _run_validation_project_val_points(self, train_index=-1) -> Dict[str, float]:
+        self._setup_experiment_dir()
+
+
+        with torch.inference_mode():
+            #semantic 
+            self.nerf.eval()
+            val_type = self.hparams.val_type  # train  val
+            print('val_type: ', val_type)
+
+            indices_to_eval = np.arange(len(self.val_items))
+            
+
+            experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+            Path(str(experiment_path_current)).mkdir()
+            Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+            
+            for i in indices_to_eval[5:6]:
+                if val_type == 'val':
+                    metadata_item = self.val_items[i]
+                elif val_type == 'train':
+                    metadata_item = self.train_items[i]
+                viz_rgbs = metadata_item.load_image().float() / 255.
+
+                save_dir = f'zyq/val_{metadata_item.image_path.stem}_v4'
+                print('save_dir %s' % save_dir)
+                if os.path.exists(save_dir):
+                    shutil.rmtree(save_dir)
+                results, _ = self.render_image(metadata_item, train_index)
+                typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                viz_rgbs = metadata_item.load_image().float() / 255.
+                
+                depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1])
+
+                H, W = depth_map.shape
+
+                directions = get_ray_directions(W,
+                                                H,
+                                                metadata_item.intrinsics[0],
+                                                metadata_item.intrinsics[1],
+                                                metadata_item.intrinsics[2],
+                                                metadata_item.intrinsics[3],
+                                                self.hparams.center_pixels,
+                                                'cpu')
+                depth_scale = torch.abs(directions[:, :, 2]) # z-axis's values
+                depth_map = (depth_map * depth_scale).numpy()
+
+                x, y = int(W * 1/2), int(H * 1/2)
+                #x, y = W // 2, H // 2
+                K1 = metadata_item.intrinsics
+                #K1 = np.array([[K1[0], 0, K1[2]],[0, -K1[1], K1[3]],[0,0,-1]])
+                K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
+                E1 = np.array(metadata_item.c2w)
+                E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+                print('camera c2w', metadata_item.c2w)
+                print('camera intrinsic', metadata_item.intrinsics)
+                depth = depth_map[y, x]   #* 0.5
+                pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
+                pt_3d = np.append(pt_3d, 1)
+                print('3d point in camera space', pt_3d)
+                (Path(f"{save_dir}")).mkdir(exist_ok=True)
+                (Path(f"{save_dir}/occluded")).mkdir(exist_ok=True)
+                img1= cv2.imread(f"{str(metadata_item.image_path)}")
+                pt2 = (int(x), int(y))
+                radius = 5
+                color = (0, 0, 255)
+                thickness = 2
+                cv2.circle(img1, pt2, radius, color, thickness)
+                cv2.imwrite(f"{save_dir}/000000_{metadata_item.image_path.stem}.jpg", img1)
+                
+                world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
+                print('point in world ', world_point)
+
+                #for j in [30]:
+                for j in np.arange(len(self.train_items[:])):
+
+                    """ Compute occlusion """
+
+                    train_item = self.train_items[j]
+
+
+                    E2 = np.array(train_item.c2w)
+                    E2 = np.stack([E2[:, 0], E2[:, 1]*-1, E2[:, 2]*-1, E2[:, 3]], 1)
+                    w2c = np.linalg.inv(np.concatenate((E2, [[0,0,0,1]]), 0))
+                    pt_3d_trans = np.dot(w2c, world_point)
+
+                    pt_2d_trans = np.dot(K1, pt_3d_trans[:3]) 
+                    pt_2d_trans = pt_2d_trans / pt_2d_trans[2]
+                    print('%d, camera point in %s' % (j, train_item.image_path.stem), pt_3d_trans, pt_2d_trans)
+                    
+                    h2, w2 = H, W
+                    x2, y2 = int(pt_2d_trans[0]), int(pt_2d_trans[1])
+                    if x2 >= 0 and x2 < w2 and y2 >= 0 and y2 < h2:
+                        results2, _ = self.render_image(train_item, train_index)
+                        depth_map2 = results2[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1])
+                        depth_map2 = (depth_map2 * depth_scale).numpy()
+                        depth2 = depth_map2[y2, x2]
+                        img2 = cv2.imread(str(train_item.image_path))
+                        pt2 = (int(pt_2d_trans[0]), int(pt_2d_trans[1]))
+                        depth_diff = np.abs(depth2 - pt_3d_trans[2])
+                        print('Project inside image 2', depth, depth2, depth_diff)
+                        radius = 5
+                        color = (0, 0, 255)
+                        thickness = 2
+                        if depth_diff > 0.01:
+                            print('occluded points!!')
+                            color = (0, 255, 0)
+                            img2 = cv2.circle(img2, pt2, radius, color, thickness)
+                            cv2.imwrite(f"{save_dir}/occluded/{train_item.image_path.stem}.jpg", img2)
+                        else:
+                            img2 = cv2.circle(img2, pt2, radius, color, thickness)
+                            cv2.imwrite(f"{save_dir}/{train_item.image_path.stem}.jpg", img2)
+                    # else:
+                        # print('Projected point is not on image2')
+                        
+
+                        
+        return -1
+
+    def _run_validation_save_depth(self, train_index=-1) -> Dict[str, float]:
+        self._setup_experiment_dir()
+        if self.hparams.dataset_type == 'llff':
+            self.nerf.eval()
+            from gp_nerf.rendering_gpnerf import render_rays
+            with torch.inference_mode():
+                from gp_nerf.datasets.llff import NeRFDataset
+                dataset = NeRFDataset(self.hparams, device=self.device, type='all')
+                data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=False, num_workers=0,
+                                                pin_memory=False)
+                experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                Path(str(experiment_path_current)).mkdir()
+                Path(str(experiment_path_current / 'val_rgbs')).mkdir()
+
+                save_depth_path = Path(dataset.f_paths[0]).parent.parent / 'depths'
+                (save_depth_path).mkdir(exist_ok=True)
+                
+                for dataset_index, item in enumerate(data_loader): #, start=10462):
+                    #semantic 
+                    for key in item.keys():
+                        if item[key].dim() == 2:
+                            item[key] = item[key].reshape(-1)
+                        elif item[key].dim() == 3:
+                            item[key] = item[key].reshape(-1, *item[key].shape[2:])
+                    for key in item.keys():
+                        if 'random' in key:
+                            continue
+                        elif 'random_'+key in item.keys():
+                            item[key] = torch.cat((item[key], item['random_'+key]))
+                    
+                    if self.hparams.enable_semantic:
+                        labels = item['labels'].to(self.device, non_blocking=True)
+                        if self.hparams.dataset_type == 'sam_project':
+                            pass
+                        else:
+                            if not self.hparams.enable_instance:
+                                from tools.unetformer.uavid2rgb import remapping
+                                labels = remapping(labels)
+                    else:
+                        labels = None
+
+                    
+                    rgbs = item['rgbs'].to(self.device, non_blocking=True)
+                    groups = None
+                    
+                    results = {}
+
+                    rays = item['rays'].to(self.device, non_blocking=True)
+                    image_indices = item['img_indices'].to(self.device, non_blocking=True)
+                    # print(labels.shape[0])
+                    for i in range(0, rays.shape[0], self.hparams.image_pixel_batch_size):
+                        result_batch, _ = render_rays(nerf=self.nerf, bg_nerf=self.bg_nerf,
+                                        rays=rays[i:i + self.hparams.image_pixel_batch_size],
+                                        image_indices=image_indices[i:i + self.hparams.image_pixel_batch_size] if self.hparams.appearance_dim > 0 else None,
+                                        hparams=self.hparams,
+                                        sphere_center=self.sphere_center,
+                                        sphere_radius=self.sphere_radius,
+                                        get_depth=True,
+                                        get_depth_variance=False,
+                                        get_bg_fg_rgb=True,
+                                        train_iterations=train_index)
+
+                        for key, value in result_batch.items():
+                            if key not in results:
+                                results[key] = []
+                            results[key].append(value.cpu())
+
+                    for key, value in results.items():
+                        results[key] = torch.cat(value)
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    viz_result_rgbs = results[f'rgb_{typ}'].view(dataset.H, dataset.W, 3).cpu()
+                    # Image.fromarray(viz_result_rgbs*255).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % dataset_index)))
+                    viz_result_rgbs = (viz_result_rgbs.numpy()*255)[:,:,::-1]
+                    cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % dataset_index)), viz_result_rgbs)
+                    cv2.imwrite(str(experiment_path_current / 'val_rgbs' / ("%06d_gt.jpg" % dataset_index)), (item['rgbs'].view(*viz_result_rgbs.shape).numpy()*255)[:,:,::-1])
+                    
+                    depth_map = results[f'depth_{typ}'].view(viz_result_rgbs.shape[0], viz_result_rgbs.shape[1])
+                    np.save(f"{save_depth_path}/{Path(dataset.f_paths[dataset_index]).stem}.npy", depth_map)
+                    print(f"{save_depth_path}/{Path(dataset.f_paths[dataset_index]).stem}.npy")
+
+        else:
+            with torch.inference_mode():
+                #semantic 
+                self.nerf.eval()
+                val_type = self.hparams.val_type  # train  val
+                print('val_type: ', val_type)
+
+                indices_to_eval = np.arange(len(self.train_items))
+                
+                train_depth = self.train_items[0].image_path.parent.parent.parent / 'train'/ 'depths'
+                val_depth = self.train_items[0].image_path.parent.parent.parent / 'val'/ 'depths'
+                print(train_depth)
+                print(val_depth)
+
+                (train_depth).mkdir(exist_ok=True)
+                (val_depth).mkdir(exist_ok=True)
+                
+                for i in tqdm(indices_to_eval):
+                    if i % 50 != 0 :
+                        continue
+                    metadata_item = self.train_items[i]
+                    results, _ = self.render_image(metadata_item, train_index)
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    viz_rgbs = metadata_item.load_image().float() / 255.
+                    depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1])
+                    if self.train_items[i].is_val: 
+                        np.save(f"{val_depth}/{metadata_item.image_path.stem}.npy", depth_map)
+                        print(f"{val_depth}/{metadata_item.image_path.stem}.npy")
+                    else:
+                        np.save(f"{train_depth}/{metadata_item.image_path.stem}.npy", depth_map)
+
+                    
+                            
+            return -1
+
 
     def _save_checkpoint(self, optimizers: Dict[str, any], scaler: GradScaler, train_index: int, dataset_index: int,
                          dataset_state: Optional[str]) -> None:
@@ -2567,7 +3272,33 @@ class Runner:
                 if candidate.exists():
                     instance_path = candidate
                     break
-        if 'memory_depth_dji' in self.hparams.dataset_type:
+        if self.hparams.dataset_type == 'sam':
+            sam_feature_path = None
+            candidate = metadata_path.parent.parent / 'sam_features' / '{}.npy'.format(metadata_path.stem)
+            if candidate.exists():
+                sam_feature_path = candidate
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, sam_feature_path)
+        elif self.hparams.dataset_type == 'sam_project' or self.hparams.dataset_type == 'mega_sa3d':
+            sam_feature_path = None
+            candidate = metadata_path.parent.parent / 'sam_features' / '{}.npy'.format(metadata_path.stem)
+            if candidate.exists():
+                sam_feature_path = candidate
+            # depth_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_depth.npy' % metadata_path.stem) 
+            depth_path = os.path.join(metadata_path.parent.parent, 'depths', '%s.npy' % metadata_path.stem) 
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, sam_feature_path, depth_path=depth_path)
+        
+        elif self.hparams.normal_loss:
+            normal_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_normal.npy' % metadata_path.stem) 
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, normal_path=normal_path)
+
+        elif self.hparams.depth_loss:
+            depth_path = os.path.join(metadata_path.parent.parent, 'mono_cues', '%s_depth.npy' % metadata_path.stem) 
+            return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
+                                 intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, depth_path=depth_path)
+        elif 'memory_depth_dji' in self.hparams.dataset_type:
             if self.hparams.depth_dji_type=='las':
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
             elif self.hparams.depth_dji_type=='mesh':
@@ -2593,6 +3324,136 @@ class Runner:
         return experiment_path
 
 
+    
+    
+    def pretrain_sdf_road_surface(
+        self, 
+        num_iters=5000, num_points=5000, 
+        lr=1.0e-4, w_eikonal=1.0e-3, 
+        safe_mse = True, clip_grad_val: float = 0.1, optim_cfg = {}, 
+        # Shape configs
+        # # e.g. For waymo, +z points to sky, and ego_car is about 0.5m. Hence, floor_dim='z', floor_up_sign=1, ego_height=0.5
+        floor_dim: Literal['x','y','z'] = 'x', # The vertical dimension of obj coords
+        floor_up_sign: Literal[1, -1]=-1, # [-1] if (-)dim points to sky else [1]
+        ego_height: float = 0., # Estimated ego's height from road, in obj coords space
+        # Debug & logging related
+        logger: Logger=None, log_prefix: str=None, debug_param_detail=False):
+
+
+
+        num_point_each_img = 512
+        pts_3d = []
+        for idx in range(len(self.train_items)):
+            metadata_item = self.train_items[idx]
+            depth_map = metadata_item.load_depth_dji()
+
+            H, W = depth_map.shape[:2]
+            directions = get_ray_directions(W,
+                                        H,
+                                        metadata_item.intrinsics[0],
+                                        metadata_item.intrinsics[1],
+                                        metadata_item.intrinsics[2],
+                                        metadata_item.intrinsics[3],
+                                        self.hparams.center_pixels,
+                                        'cpu')
+            depth_map = depth_map.numpy()
+            K1 = metadata_item.intrinsics
+            K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
+            E1 = np.array(metadata_item.c2w)
+            E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+
+            for p in range(num_point_each_img):
+                x, y = random.randint(0, W-1), random.randint(0, H-1)
+                depth = depth_map[y, x]   #* 0.5
+                if torch.isinf(torch.from_numpy(depth)):
+                    continue
+                pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
+                pt_3d = np.append(pt_3d, 1)
+                world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
+                pts_3d.append(world_point[:3])
+
+        pts_3d = torch.from_numpy(np.array(pts_3d)).to(self.device)
+        pts_3d[:,0:1] = pts_3d.mean(0)[0].expand_as(pts_3d[:,0:1])
+        # pts_3d[:,0:1] = pts_3d.min(0).values[0].expand_as(pts_3d[:,0:1])
+
+        
+
+        # visualize_points_list = [pts_3d.view(-1, 3).cpu().numpy()]
+        # visualize_points(visualize_points_list)
+        tracks_in_obj = contract_to_unisphere_new(pts_3d, self.hparams)
+        """
+        Pretrain sdf to be a road surface
+        """
+        floor_dim: int = ['x','y','z'].index(floor_dim)
+        other_dims = [i for i in range(3) if i != floor_dim]
+        
+        device = self.device
+        sdf_parameters = list(self.nerf.encoding.parameters())  \
+                       + list(self.nerf.plane_encoder.parameters())  \
+                       + list(self.nerf.decoder.parameters())
+        optimizer = Adam(sdf_parameters, lr=lr, **optim_cfg)
+        scaler = GradScaler(init_scale=128.0)
+        
+        # implicit_surface.preprocess_per_train_step(0)
+        self.nerf.encoding.set_anneal_iter(0)
+        
+        if safe_mse:
+            loss_eikonal_fn = lambda x: safe_mse_loss(x, x.new_ones(x.shape), reduction='mean', limit=1.0)
+        else:
+            loss_eikonal_fn = lambda x: F.mse_loss(x, x.new_ones(x.shape), reduction='mean')
+        
+        # tracks_in_net = implicit_surface.space.normalize_coords(tracks_in_obj)
+        
+        # if log_prefix is None: 
+        #     log_prefix = implicit_surface.__class__.__name__
+        
+        with torch.enable_grad():
+            with tqdm(range(num_iters), desc=f"=> Pretraining SDF...") as pbar:
+                for it in pbar:
+                    samples_in_net = torch.empty([num_points,3], dtype=torch.float, device=device).uniform_(-1, 1)
+                    samples_in_obj = self.nerf.encoding.space.unnormalize_coords(samples_in_net)
+                    
+                    # For each sample point, find the track point of the minimum distance (measured in 3D space.)
+                    # # [num_points, 1, 3] - [1, num_tracks, 3] = [num_points, num_tracks, 3] -> [num_points, num_tracks] -> [num_samples]
+                    # ret_min_dis_in_obj = (samples_in_obj.unsqueeze(-2) - tracks_in_obj.unsqueeze(0)).norm(dim=-1).min(dim=-1)
+                    
+                    # For each sample point, find the track point of the minimum distance (measure at 2D space. i.e. xoy plane for floor_dim=z)
+                    # [num_points, 1, 3] - [1, num_tracks, 3] = [num_points, num_tracks, 3] -> [num_points, num_tracks] -> [num_samples]
+                    ret_min_dis_in_obj = (samples_in_obj[..., None, other_dims] - tracks_in_obj[None, ..., other_dims]).norm(dim=-1).min(dim=-1)
+
+                    # For each sample point, current floor'z coordinate of floor_dim
+                    floor_at_in_obj = tracks_in_obj[ret_min_dis_in_obj.indices][..., floor_dim] - floor_up_sign * ego_height
+                    sdf_gt_in_obj = floor_up_sign * (samples_in_obj[..., floor_dim] - floor_at_in_obj)
+                    
+                    #---- Convert SDF GT value in real-world object's unit to network's unit
+                    sdf_gt = sdf_gt_in_obj / self.nerf.sdf_scale
+                    # sdf_gt = sdf_gt_in_obj / 25
+                    
+                    pred_sdf, feature_vector, pred_nablas = self.nerf.forward_sdf_nablas(samples_in_net, nablas_has_grad=True)
+                    pred_sdf = pred_sdf
+                    nablas_norm = pred_nablas.norm(dim=-1)
+                    loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * loss_eikonal_fn(nablas_norm)
+                    
+                    optimizer.zero_grad()
+                    
+                    # loss.backward()
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    if clip_grad_val > 0:
+                        torch.nn.utils.clip_grad.clip_grad_value_(sdf_parameters, clip_grad_val)
+                    
+                    # optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    
+                    # pbar.set_postfix(loss=loss.item())
+                    # if logger is not None:
+                    #     logger.add(f"initialize", log_prefix + '.loss', loss.item(), it)
+                    #     logger.add_nested_dict("initialize", log_prefix + '.sdf', tensor_statistics(pred_sdf), it)
+                    #     logger.add_nested_dict("initialize", log_prefix + '.nablas_norm', tensor_statistics(nablas_norm), it)
+                    #     if debug_param_detail:
+                    #         logger.add_nested_dict("initialize", log_prefix + '.encoding', implicit_surface.encoding.stat_param(with_grad=True), it)
+    
     def pretrain_sdf_road_surface_2d(
         self, 
         num_iters=5000, num_points=5000, 
@@ -2733,6 +3594,181 @@ class Runner:
                     #     if debug_param_detail:
                     #         logger.add_nested_dict("initialize", log_prefix + '.encoding', implicit_surface.encoding.stat_param(with_grad=True), it)
     
+
+    def pretrain_sdf_road_surface_3d(
+        self, 
+        num_iters=1000, num_points=5000, 
+        lr=1.0e-4, w_eikonal=1.0e-3, 
+        safe_mse = True, clip_grad_val: float = 0.1, optim_cfg = {}, 
+        floor_dim: Literal['x','y','z'] = 'x', # The vertical dimension of obj coords
+        floor_up_sign: Literal[1, -1]=-1, # [-1] if (-)dim points to sky else [1]
+        ego_height: float = 0., # Estimated ego's height from road, in obj coords space
+        logger: Logger=None, log_prefix: str=None, debug_param_detail=False):
+
+        # 读取mesh表面， 获取顶点法线，  提取法线方向朝向+x的上表面点
+        # mesh = trimesh.load_mesh('/data/yuqi/code/GP-NeRF-semantic/data/mesh_subset_nerfcoor.obj')
+        # mesh = trimesh.load_mesh('/data/yuqi/code/GP-NeRF-semantic/data/mesh.obj')
+        mesh = trimesh.load_mesh(self.hparams.mesh_path)
+        
+
+        
+        vertex_normals = mesh.vertex_normals
+        pts_3d = mesh.vertices[vertex_normals[:, 0] <= 0]
+        upper_surface_normal = vertex_normals[vertex_normals[:, 0] <= 0]
+        
+        min_altitude = pts_3d.min(0)[0]
+        min_altitude = (min_altitude - self.hparams.stretch[0][0]) / (self.hparams.stretch[1][0] - self.hparams.stretch[0][0])   
+
+
+        # sample_points, face_indices = trimesh.sample.sample_surface(mesh, 10000000)
+        # sample_normals = mesh.face_normals[face_indices]
+        # pts_3d_2 = sample_points[sample_normals[:, 0] < 0]
+        # upper_surface_normal_2 = sample_normals[sample_normals[:, 0] < 0]
+        
+        # upper_surface_normal_2 = upper_surface_normal_2[(pts_3d_2 >= self.hparams.stretch[0].cpu().numpy()*1.1).all(axis=1) & (pts_3d_2 <= self.hparams.stretch[1].cpu().numpy()*1.1).all(axis=1)]
+        # pts_3d_2 = pts_3d_2[(pts_3d_2 >= self.hparams.stretch[0].cpu().numpy()*1.1).all(axis=1) & (pts_3d_2 <= self.hparams.stretch[1].cpu().numpy()*1.1).all(axis=1)]  # 只要bound内的点
+        # del sample_points, face_indices, sample_normals, mesh
+        # pts_3d = np.concatenate([pts_3d, pts_3d_2], 0)
+        # upper_surface_normal = np.concatenate([upper_surface_normal, upper_surface_normal_2], 0)
+
+
+
+        # vi = np.concatenate([pts_3d, upper_surface_normal],1)
+        # vi = torch.from_numpy(np.array(vi)).to(self.device)
+        # visualize_points_list = [vi.cpu().numpy()]
+        # visualize_points(visualize_points_list)
+
+        # num_point_each_img = 512
+        # pts_3d = []
+        # for idx in range(len(self.train_items)):
+        #     metadata_item = self.train_items[idx]
+        #     depth_map = metadata_item.load_depth_dji()
+
+        #     H, W = depth_map.shape[:2]
+        #     directions = get_ray_directions(W,
+        #                                 H,
+        #                                 metadata_item.intrinsics[0],
+        #                                 metadata_item.intrinsics[1],
+        #                                 metadata_item.intrinsics[2],
+        #                                 metadata_item.intrinsics[3],
+        #                                 self.hparams.center_pixels,
+        #                                 'cpu')
+        #     depth_map = depth_map.numpy()
+        #     K1 = metadata_item.intrinsics
+        #     K1 = np.array([[K1[0], 0, K1[2]],[0, K1[1], K1[3]],[0,0,1]])
+        #     E1 = np.array(metadata_item.c2w)
+        #     E1 = np.stack([E1[:, 0], E1[:, 1]*-1, E1[:, 2]*-1, E1[:, 3]], 1)
+
+        #     for p in range(num_point_each_img):
+        #         x, y = random.randint(0, W-1), random.randint(0, H-1)
+        #         depth = depth_map[y, x]   #* 0.5
+        #         if torch.isinf(torch.from_numpy(depth)):
+        #             continue
+        #         pt_3d = np.dot(np.linalg.inv(K1), np.array([x, y, 1])) * depth
+        #         pt_3d = np.append(pt_3d, 1)
+        #         world_point = np.dot(np.concatenate((E1, [[0,0,0,1]]), 0), pt_3d)
+        #         pts_3d.append(world_point[:3])
+
+        pts_3d = torch.from_numpy(np.array(pts_3d)).to(self.device)
+        # pts_3d = pts_3d[(pts_3d[:,1:] >= self.hparams.stretch[0][1:]*1.1).all(axis=1) & (pts_3d[:,1:] <= self.hparams.stretch[1][1:]*1.1).all(axis=1)]  # 只要bound内的点
+
+
+        
+
+
+        # visualize_points_list = [pts_3d.cpu().numpy()]
+        # visualize_points(visualize_points_list)
+        tracks_in_obj = (contract_to_unisphere_new(pts_3d, self.hparams)).float()
+        # tracks_in_obj = tracks_in_obj[(tracks_in_obj >= -1).all(axis=1) & (tracks_in_obj <= 1).all(axis=1)]  # 只要bound内的点
+
+
+        device = self.device
+        sdf_parameters = list(self.nerf.encoding.parameters())  \
+                       + list(self.nerf.plane_encoder.parameters())  \
+                       + list(self.nerf.decoder.parameters())
+        optimizer = Adam(sdf_parameters, lr=lr, **optim_cfg)
+        scaler = GradScaler(init_scale=128.0)
+        
+        # implicit_surface.preprocess_per_train_step(0)
+        self.nerf.encoding.set_anneal_iter(0)
+        
+        if safe_mse:
+            loss_eikonal_fn = lambda x: safe_mse_loss(x, x.new_ones(x.shape), reduction='mean', limit=1.0)
+        else:
+            loss_eikonal_fn = lambda x: F.mse_loss(x, x.new_ones(x.shape), reduction='mean')
+        
+        
+        with torch.enable_grad():
+            with tqdm(range(num_iters), desc=f"=> Pretraining SDF...") as pbar:
+                for it in pbar:
+                    # torch.cuda.empty_cache()
+
+                    samples_in_net = torch.empty([num_points,3], dtype=torch.float, device=device).uniform_(-1, 1)
+                    # samples_in_obj = self.nerf.encoding.space.unnormalize_coords(samples_in_net)
+                    
+
+                    # kdtree_B = cKDTree(tracks_in_obj.cpu().numpy())
+                    # nearest_distances, nearest_indices = kdtree_B.query(samples_in_net.cpu().numpy(), k=1)
+                    
+                    nearest_distances = torch.cdist(samples_in_net, tracks_in_obj)
+                    nearest_indices = torch.argmin(nearest_distances, dim=1)
+
+
+                    # 计算与最近点的距离， 符号由法线的朝向决定， 这里负值向天空
+                    floor_at_in_obj = tracks_in_obj[nearest_indices]
+                    sdf_gt_in_obj = (samples_in_net - floor_at_in_obj).norm(dim=-1)
+
+
+                    derection_vector = (samples_in_net - floor_at_in_obj)
+                    mesh_normal = torch.from_numpy(upper_surface_normal[nearest_indices.cpu().numpy()]).to(self.device)
+                    dot_product = torch.sum(derection_vector * mesh_normal, axis=1)
+                    sign_adjust = torch.where((dot_product > 0) | (samples_in_net[:,0] < min_altitude), 1, -1)
+                    # sign_adjust = torch.where(dot_product > 0, 1, -1)
+                    sdf_gt_in_obj = sign_adjust * sdf_gt_in_obj
+
+
+                    #---- Convert SDF GT value in real-world object's unit to network's unit
+                    sdf_gt = sdf_gt_in_obj / self.nerf.sdf_scale
+                    # sdf_gt = sdf_gt_in_obj / 25
+                    
+                    # 1. nablas
+                    pred_sdf, feature_vector, pred_nablas = self.nerf.forward_sdf_nablas(samples_in_net, nablas_has_grad=True)
+                    pred_sdf = pred_sdf
+                    nablas_norm = pred_nablas.norm(dim=-1)
+                    gradient_error = loss_eikonal_fn(nablas_norm)
+                    loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * gradient_error
+
+                    # # # 2. neus
+                    # sdf_nn_output= self.nerf.forward_sdf(samples_in_net)
+                    # pred_sdf = sdf_nn_output[:, :1]
+                    # gradient = self.nerf.gradient(samples_in_net, 0.005).squeeze()
+                    # # nablas_norm =  gradient / (1e-5 + torch.linalg.norm(gradient, ord=2, dim=-1,  keepdim = True))  # 这里instant-nsr 把gridient转换成了normal，做了一个归一化
+                    # pts_norm = torch.linalg.norm(samples_in_net.reshape(-1, 3), ord=2, dim=-1, keepdim=True).reshape(-1)
+                    # inside_sphere = (pts_norm < 1.0).float().detach()
+                    # relax_inside_sphere = (pts_norm < 1.5).float().detach()
+                    # gradient_error = (torch.linalg.norm(gradient.reshape(num_points, 3), ord=2, dim=-1) - 1.0) ** 2
+                    # # gradient_error = (relax_inside_sphere * gradient_error).sum() / (relax_inside_sphere.sum() + 1e-5)
+                    # gradient_error = gradient_error.sum()
+                    # loss = F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean') + w_eikonal * gradient_error
+                    
+                    self.writer.add_scalar('sdf_initial/sdf_loss', F.smooth_l1_loss(pred_sdf, sdf_gt, reduction='mean'), it)
+                    self.writer.add_scalar('sdf_initial/gradient_error', gradient_error, it)
+
+
+                    
+                    optimizer.zero_grad()
+                    
+                    # loss.backward()
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    if clip_grad_val > 0:
+                        torch.nn.utils.clip_grad.clip_grad_value_(sdf_parameters, clip_grad_val)
+                    
+                    # optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    
+
     def visualize_sdf_surface(self, nerf, save_path, resolution, threshold, device=None):
         print(f"==> Saving mesh to {save_path}")
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -2786,6 +3822,8 @@ class Runner:
 
         # # 保存点云到PLY文件
         # o3d.io.write_triangle_mesh("point_cloud.ply", mesh)
+
+
 
     def save_geometry(self, vertices, triangles, aabb_max, aabb_min, save_path):
         vertices = (vertices+1)/2
