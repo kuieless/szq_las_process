@@ -554,9 +554,9 @@ class Runner:
                                   dataset.get_state() if self.hparams.dataset_type == 'filesystem' else None)
                     if self.hparams.enable_instance and self.hparams.cached_centroids_type == 'all':
                         all_centroids = self.instance_cluster_prediction(train_iterations, dataset=dataset)
-                        val_metrics = self._run_validation(train_iterations, all_centroids)
+                        val_metrics, _ = self._run_validation(train_iterations, all_centroids)
                     else:
-                        val_metrics = self._run_validation(train_iterations)
+                        val_metrics, _ = self._run_validation(train_iterations)
                     self._write_final_metrics(val_metrics, train_iterations)
                     # raise TypeError
 
@@ -690,13 +690,20 @@ class Runner:
                 if (train_iterations > 0 and train_iterations % self.hparams.val_interval == 0) or train_iterations == self.hparams.train_iterations:
                     if self.hparams.enable_instance and self.hparams.cached_centroids_type == 'all':
                         all_centroids = self.instance_cluster_prediction(train_iterations, dataset=dataset)
-                        val_metrics = self._run_validation(train_iterations, all_centroids)
+                        val_metrics, all_centroids = self._run_validation(train_iterations, all_centroids)
                     else:
-                        val_metrics = self._run_validation(train_iterations)
+                        val_metrics, all_centroids = self._run_validation(train_iterations)
+                        
                     
                     if 'llff' not in self.hparams.dataset_type and 'sa3d' not in self.hparams.dataset_type:
                         self._write_final_metrics(val_metrics, train_iterations)
-                
+                    
+                    if self.hparams.enable_instance and train_iterations == self.hparams.train_iterations:
+                        self.hparams.render_zyq = True 
+                        if self.hparams.instance_loss_mode == 'linear_assignment':
+                            all_centroids=None
+                        
+                        _ = self._run_validation_render_zyq(train_iterations, all_centroids)
                 
                 if train_iterations >= self.hparams.train_iterations:
                     break
@@ -724,11 +731,18 @@ class Runner:
             else:
                 with open(self.hparams.cached_centroids_path, 'rb') as f:
                     all_centroids = pickle.load(f)
-            val_metrics = self._run_validation(train_iterations, all_centroids)
+            val_metrics, all_centroids = self._run_validation(train_iterations, all_centroids)
         else:
-            val_metrics = self._run_validation(train_iterations)
+            val_metrics, _ = self._run_validation(train_iterations)
         
         self._write_final_metrics(val_metrics, train_iterations=train_iterations)
+
+
+        if self.hparams.enable_instance:
+            self.hparams.render_zyq = True
+            if self.hparams.instance_loss_mode == 'linear_assignment':
+                all_centroids=None
+            val_metrics = self._run_validation_render_zyq(train_iterations, all_centroids)
         
 
 
@@ -1351,8 +1365,10 @@ class Runner:
             # used_files.sort()
             # process_item = [Path(far_p).stem for far_p in used_files]
 
-
-            experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+            if self.hparams.enable_instance:
+                experiment_path_current = self.experiment_path / "eval_fushi"
+            else:
+                experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
             Path(str(experiment_path_current)).mkdir()
             Path(str(experiment_path_current / 'val_rgbs')).mkdir()
             Path(str(experiment_path_current / 'val_rgbs'/'pred_all')).mkdir()
@@ -1405,14 +1421,13 @@ class Runner:
                     depth_map = results[f'depth_{typ}'].view(viz_result_rgbs.shape[0], viz_result_rgbs.shape[1]).numpy().astype(np.float16)
                     np.save(os.path.join(save_depth_dir, ("%06d.npy" % i)), depth_map)
 
-
                     if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
                         Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
                     Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
                         str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d.jpg" % i)))
                     
                     
-                        
+                     
                     # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                     img_list = [viz_result_rgbs * 255]
 
@@ -1456,9 +1471,9 @@ class Runner:
                     output_dir = str(experiment_path_current / 'panoptic')
                     if not os.path.exists(output_dir):
                         Path(output_dir).mkdir()
-                    np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                    np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                    np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
+                    # np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
+                    # np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
+                    # np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
                     if self.hparams.cached_centroids_type == 'all':
                         all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
                                                                 device=self.device, num_images=len(indices_to_eval))
@@ -1852,7 +1867,7 @@ class Runner:
                                 TP=TP, FP=FP, FN=FN
                             )
                             
-                            grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
+                            grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=4).permute((1, 2, 0)).contiguous()
                             grid = (grid * 255).cpu().numpy().astype(np.uint8)
                             
                             Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % save_i)))
@@ -1873,7 +1888,7 @@ class Runner:
                 if self.is_master and base_tmp_path is not None:
                     shutil.rmtree(base_tmp_path)
             
-            return val_metrics
+            return val_metrics, all_centroids
             
     
     def _run_validation_eval_m2f(self, train_index=-1, all_centroids=None) -> Dict[str, float]:
