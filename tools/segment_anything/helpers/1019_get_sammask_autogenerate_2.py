@@ -122,6 +122,7 @@ def _get_train_opts() -> Namespace:
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds',required=False, help='')
     parser.add_argument('--points_per_side', type=int, default=32,required=False, help='')
+    parser.add_argument('--eval', default=False, type=eval, choices=[True, False], help='')
     
 
     return parser.parse_args()
@@ -140,7 +141,13 @@ def hello(hparams: Namespace) -> None:
         hparams.train_scale_factor =1
         hparams.val_scale_factor =1
     runner = Runner(hparams)
-    train_items = runner.train_items
+
+
+    if not hparams.eval:
+        train_items = runner.train_items
+
+    else:
+        train_items = runner.val_items
 
 
     points_per_side=hparams.points_per_side
@@ -186,20 +193,23 @@ def hello(hparams: Namespace) -> None:
     Path(os.path.join(output_path,'instances_mask_vis_each')).mkdir(exist_ok=True)
 
     
-    used_files = []
-    for ext in ('*.png', '*.jpg'):
-        # used_files.extend(glob.glob(os.path.join(str(Path(hparams.image_path).parent.parent), 'subset','rgbs', ext)))
-        used_files.extend(glob.glob(os.path.join(hparams.dataset_path, 'subset','rgbs', ext)))
+
+    if not hparams.eval:
         
-    used_files.sort()
-    process_item = [Path(far_p).stem for far_p in used_files]
+        used_files = []
+        for ext in ('*.png', '*.jpg'):
+            used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
+        used_files.sort()
+        process_item = [Path(far_p).stem for far_p in used_files]
+
 
     id = 1 
     # id = 65537 
     for metadata_item in tqdm.tqdm(train_items):
         img_name = Path(metadata_item.image_path).stem
-        if img_name not in process_item or metadata_item.is_val: # or int(img_name) < 190:
-            continue
+        if not hparams.eval:
+            if img_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
+                continue
         image = metadata_item.load_image()
         feature = torch.from_numpy(np.load(str(metadata_item.depth_dji_path).replace('depth_mesh', 'sam_features')))
         

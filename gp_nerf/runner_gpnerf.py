@@ -748,6 +748,7 @@ class Runner:
 
     def _write_final_metrics(self, val_metrics: Dict[str, float], train_iterations) -> None:
         if self.is_master:
+            
             experiment_path_current = self.experiment_path / "eval_{}".format(train_iterations)
             with (experiment_path_current /'metrics.txt').open('a') as f:
                 if 'pq' in val_metrics:
@@ -1335,8 +1336,10 @@ class Runner:
             dataset_path = Path(self.hparams.dataset_path)
 
             # val_paths = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
-
-            val_paths = sorted(list((dataset_path / 'render_far0.3_val' / 'metadata').iterdir()))
+            if 'Yingrenshi' in self.hparams.dataset_path:
+                val_paths = sorted(list((dataset_path / 'render_far0.3' / 'metadata').iterdir()))
+            else:
+                val_paths = sorted(list((dataset_path / 'render_far0.3_val' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_far0.5' / 'metadata').iterdir()))
             # val_paths = sorted(list((dataset_path / 'render_line' / 'metadata').iterdir()))
 
@@ -1365,7 +1368,7 @@ class Runner:
             # used_files.sort()
             # process_item = [Path(far_p).stem for far_p in used_files]
 
-            if self.hparams.enable_instance:
+            if self.hparams.enable_instance and self.hparams.render_zyq:
                 experiment_path_current = self.experiment_path / "eval_fushi"
             else:
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
