@@ -100,7 +100,7 @@ def hello(hparams: Namespace) -> None:
 
 
         Path(f"{hparams.output_path}").mkdir(exist_ok=True, parents=True)
-        Image.fromarray(i4_new.astype(np.uint8)).save(f"{hparams.output_path}/{file_name}.png")
+        Image.fromarray(i4_new.astype(np.uint16)).save(f"{hparams.output_path}/{file_name}.png")
 
         alpha=0.65
         i4_viz = label_to_color(i4)*alpha+rgb*(1-alpha)

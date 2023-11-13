@@ -1174,8 +1174,6 @@ class Runner:
                         metrics['loss'] += self.hparams.wgt_group_loss * group_loss
             
 
-            if self.writer is not None:
-                self.writer.add_scalar('1_train/nloss_decay', nloss_decay, train_iterations)
 
 
         if 'sdf' in self.hparams.network_type and not self.hparams.freeze_geo:

@@ -107,13 +107,12 @@ def hello(hparams: Namespace) -> None:
         instance_label[instance_label == 80] = 81
         
 
-
         Path(f"{hparams.output_path}/instances_gt").mkdir(exist_ok=True, parents=True)
-        Image.fromarray(instance_label.astype(np.uint8)).save(f"{hparams.output_path}/instances_gt/{file_name}.png")
+        Image.fromarray(instance_label.astype(np.uint16)).save(f"{hparams.output_path}/instances_gt/{file_name}.png")
 
 
         Path(f"{hparams.output_path}/labels_gt").mkdir(exist_ok=True, parents=True)
-        Image.fromarray(semantic_label.astype(np.uint8)).save(f"{hparams.output_path}/labels_gt/{file_name}.png")
+        Image.fromarray(semantic_label.astype(np.uint16)).save(f"{hparams.output_path}/labels_gt/{file_name}.png")
 
 
         alpha=0.65
