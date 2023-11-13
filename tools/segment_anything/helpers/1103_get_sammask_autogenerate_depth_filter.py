@@ -283,8 +283,8 @@ def hello(hparams: Namespace) -> None:
 
 
         ### NOTE: 有时候会报维度不匹配的错误，修改下面的代码
-        # masks = mask_generator.generate(image, feature[0])
-        masks = mask_generator.generate(image, feature)
+        masks = mask_generator.generate(image, feature[0])
+        # masks = mask_generator.generate(image, feature)
         
 
         ## 把单张depth投影到三维

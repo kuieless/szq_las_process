@@ -94,7 +94,7 @@ def hello(hparams) -> None:
     
 
 
-    cluster_sizes=np.arange(250, 3000, 50).tolist()
+    cluster_sizes=np.arange(250, 2500, 50).tolist()
     for cluster_size in cluster_sizes:
         train_num = 0
 

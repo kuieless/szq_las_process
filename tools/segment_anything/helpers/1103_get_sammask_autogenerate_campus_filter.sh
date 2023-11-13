@@ -8,7 +8,7 @@ export CUDA_VISIBLE_DEVICES=4
 #     --threshold=0.001   \
 #     --dataset_path=/data/yuqi/Datasets/DJI/Campus_new
     
-
+#val
 python /data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/1103_get_sammask_autogenerate_depth_filter.py  \
     --output_path=zyq/1107_get_instance_mask_val_campus_depth  \
     --threshold=0.001   \
