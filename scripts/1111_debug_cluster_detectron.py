@@ -52,7 +52,7 @@ def hello() -> None:
     use_dbscan=True
     use_silverman=False
     cluster_size=500
-    output=f'1112_debug_campus_cluster_{num_points}_detectron'
+    output=f'1113_debug_campus_cluster_{num_points}_detectron'
 
     # 这里创建文件夹用于存放聚类调试的结果
     Path(os.path.join('zyq',output)).mkdir(exist_ok=True)

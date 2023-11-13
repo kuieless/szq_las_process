@@ -58,7 +58,8 @@ def hello() -> None:
     use_dbscan=True
     use_silverman=False
     cluster_size=1000
-    output=f'1112_debug_campus_cluster_{num_points}_{cluster_size}_samdepth_mean_detentron_linear'
+    # output=f'1113_debug_campus_cluster_{num_points}_{cluster_size}_samdepth_mean_cv'
+    output=f'1113_debug_campus_cluster_{num_points}_{cluster_size}_samdepth_mean_detectron'
 
     # 这里创建文件夹用于存放聚类调试的结果
     Path(os.path.join('zyq',output)).mkdir(exist_ok=True)
@@ -70,6 +71,7 @@ def hello() -> None:
 
 
     output_dir = 'logs_campus/1111_campus_detectron/5/eval_100000_1112/panoptic'
+    # output_dir = 'logs_campus/1107_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview/12/eval_100000_1112/panoptic'
     
     ### 先读入原始pred的rgb， semantic, instance, 以及对应的gt
     all_instance_features = np.load(os.path.join(output_dir, "all_instance_features.npy"))

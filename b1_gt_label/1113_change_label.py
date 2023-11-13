@@ -60,13 +60,13 @@ def hello(hparams: Namespace) -> None:
 
     semantic_paths = []
     for ext in ('*.png', '*.jpg'):
-        semantic_paths.extend(glob(os.path.join('b1_gt_label/labels_gt', ext)))
+        semantic_paths.extend(glob(os.path.join('b1_gt_label/labels_gt2', ext)))
     semantic_paths.sort()
 
 
     instance_paths = []
     for ext in ('*.png', '*.jpg'):
-        instance_paths.extend(glob(os.path.join('b1_gt_label/instances_gt', ext)))
+        instance_paths.extend(glob(os.path.join('b1_gt_label/instances_gt2', ext)))
     instance_paths.sort()
 
 
