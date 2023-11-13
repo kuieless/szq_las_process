@@ -35,24 +35,31 @@ from gp_nerf.eval_utils import calculate_panoptic_quality_folders
 from tools.contrastive_lift.utils import create_instances_from_semantics
 
 
-# torch.cuda.set_device(7)
+# torch.cuda.set_device(6)
 
 
 
 
 
 def hello() -> None:
+
+
+
     H, W = 912, 1368
-    eval_num = 11
+    eval_num = 15
     train_num = 0
+
+    ### 只考虑building
+    thing_classes = [1]
 
     device='cuda'
     bandwidth=0.2
-    num_points=200000
+    num_points=500000
     use_dbscan=True
     use_silverman=False
     cluster_size=1000
-    output=f'1112_debug_campus_cluster_{num_points}_{cluster_size}_ori'
+    output=f'1112_debug_yingrenshi_cluster_{num_points}_{cluster_size}_samdepth_mean'
+    # output=f'1112_debug_yingrenshi_cluster_{num_points}_{cluster_size}_samdepth_mean_detectron'
 
     # 这里创建文件夹用于存放聚类调试的结果
     Path(os.path.join('zyq',output)).mkdir(exist_ok=True)
@@ -62,8 +69,8 @@ def hello() -> None:
     Path(os.path.join('zyq',output,'gt_surrogateid')).mkdir(exist_ok=True)
 
 
-
-    output_dir = 'logs_campus/1107_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview/12/eval_100000_1112/panoptic'
+    output_dir = 'logs_dji/1104_yingrenshi_density_depth_hash22_instance_origin_sam_0.001_depth_crossview/3/eval_200000/panoptic'
+    # output_dir = 'logs_dji/1111_yingrenshi_detectron/1/eval_100000/panoptic'
     
     ### 先读入原始pred的rgb， semantic, instance, 以及对应的gt
     all_instance_features = np.load(os.path.join(output_dir, "all_instance_features.npy"))
@@ -81,23 +88,44 @@ def hello() -> None:
     gt_points_rgb=torch.from_numpy(gt_points_rgb).to(device).view(eval_num, H*W, -1)
     gt_points_instance=torch.from_numpy(gt_points_instance).to(device).view(eval_num, H*W)
 
-    ### 只考虑building
-    thing_classes = [1]
     
     all_centroids=None
-    # with open('logs_dji/1025_yingrenshi_density_depth_hash22_instance_freeze_gt_slow/0/eval_170000/test_centroids.npy', 'rb') as f:
-    #     all_centroids = pickle.load(f)
-    
 
     ### 先对原始的pred instance feature， 用 pred semantic 过滤， 这里的 pred semantic 已经通过gt semantic过滤了
-    all_thing_features = create_instances_from_semantics(all_instance_features, all_points_semantics.view(-1), thing_classes,device=device)
+    all_thing_features = create_instances_from_semantics(all_instance_features, all_points_semantics.view(-1), thing_classes=thing_classes, device=device)
     
 
-    gt_points_instance_cuda = gt_points_instance.clone().view(-1)
-    # 这里进行均匀采样的实验， 利用gt instance 得到采样的ray，然后把 改变all_thing_features 
-    points_per_label = 10000
-        
+    # # 这里进行均匀采样的实验， 利用gt instance 得到采样的ray，然后把 改变all_thing_features 
+    #########################  1.
+    # gt_points_instance_cuda = gt_points_instance.clone().view(-1)
+    # points_per_label = 10000
+
+
+
+    #### 2023.11.12  对每张图上的 gt_points_instance 利用sam_mask和pred semantic进行一个过滤
+
+    sam_paths = []
+    for ext in ('*.png', '*.npy'):
+        sam_paths.extend(glob(os.path.join('/data/yuqi/Datasets/DJI/Yingrenshi_20230926/val/instances_mask_0.001_depth', ext)))
+    sam_paths.sort()
+
+    sam_masks = []
+    for idx, sam_path in enumerate(tqdm(sam_paths)):
+        label = np.load(sam_path)
+        label =  torch.tensor(label.astype(np.int32),dtype=torch.int32)
+        sam_masks.append(label)
+    assert len(sam_masks) ==eval_num
+    sam_masks = torch.stack(sam_masks).to(device).flatten()
+
+    valid_mask = (all_points_semantics.view(-1) == 1) * (sam_masks).bool()
+    sam_masks[~valid_mask] = 0
+    gt_points_instance_cuda = sam_masks.clone()
+
+
+
     unique_labels, label_counts = torch.unique(gt_points_instance_cuda, return_counts=True)
+
+    points_per_label = int((num_points / (unique_labels.shape[0]-1))*1.05)
 
 
     sample_mean = []
@@ -116,21 +144,23 @@ def hello() -> None:
             sampled_indices = np.random.choice(repeat_label_indices, size=points_per_label, replace=False)
         sample_mean.append(sampled_indices)
     sample_mean = torch.from_numpy(np.array(sample_mean))
-        
-    # all_thing_features[~(mask.bool()),0] = float('inf')
-
     all_thing_features_mean = all_thing_features[sample_mean.flatten()]
-
 
     _, centroids = cluster(all_thing_features_mean.cpu().numpy(), bandwidth=bandwidth, device=device, num_images=eval_num+train_num, 
                                    num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan,cluster_size=cluster_size, all_centroids=all_centroids, use_mean=True)
     print(f"centroids shape: {centroids.shape}")
-    
-    
+
     
     all_points_instances, centroids = cluster(all_thing_features.cpu().numpy(), bandwidth=bandwidth, device=device, num_images=eval_num+train_num, 
                                    num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan,cluster_size=cluster_size, all_centroids=centroids)
     
+    #########################   2. 
+    
+
+    # all_points_instances, centroids = cluster(all_thing_features.cpu().numpy(), bandwidth=bandwidth, device=device, num_images=eval_num+train_num, 
+    #                                num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan,cluster_size=cluster_size)
+    
+    #########################
     
     
     
@@ -161,16 +191,6 @@ def hello() -> None:
         
         Image.fromarray(gt_instances.reshape(H, W).cpu().numpy().astype(np.uint16)).save(
             os.path.join('zyq', output , 'gt_surrogateid', ("%06d.png" % save_i)))        
-        
-        # stack = visualize_panoptic_outputs(
-        #     p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
-        #     H, W, thing_classes=thing_classes, visualize_entropy=False
-        # )
-        # grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
-        # grid = (grid * 255).cpu().numpy().astype(np.uint8)
-        
-        # Image.fromarray(grid).save(os.path.join('zyq',output,("%06d.jpg" % save_i)))
-
     
     path_target_sem = os.path.join('zyq',output,'gt_semantics')
     path_target_inst = os.path.join('zyq',output,'gt_surrogateid')
@@ -200,7 +220,8 @@ def hello() -> None:
                 print(message)
             f.write('{}\n')
             f.write(f"pq, rq, sq, mIoU, TP, FP, FN: {metrics_each['all']['pq'][0].item()},{metrics_each['all']['rq'][0].item()},{metrics_each['all']['sq'][0].item()},{metrics_each['all']['iou_sum'][0].item()},{metrics_each['all']['true_positives'][0].item()},{metrics_each['all']['false_positives'][0].item()},{metrics_each['all']['false_negatives'][0].item()}\n")
-                
+            f.write('all_centroids_shape: {}\n'.format(centroids.shape))
+            
         print('done')
 
 

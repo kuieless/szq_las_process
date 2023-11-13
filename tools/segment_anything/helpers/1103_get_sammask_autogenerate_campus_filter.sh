@@ -1,10 +1,17 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=4
 
+
+# python /data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/1103_get_sammask_autogenerate_depth_filter.py  \
+#     --output_path=zyq/1107_get_instance_mask_train_campus_depth  \
+#     --threshold=0.001   \
+#     --dataset_path=/data/yuqi/Datasets/DJI/Campus_new
+    
 
 python /data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/1103_get_sammask_autogenerate_depth_filter.py  \
-    --output_path=zyq/1107_get_instance_mask_train_campus_depth  \
+    --output_path=zyq/1107_get_instance_mask_val_campus_depth  \
     --threshold=0.001   \
-    --dataset_path=/data/yuqi/Datasets/DJI/Campus_new
+    --dataset_path=/data/yuqi/Datasets/DJI/Campus_new  \
+    --eval=True
     

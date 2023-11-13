@@ -177,6 +177,7 @@ def _get_train_opts() -> Namespace:
 
     # parser.add_argument('--depth_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/depth_mesh',required=False, help='')
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
+    parser.add_argument('--eval', default=False, type=eval, choices=[True, False], help='')
 
     
     
@@ -197,7 +198,12 @@ def hello(hparams: Namespace) -> None:
         hparams.train_scale_factor =1
         hparams.val_scale_factor =1
     runner = Runner(hparams)
-    train_items = runner.train_items
+
+    if not hparams.eval:
+        train_items = runner.train_items
+
+    else:
+        train_items = runner.val_items
 
 
     points_per_side=32
@@ -244,14 +250,15 @@ def hello(hparams: Namespace) -> None:
     Path(os.path.join(output_path,'instances_mask_vis_each')).mkdir(exist_ok=True)
 
     
-
-    used_files = []
-    for ext in ('*.png', '*.jpg'):
-        # used_files.extend(glob.glob(os.path.join(str(Path(hparams.image_path).parent.parent), 'subset','rgbs', ext)))
-        used_files.extend(glob.glob(os.path.join(hparams.dataset_path, 'subset','rgbs', ext)))
+    if not hparams.eval:
         
-    used_files.sort()
-    process_item = [Path(far_p).stem for far_p in used_files]
+        used_files = []
+        for ext in ('*.png', '*.jpg'):
+            used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
+        used_files.sort()
+        process_item = [Path(far_p).stem for far_p in used_files]
+
+
     # process_item = process_item[350:]
     visualize_ori = True
     if visualize_ori:
@@ -260,8 +267,9 @@ def hello(hparams: Namespace) -> None:
     
     for metadata_item in tqdm.tqdm(train_items):
         img_name = Path(metadata_item.image_path).stem
-        if img_name not in process_item or metadata_item.is_val: # or int(img_name) < 190:
-            continue
+        if not hparams.eval:
+            if img_name not in process_item or metadata_item.is_val: # or int(file_name) != 182:
+                continue
 
         image = metadata_item.load_image()
         
@@ -275,8 +283,8 @@ def hello(hparams: Namespace) -> None:
 
 
         ### NOTE: 有时候会报维度不匹配的错误，修改下面的代码
-        masks = mask_generator.generate(image, feature[0])
-        # masks = mask_generator.generate(image1, feature)
+        # masks = mask_generator.generate(image, feature[0])
+        masks = mask_generator.generate(image, feature)
         
 
         ## 把单张depth投影到三维

@@ -1,5 +1,7 @@
 
 # Byte-compiled / optimized / DLL files
+zyq_2d_to_3d
+zyq_sam_label
 *.txt
 *.png
 *.jpg

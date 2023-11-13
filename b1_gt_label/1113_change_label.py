@@ -39,8 +39,8 @@ torch.cuda.set_device(4)
 
 def _get_train_opts() -> Namespace:
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
-    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Campus_new',required=False, help='')
-    parser.add_argument('--output_path', type=str, default='campus_gt_label/6_merge',required=False, help='experiment name')
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='b1_gt_label/change',required=False, help='experiment name')
     return parser.parse_args()
 
 def label_to_color(label_array):
@@ -60,17 +60,17 @@ def hello(hparams: Namespace) -> None:
 
     semantic_paths = []
     for ext in ('*.png', '*.jpg'):
-        semantic_paths.extend(glob(os.path.join('campus_gt_label/labels_gt_3_merge1and2', ext)))
+        semantic_paths.extend(glob(os.path.join('b1_gt_label/labels_gt', ext)))
     semantic_paths.sort()
 
 
     instance_paths = []
     for ext in ('*.png', '*.jpg'):
-        instance_paths.extend(glob(os.path.join('campus_gt_label/instances_gt_5_replace_instancelabel7', ext)))
+        instance_paths.extend(glob(os.path.join('b1_gt_label/instances_gt', ext)))
     instance_paths.sort()
 
 
-    H, W = 912,1368
+    H, W = 1024,1536
     for idx, semantic in enumerate(tqdm(semantic_paths)):
         file_name = Path(semantic).stem
         instance = instance_paths[idx]
@@ -92,12 +92,19 @@ def hello(hparams: Namespace) -> None:
         instance_label[~building_mask] = 0 
 
 
-        to_replace = [42, 26, 31,32,33,34,35, 41, 2,3,4, 82,  57,59,60,61, 79, 48, 51]
-        remapping_mask = np.isin(instance_label, to_replace)
+        to_replac_road = [72,73,104,75,76,79,77,88,91,92,93,94,97,63]
+        to_replac_tree = [5,10,82,83,84,3,13]
 
-        instance_label[remapping_mask] = 0
-        semantic_label[remapping_mask] = 2
+        remapping_road_mask = np.isin(instance_label, to_replac_road)
+        remapping_tree_mask = np.isin(instance_label, to_replac_tree)
 
+        instance_label[remapping_road_mask] = 0
+        semantic_label[remapping_road_mask] = 2
+
+        instance_label[remapping_tree_mask] = 0
+        semantic_label[remapping_tree_mask] = 4
+
+        instance_label[instance_label == 80] = 81
         
 
 
