@@ -198,7 +198,7 @@ def hello(hparams: Namespace) -> None:
         
         used_files = []
         for ext in ('*.png', '*.jpg'):
-            used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
+            used_files.extend(glob.glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
         used_files.sort()
         process_item = [Path(far_p).stem for far_p in used_files]
 

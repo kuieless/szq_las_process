@@ -1189,9 +1189,6 @@ class Runner:
                         metrics['loss'] += self.hparams.wgt_group_loss * group_loss
             
 
-            if self.writer is not None:
-                self.writer.add_scalar('1_train/nloss_decay', nloss_decay, train_iterations)
-
 
         if 'sdf' in self.hparams.network_type and not self.hparams.freeze_geo:
 
@@ -1593,6 +1590,15 @@ class Runner:
                         
                         # get rendering rgbs and depth
                         viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
+
+                        if self.hparams.eval_others and self.hparams.eval_others_name == 'labels_panolift':
+                            viz_result_rgbs = Image.open(os.path.join(self.hparams.dataset_path, 'val', 'rgbs_panolift',(Path(metadata_item.image_path).stem+'.png'))).convert('RGB')
+                            size = viz_result_rgbs.size
+                            if size[0] != self.W or size[1] != self.H:
+                                viz_result_rgbs = viz_result_rgbs.resize((self.W, self.H), Image.BILINEAR)
+                            viz_result_rgbs = torch.tensor(np.asarray(viz_result_rgbs))/255
+
+
                         viz_result_rgbs = viz_result_rgbs.clamp(0,1)
                         if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
                             val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
