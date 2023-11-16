@@ -202,8 +202,8 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
             sem_label = remapping(sem_label)
 
             ## 1111 可视化的semantic图像也改为和gt semantic 同样的范围
-            invalid_mask = gt_label==0
-            sem_label[invalid_mask.view(sem_label.shape)] = 0
+            # invalid_mask = gt_label==0
+            # sem_label[invalid_mask.view(sem_label.shape)] = 0
 
         gt_label_rgb = custom2rgb(gt_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())
         visualize_sem = custom2rgb(sem_label.view(*viz_rgbs.shape[:-1]).cpu().numpy())

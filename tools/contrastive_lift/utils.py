@@ -53,8 +53,8 @@ def cluster(all_thing_features, bandwidth, device, num_images=None, use_dbscan=F
         fps_points_rescaled = centers_rescaled[fps_points_indices]
     else:
     # ##### NOTE: 2. 不需要rescale， 但变量保留原始名称 'fps_points_rescaled'
-        # num_points = min(centers_filtered.shape[0], num_points)
-        # print(f'the setting num_point_size > larger than  the centers_filtered(input):{num_points}')
+        num_points = min(centers_filtered.shape[0], num_points)
+        print(f'the setting num_point_size > larger than  the centers_filtered(input):{num_points}')
         fps_points_indices = np.random.choice(centers_filtered.shape[0], num_points, replace=False)
         fps_points_rescaled = centers_filtered[fps_points_indices]
 
