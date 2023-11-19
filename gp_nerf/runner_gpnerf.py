@@ -1825,7 +1825,7 @@ class Runner:
                     path_pred_sem = str(experiment_path_current / 'pred_semantics')
                     path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
                     if Path(path_target_inst).exists():
-                        pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                        pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
                                         path_target_sem, path_target_inst, image_size=[self.W, self.H])
                         with (experiment_path_current / 'instance.txt').open('w') as f:
                             f.write(f'\n\npred_areas\n')  
@@ -1873,7 +1873,7 @@ class Runner:
                             stack = visualize_panoptic_outputs(
                                 p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
                                 self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False,
-                                TP=TP, FP=FP, FN=FN
+                                TP=TP, FP=FP, FN=FN, matching=matching
                             )
                             
                             grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=4).permute((1, 2, 0)).contiguous()
@@ -2143,7 +2143,7 @@ class Runner:
                     path_pred_sem = str(experiment_path_current / 'pred_semantics')
                     path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
                     if Path(path_target_inst).exists():
-                        pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+                        pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
                                         path_target_sem, path_target_inst, image_size=[self.W, self.H])
                         val_metrics['pq'] = pq
                         val_metrics['sq'] = sq

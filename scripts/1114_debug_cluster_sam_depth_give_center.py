@@ -44,15 +44,13 @@ import configargparse
 def _get_train_opts() -> Namespace:
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
     parser.add_argument('--num_points', type=int, default=200000,required=False, help='')
-    parser.add_argument('--output_path', type=str, default='zyq/1113_campus_cross_view',required=False, help='')
-    parser.add_argument('--panoptic_dir', type=str, default='logs_campus/1107_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview/12/eval_100000_1112/panoptic',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='zyq/1117_cluster_colorize',required=False, help='')
+    parser.add_argument('--panoptic_dir', type=str, default='logs_campus/1113_campus_density_depth_hash22_instance_origin_sam_0.001_depth_crossview_all/0/eval_100000/panoptic',required=False, help='')
     
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Campus_new',required=False, help='')
-    parser.add_argument('--all_centroids', type=str, default='',required=False, help='')
-    
-    parser.add_argument('--type', type=str, default='mean',required=False, choices=['mean', 'uniform'], help='')
-    
-
+    parser.add_argument('--all_centroids', type=str, default='/data/yuqi/code/GP-NeRF-semantic/zyq/1115_cluster_campus/mean_cross_view_all/mean_depth_200000_1000/test_centroids.npy',required=False, help='')
+    parser.add_argument('--cluster_sizes', type=int, default=1000,required=False, help='')
+        
         
     return parser.parse_args()
 
@@ -98,12 +96,12 @@ def hello(hparams) -> None:
 
 
     # cluster_sizes=np.arange(350, 2500, 100).tolist()
-    cluster_sizes=[1000]
+    cluster_sizes=[hparams.cluster_sizes]
 
     for cluster_size in cluster_sizes:
         train_num = 0
 
-        output=os.path.join(output_path, f'{hparams.type}_depth_{num_points}_{cluster_size}')
+        output=os.path.join(output_path, f'mean_depth_{num_points}_{cluster_size}')
 
         # 这里创建文件夹用于存放聚类调试的结果
         Path(os.path.join(output)).mkdir(exist_ok=True)
@@ -132,9 +130,9 @@ def hello(hparams) -> None:
         ### 先对原始的pred instance feature， 用 pred semantic 过滤， 这里的 pred semantic 已经通过gt semantic过滤了
         all_thing_features = create_instances_from_semantics(all_instance_features, all_points_semantics.view(-1), thing_classes=thing_classes, device=device)
         
-        #################################### 1 . mean 聚类
         with open(hparams.all_centroids, 'rb') as f:
             all_centroids = pickle.load(f)
+            print(f"load {hparams.all_centroids}")
 
         all_points_instances, centroids = cluster(all_thing_features.cpu().numpy(), bandwidth=bandwidth, device=device, num_images=eval_num+train_num, 
                                     num_points=num_points, use_silverman=use_silverman, use_dbscan=use_dbscan,cluster_size=cluster_size, all_centroids=all_centroids)
@@ -173,7 +171,7 @@ def hello(hparams) -> None:
         path_pred_sem = os.path.join(output,'pred_semantics')
         path_pred_inst = os.path.join(output,'pred_surrogateid')
         if Path(path_target_inst).exists():
-            pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN  = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
+            pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching  = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
                             path_target_sem, path_target_inst, image_size=[W,H])
             # val_metrics['pq'] = pq
             # val_metrics['sq'] = sq
@@ -216,7 +214,7 @@ def hello(hparams) -> None:
                 stack = visualize_panoptic_outputs(
                     p_rgb.cpu(), p_semantics.cpu(), p_instances.cpu(), None, gt_rgb.cpu(), gt_semantics.cpu(), gt_instances.cpu(),
                     H, W, thing_classes=thing_classes, visualize_entropy=False,
-                    TP=TP, FP=FP, FN=FN
+                    TP=TP, FP=FP, FN=FN, matching=matching
                 )
                 grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=4).permute((1, 2, 0)).contiguous()
                 grid = (grid * 255).cpu().numpy().astype(np.uint8)
@@ -234,9 +232,6 @@ def hello(hparams) -> None:
 
             writer.add_scalar('centroids', centroids.shape[0], cluster_size)
 
-                
-        with open(os.path.join(output, 'test_centroids.npy'), "wb") as file:
-            pickle.dump(centroids, file)
 
 
 if __name__ == '__main__':

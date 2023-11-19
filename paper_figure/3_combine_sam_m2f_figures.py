@@ -39,7 +39,7 @@ def get_id(sam, m2f):
         counts_total = sam_mask_counts[sam_mask_unique==1]
         couts_max_label = counts.max()
         # if couts_max_label / counts_total > 0.1:
-        if couts_max_label / counts_total > 0.7:    #20231018 改成>0.7, 避免
+        if couts_max_label / counts_total > 0.2:    #20231018 改成>0.7, 避免
             id_max_label = unique[counts.argmax()]
         else:
             id_max_label = 0
@@ -92,7 +92,7 @@ def _get_train_opts() -> Namespace:
     # parser.add_argument('--sam_features_path', type=str, default='',required=False, help='')
     parser.add_argument('--labels_m2f_path', type=str, default='',required=False, help='')
     parser.add_argument('--rgbs_path', type=str, default='',required=False, help='')
-    parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/paper_figure/3_semantic_fusion',required=False, help='')
+    parser.add_argument('--output_path', type=str, default='/data/yuqi/code/GP-NeRF-semantic/paper_figure/3_semantic_fusion_1117',required=False, help='')
     
     return parser.parse_args()
 
@@ -116,7 +116,7 @@ def hello(hparams: Namespace) -> None:
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to(device=device)
 
-    mask_generator = SamAutomaticMaskGenerator(sam, points_per_side=64)
+    mask_generator = SamAutomaticMaskGenerator(sam, points_per_side=128)
     
 
 
@@ -145,7 +145,7 @@ def hello(hparams: Namespace) -> None:
     Image.fromarray(mask_rgb).save(os.path.join(save_path_vis, img_name+".png"))
     
     
-    Image.fromarray((0.3*mask_rgb+0.7*image1).astype(np.uint8)).save(os.path.join(save_path_alpha, img_name+".png"))
+    Image.fromarray((0.5*mask_rgb+0.5*image1).astype(np.uint8)).save(os.path.join(save_path_alpha, img_name+".png"))
 
 
     

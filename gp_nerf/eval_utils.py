@@ -41,8 +41,8 @@ def calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, path_targe
         target_ = torch.cat([img_target_sem, img_target_inst], dim=1).reshape(-1, 2)
         pred.append(pred_)
         target.append(target_)
-    pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN  = panoptic_quality(torch.cat(pred, dim=0).cuda(), torch.cat(target, dim=0).cuda(), things, stuff, allow_unknown_preds_category=True)
-    return pq.item(), sq.item(), rq.item(), metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN
+    pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching  = panoptic_quality(torch.cat(pred, dim=0).cuda(), torch.cat(target, dim=0).cuda(), things, stuff, allow_unknown_preds_category=True)
+    return pq.item(), sq.item(), rq.item(), metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching
 
 
 
@@ -283,7 +283,11 @@ def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_la
         if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label')):
             Path(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label')).mkdir()
         # if hparams.save_individual:
-        Image.fromarray((gt_label_rgb.cpu().numpy() * (1-alpha) + viz_result_rgbs.cpu().numpy() * alpha).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label' / ("%06d_gt_label.jpg" % i)))
+        valid_gt_label = (gt_label != 0).view(*viz_rgbs.shape[:-1]).cpu().numpy() # no supervision
+        gt_label_rgb_1 = viz_result_rgbs.cpu().numpy()
+        gt_label_rgb_1[valid_gt_label] = (gt_label_rgb.cpu().numpy())[valid_gt_label] * (1-alpha) + viz_result_rgbs.cpu().numpy()[valid_gt_label] * alpha
+        # gt_label_rgb_1 = (gt_label_rgb.cpu().numpy() * (1-alpha) + viz_result_rgbs.cpu().numpy() * alpha).astype(np.uint8)
+        Image.fromarray(gt_label_rgb_1.astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / 'alpha_gt_label' / ("%06d_gt_label.jpg" % i)))
 
         if writer is not None:
             writer.add_image('5_val_images_semantic/{}'.format(i), torch.from_numpy(visualize_sem).permute(2, 0, 1), i)
@@ -308,9 +312,9 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
             sem_logits = results[f'sem_map_{typ}']
             sem_label = logits_2_label(sem_logits)
             sem_label = remapping(sem_label)
-            if not hparams.render_zyq:
-                invalid_mask = gt_label==0
-                sem_label[invalid_mask.view(sem_label.shape)] = 0
+            # if not hparams.render_zyq:
+                # invalid_mask = gt_label==0
+                # sem_label[invalid_mask.view(sem_label.shape)] = 0
         else:
             sem_label = torch.ones_like(instances)
         

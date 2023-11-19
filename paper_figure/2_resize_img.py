@@ -27,13 +27,13 @@ def resize_images(input_folder, output_folder, min_short_side=300):
 
 if __name__ == "__main__":
     # 输入文件夹路径
-    input_folder_path = "/data/yuqi/code/GP-NeRF-semantic/paper_figure/3_semantic_fusion"
+    input_folder_path = "/data/yuqi/code/GP-NeRF-semantic/paper_figure/5_dep_prior1"
 
     # 输出文件夹路径
-    output_folder_path = "/data/yuqi/code/GP-NeRF-semantic/paper_figure/3_semantic_fusion/resize"
+    output_folder_path = "/data/yuqi/code/GP-NeRF-semantic/paper_figure/5_dep_prior1/resize"
 
     # 最短边设为300
-    min_short_side = 300
+    min_short_side = 912
 
     # 调用函数进行resize
     resize_images(input_folder_path, output_folder_path, min_short_side)

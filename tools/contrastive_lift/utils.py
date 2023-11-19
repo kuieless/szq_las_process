@@ -192,10 +192,15 @@ def assign_clusters(all_thing_features, all_points_semantics, all_centroids, dev
 
     return all_points_instances
 
+def find_key_by_value(dictionary, target_value):
+    for key, value in dictionary.items():
+        if value == target_value:
+            return key
+    return None  # 如果找不到对应值的键，可以根据需求返回一个默认值或者抛出异常
 
 
 def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, semantics, instances, H, W, thing_classes, visualize_entropy=True,
-                               m2f_semantics=None, m2f_instances=None, TP=None, FP=None, FN=None):
+                               m2f_semantics=None, m2f_instances=None, TP=None, FP=None, FN=None, matching=None):
     alpha = 0.65
     distinct_colors = DistinctColors()
     distinct_colors_semantic = DistinctColors_semantic()
@@ -214,6 +219,30 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
         p_instances = p_instances.argmax(dim=1)
     if len(p_semantics.shape) > 1:
         p_semantics = p_semantics.argmax(dim=1)
+
+    # 对匹配的标签进行处理，把pred 标签映射到 gt上
+    if matching is not None:  
+        # 创建一个新的映射字典
+        match_dict = matching['matching']
+        gt_instances_temp = instances.clone()
+        p_instances_temp = p_instances.clone()
+        # 加255是为了避免覆盖
+        p_instances_temp[p_instances_temp!=0] = p_instances_temp[p_instances_temp!=0] + 255
+        unique_p_instances_temp = p_instances_temp.unique()
+        p_instances_change = p_instances_temp.clone()
+
+        for unique_label in unique_p_instances_temp:
+            if unique_label == 0 :
+                continue
+            if unique_label-255 in match_dict.values():
+                p_instances_change[p_instances_temp==unique_label]=int(find_key_by_value(match_dict,unique_label-255))
+        
+        ## 这样把匹配的值改为了gt instance上的值
+        ## 而其他值都加了255，  gt instance 是 int8 的， 不会产生覆盖或者相同的冲突
+        ## 现在需要把 p_instances_change 赋给 p_instances
+        p_instances = p_instances_change
+
+
     p_semantics = p_semantics.to(torch.int64)
     img_semantics = distinct_colors_semantic.apply_colors_fast_torch(p_semantics.cpu()).view(H, W, 3).permute(2, 0, 1) * alpha + img * (1 - alpha)
     boundaries_img_semantics = get_boundary_mask(p_semantics.cpu().view(H, W))

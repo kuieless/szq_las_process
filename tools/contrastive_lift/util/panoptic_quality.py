@@ -130,6 +130,8 @@ def _panoptic_quality_update(
     pred_segment_matched = set()
     target_segment_matched = set()
     zyq_TP,zyq_FP,zyq_FN=[],[],[]
+    matching = {}
+    matching['matching']={}
     for (pred_color, target_color), intersection in intersection_areas.items():
         # test only non void, matching category
         if target_color == void_color:
@@ -150,6 +152,9 @@ def _panoptic_quality_update(
             iou_sum[continuous_id] += iou
             true_positives[continuous_id] += 1
             zyq_TP.append(target_color)
+            if target_color[0] ==1 and  pred_color[0] ==1:
+                matching['matching'][f'{target_color[1]}']=pred_color[1]
+
 
 
     # count false negative: ground truth but not matched
@@ -180,8 +185,10 @@ def _panoptic_quality_update(
 
         continuous_id = cat_id_to_continuous_id[pred_color[0]]
         false_positives[continuous_id] += 1
-
-    return iou_sum, true_positives, false_positives, false_negatives, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN
+    matching['pred_areas'] = torch.tensor([key[1] for key,value in pred_areas.items() if key[0] == 1 and key[1]!=0])
+    matching['target_areas'] = torch.tensor([key[1] for key,value in target_areas.items() if key[0] == 1 and key[1]!=0])
+    
+    return iou_sum, true_positives, false_positives, false_negatives, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching
 
 
 def _panoptic_quality_compute(
@@ -261,7 +268,7 @@ def panoptic_quality(
     cat_id_to_continuous_id = _get_category_id_to_continous_id(things, stuff)
     flatten_preds = _prepocess_image(things, stuff, preds, void_color, allow_unknown_preds_category)
     flatten_target = _prepocess_image(things, stuff, target, void_color, True)
-    iou_sum, true_positives, false_positives, false_negatives, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN = _panoptic_quality_update(
+    iou_sum, true_positives, false_positives, false_negatives, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching = _panoptic_quality_update(
         flatten_preds, flatten_target, cat_id_to_continuous_id, void_color
     )
 
@@ -271,7 +278,7 @@ def panoptic_quality(
     # print(f'false_negatives: {false_negatives}')
 
     results, metrics_each = _panoptic_quality_compute(things, stuff, iou_sum, true_positives, false_positives, false_negatives)
-    return results["all"]["pq"], results["all"]["sq"], results["all"]["rq"], metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN
+    return results["all"]["pq"], results["all"]["sq"], results["all"]["rq"], metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching
 
 
 def panoptic_quality_match(
