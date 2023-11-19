@@ -267,7 +267,7 @@ def visualize_panoptic_outputs(p_rgb, p_semantics, p_instances, p_depth, rgb, se
         img_instances_gt = colored_img_instance_gt.view(H, W, 3).permute(2, 0, 1) * alpha + img_gt * (1 - alpha)
         img_instances_gt[:, boundaries_img_instances_gt > 0] = 0
         # stack = torch.cat([torch.stack([img_gt, img_semantics_gt, img_instances_gt, torch.zeros_like(img_gt), torch.zeros_like(img_gt)]), torch.stack([img, img_semantics, img_instances, depth, img_sem_entropy])], dim=0)
-        if TP is not None:
+        if TP is not None:  # 这里根据 匹配关系上色
             mask_TP = torch.isin(instances, TP).view(H,W).cpu()
             mask_FN = torch.isin(instances, FN).view(H,W).cpu()
             mask_FP = torch.isin(p_instances.cpu(), FP).view(H,W).cpu()

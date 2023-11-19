@@ -164,7 +164,13 @@ def visualize_poses_backup(poses1, poses2=None, size=0.01):
 
 def load_poses(dataset_path):
     dataset_path = Path(dataset_path)
-    metadata_paths = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
+    train_file_names = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
+    val_file_names = sorted(list((dataset_path / 'val' / 'metadata').iterdir()))
+    all_file_names = train_file_names + val_file_names
+
+    # 根据文件名中的数字进行排序
+    metadata_paths = sorted(all_file_names, key=lambda x: int(x.stem))
+
     poses_mega = []
     intrinsics = []
     for x in metadata_paths:

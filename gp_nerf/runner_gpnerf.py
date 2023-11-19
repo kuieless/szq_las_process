@@ -719,30 +719,48 @@ class Runner:
 
 
     def eval(self):
+
         if self.hparams.ckpt_path is not None:
             checkpoint = torch.load(self.hparams.ckpt_path, map_location='cpu')
             train_iterations = checkpoint['iteration']
         self._setup_experiment_dir()
-        if self.hparams.enable_instance:
-            all_centroids=None
-            if self.hparams.cached_centroids_path is None:
-                if self.hparams.cached_centroids_type == 'all':
-                    all_centroids = self.instance_cluster_prediction(train_iterations, dataset=None)
-            else:
+
+        if self.hparams.val_type == 'train':
+            if self.hparams.enable_instance:
                 with open(self.hparams.cached_centroids_path, 'rb') as f:
                     all_centroids = pickle.load(f)
-            val_metrics, all_centroids = self._run_validation(train_iterations, all_centroids)
+                val_metrics, all_centroids = self._run_validation_train(train_iterations, all_centroids)
+            else:
+                val_metrics, _ = self._run_validation_train(train_iterations)
+        elif self.hparams.val_type == 'train_instance':
+            if self.hparams.enable_instance:
+                with open(self.hparams.cached_centroids_path, 'rb') as f:
+                    all_centroids = pickle.load(f)
+                val_metrics, all_centroids = self._run_validation_instance(train_iterations, all_centroids)
+            else:
+                val_metrics, _ = self._run_validation_train(train_iterations)
+
         else:
-            val_metrics, _ = self._run_validation(train_iterations)
-        
-        self._write_final_metrics(val_metrics, train_iterations=train_iterations)
-
-
-        if self.hparams.enable_instance:
-            self.hparams.render_zyq = True
-            if self.hparams.instance_loss_mode == 'linear_assignment':
+            if self.hparams.enable_instance:
                 all_centroids=None
-            val_metrics = self._run_validation_render_zyq(train_iterations, all_centroids)
+                if self.hparams.cached_centroids_path is None:
+                    if self.hparams.cached_centroids_type == 'all':
+                        all_centroids = self.instance_cluster_prediction(train_iterations, dataset=None)
+                else:
+                    with open(self.hparams.cached_centroids_path, 'rb') as f:
+                        all_centroids = pickle.load(f)
+                val_metrics, all_centroids = self._run_validation(train_iterations, all_centroids)
+            else:
+                val_metrics, _ = self._run_validation(train_iterations)
+            
+            self._write_final_metrics(val_metrics, train_iterations=train_iterations)
+
+            # 这里是渲染俯视图
+            if self.hparams.enable_instance:
+                self.hparams.render_zyq = True
+                if self.hparams.instance_loss_mode == 'linear_assignment':
+                    all_centroids=None
+                val_metrics = self._run_validation_render_zyq(train_iterations, all_centroids)
         
 
 
@@ -1439,7 +1457,7 @@ class Runner:
                     
                     if self.hparams.enable_instance:
                         instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
-                                        results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping, img_list, 
+                                        results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping, 
                                         experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
                                         all_points_rgb, all_points_semantics, gt_points_semantic)
             
@@ -1531,7 +1549,8 @@ class Runner:
                         # self.val_items=self.val_items[:10]
                     indices_to_eval = np.arange(len(self.val_items))
                 elif val_type == 'train':
-                    indices_to_eval = np.arange(370,490)  
+                    indices_to_eval = np.arange(len(self.train_items))
+                    # indices_to_eval = np.arange(370,490)  
                     
                 if self.hparams.enable_instance:
                     all_instance_features, all_thing_features = [], []
@@ -1622,7 +1641,7 @@ class Runner:
                         
                         if self.hparams.enable_instance:
                             instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
-                                results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
+                                results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, 
                                 experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
                                 all_points_rgb, all_points_semantics, gt_points_semantic)
                             
@@ -1898,11 +1917,10 @@ class Runner:
                     shutil.rmtree(base_tmp_path)
             
             return val_metrics, all_centroids
-            
-    
-    def _run_validation_eval_m2f(self, train_index=-1, all_centroids=None) -> Dict[str, float]:
-        from tools.unetformer.uavid2rgb import remapping
+               
 
+    def _run_validation_train(self, train_index=-1, all_centroids=None) -> Dict[str, float]:
+        from tools.unetformer.uavid2rgb import remapping
         with torch.inference_mode():
             #semantic 
             self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -1911,77 +1929,77 @@ class Runner:
             val_metrics = defaultdict(float)
             base_tmp_path = None
             
+            from glob import glob
+            used_files = []
+            for ext in ('*.png', '*.jpg'):
+                used_files.extend(glob(os.path.join(self.hparams.dataset_path, 'subset', 'rgbs', ext)))
+            used_files.sort()
+            process_item = [Path(far_p).stem for far_p in used_files]
+
+
             val_type = self.hparams.val_type  # train  val
+            assert val_type == 'train'
             print('val_type: ', val_type)
             try:
-                if val_type == 'val':
-                    if 'residence'in self.hparams.dataset_path:
-                        self.val_items=self.val_items[:19]
-                    # elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
-                        # self.val_items=self.val_items[:10]
-                    indices_to_eval = np.arange(len(self.val_items))
-                elif val_type == 'train':
-                    indices_to_eval = np.arange(370,490)  
+                if val_type == 'train':
+                    indices_to_eval = np.arange(len(self.train_items))
                     
-                
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
-                if self.hparams.cached_centroids_path is None and self.hparams.enable_instance:
+                
+                    
+                samantic_each_value = {}
+                for class_name in CLASSES:
+                    samantic_each_value[f'{class_name}_iou'] = []
+                samantic_each_value['mIoU'] = []
+                samantic_each_value['FW_IoU'] = []
+                samantic_each_value['F1'] = []
+
+                
+                if self.hparams.debug:
+                    indices_to_eval = indices_to_eval[:2]
+                
+                for i in main_tqdm(indices_to_eval):
+                    self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
+
+                    metadata_item = self.train_items[i]
+                    
+                    save_left_or_right = 'val_rgbs'
+                    if (metadata_item.left_or_right) != None:
+                        if metadata_item.left_or_right == 'left':
+                            save_left_or_right = 'val_rgbs_left'
+                        elif metadata_item.left_or_right == 'right':
+                            save_left_or_right = 'val_rgbs_right'
+                    # else:
+                        # continue
+
+
+                    
                     Path(str(experiment_path_current)).mkdir(exist_ok=True)
-                    Path(str(experiment_path_current / 'val_rgbs')).mkdir(exist_ok=True)
-                else:
-                    Path(str(experiment_path_current)).mkdir()
-                    Path(str(experiment_path_current / 'val_rgbs')).mkdir()
-                with (experiment_path_current / 'psnr.txt').open('w') as f:
+                    Path(str(experiment_path_current / save_left_or_right)).mkdir(exist_ok=True)
                     
-                    samantic_each_value = {}
-                    for class_name in CLASSES:
-                        samantic_each_value[f'{class_name}_iou'] = []
-                    samantic_each_value['mIoU'] = []
-                    samantic_each_value['FW_IoU'] = []
-                    samantic_each_value['F1'] = []
-                    # samantic_each_value['OA'] = []
+                    ### 渲染 train 的时候只渲染 subset 的
+                    if Path(metadata_item.image_path).stem not in process_item:
+                        continue
+                    file_name = int(Path(metadata_item.image_path).stem)
 
-                    if self.hparams.enable_instance:
-                        all_thing_features = [], []
-                        all_points_rgb, all_points_semantics = [], []
-                        gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
-                    if self.hparams.debug:
-                        indices_to_eval = indices_to_eval[:2]
-                        # indices_to_eval = indices_to_eval[:2]
+
+                    results, _ = self.render_image(metadata_item, train_index)
+
+
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
                     
-                    for i in main_tqdm(indices_to_eval):
-                        self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
-                        # if i != 0:
-                        #     break
-                        metadata_item = self.val_items[i]
+                    viz_rgbs = metadata_item.load_image().float() / 255.
+                    self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
+                    
+                    # get rendering rgbs
+                    viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
 
-                        if self.hparams.enable_instance:
-                            gt_instance_label = metadata_item.load_instance_gt()
-                            gt_points_instance.append(gt_instance_label.view(-1))
-                        
-                        results, _ = self.render_image(metadata_item, train_index)
-                        
 
-                        typ = 'fine' if 'rgb_fine' in results else 'coarse'
-                        
-                        viz_rgbs = metadata_item.load_image().float() / 255.
-                        self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
-                        if self.hparams.save_depth:
-                            save_depth_dir = os.path.join(str(self.experiment_path), "depth_{}".format(train_index))
-                            if not os.path.exists(save_depth_dir):
-                                os.makedirs(save_depth_dir)
-                            depth_map = results[f'depth_{typ}'].view(viz_rgbs.shape[0], viz_rgbs.shape[1]).numpy().astype(np.float16)
-                            np.save(os.path.join(save_depth_dir, metadata_item.image_path.stem + '.npy'), depth_map)
-                            continue
-                        
-                        # get rendering rgbs and depth
-                        viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
-                        viz_result_rgbs = viz_result_rgbs.clamp(0,1)
-                        if val_type == 'val':   # calculate psnr  ssim  lpips when val (not train)
-                            val_metrics = calculate_metric_rendering(viz_rgbs, viz_result_rgbs, train_index, self.wandb, self.writer, val_metrics, i, f, self.hparams, metadata_item, typ, results, self.device, self.pose_scale_factor)
-                        
-                        viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
-                        
+                    viz_result_rgbs = viz_result_rgbs.clamp(0,1)
+                    viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                    
+                    if not self.hparams.enable_instance:
+
                         # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                         img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
 
@@ -1990,23 +2008,17 @@ class Runner:
                         image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
                         img_list.append(torch.from_numpy(image_diff_color))
                         
-                        
-                        prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, i)
+                        prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, file_name,save_left_or_right)
                         
                         get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
-                                            i, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each)
-                        
-                        
-                        if self.hparams.enable_instance:
-                            instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
-                                results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, 
-                                experiment_path_current, i, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
-                                all_points_rgb, all_points_semantics, gt_points_semantic)
-                            
-                            all_thing_features.append(p_instances)
-                            gt_points_rgb.append(viz_rgbs.view(-1,3))
+                                            file_name, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each,save_left_or_right)
 
 
+                        if not os.path.exists(str(experiment_path_current / save_left_or_right / 'pred_rgb')):
+                            Path(str(experiment_path_current / save_left_or_right / 'pred_rgb')).mkdir()
+                        Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                            str(experiment_path_current / save_left_or_right / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
+                        
 
                         # NOTE: 对需要可视化的list进行处理
                         # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
@@ -2015,149 +2027,81 @@ class Runner:
                         img_list = torch.stack(img_list).permute(0,3,1,2)
                         img = make_grid(img_list, nrow=3)
                         img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
-                        Image.fromarray(img_grid).save(str(experiment_path_current / 'val_rgbs' / ("%06d_all.jpg" % i)))
 
-                        if self.writer is not None and (train_index % 50000 == 0):
-                            self.writer.add_image('5_val_images/{}'.format(i), img.byte(), train_index)
-                        if self.wandb is not None and (train_index % 50000 == 0):
-                            Img = wandb.Image(img, caption="ckpt {}: {} th".format(train_index, i))
-                            self.wandb.log({"images_all/{}".format(train_index): Img, 'epoch': i})
-                        
-
-                        if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')):
-                            Path(str(experiment_path_current / 'val_rgbs' / 'pred_rgb')).mkdir()
-                        Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                            str(experiment_path_current / 'val_rgbs' / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
-                        
-                        
-                        if val_type == 'val':
-                            #save  [pred_label, pred_rgb, fg_bg] to the folder 
-
-                            if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')) and self.hparams.save_individual:
-                                Path(str(experiment_path_current / 'val_rgbs' / 'gt_rgb')).mkdir()
-                            if self.hparams.save_individual:
-                                Image.fromarray((viz_rgbs.numpy() * 255).astype(np.uint8)).save(
-                                    str(experiment_path_current / 'val_rgbs' / 'gt_rgb' / ("%06d_gt_rgb.jpg" % i)))
+                        if not os.path.exists(str(experiment_path_current / save_left_or_right / 'all')):
+                            Path(str(experiment_path_current / save_left_or_right / 'all')).mkdir()
+                        Image.fromarray(img_grid).save(str(experiment_path_current / save_left_or_right / 'all' / ("%06d_all.jpg" % file_name)))
 
 
-                            if self.hparams.bg_nerf or f'bg_rgb_{typ}' in results:
-                                img = Runner._create_fg_bg_image(results[f'fg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu(),
-                                                                results[f'bg_rgb_{typ}'].view(viz_rgbs.shape[0],viz_rgbs.shape[1], 3).cpu())
+                    if self.hparams.enable_instance:  #  这里对每一张instance进行聚类
                                 
-                                if not os.path.exists(str(experiment_path_current / 'val_rgbs' / 'fg_bg')):
-                                    Path(str(experiment_path_current / 'val_rgbs' / 'fg_bg')).mkdir()
-                                
-                                img.save(str(experiment_path_current / 'val_rgbs' / 'fg_bg' / ("%06d_fg_bg.jpg" % i)))
-                            
-                            # logger
-                            samantic_each_value = save_semantic_metric(self.metrics_val_each, CLASSES, samantic_each_value, self.wandb, self.writer, train_index, i)
-                            self.metrics_val_each.reset()
-                        del results
-                
-                if self.hparams.enable_instance:
-                    # instance clustering
-                    all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
-                    output_dir = str(experiment_path_current / 'panoptic')
-                    if not os.path.exists(output_dir):
-                        Path(output_dir).mkdir()
-                    np.save(os.path.join(output_dir, "all_thing_features.npy"), all_thing_features)
-                    np.save(os.path.join(output_dir, "all_points_semantics.npy"), torch.stack(all_points_semantics).cpu().numpy())
-                    np.save(os.path.join(output_dir, "all_points_rgb.npy"), torch.stack(all_points_rgb).cpu().numpy())
-                    np.save(os.path.join(output_dir, "gt_points_rgb.npy"), torch.stack(gt_points_rgb).cpu().numpy())
-                    np.save(os.path.join(output_dir, "gt_points_semantic.npy"), torch.stack(gt_points_semantic).cpu().numpy())
-                    np.save(os.path.join(output_dir, "gt_points_instance.npy"), torch.stack(gt_points_instance).cpu().numpy())
+                        all_instance_features, all_thing_features = [], []
+                        all_thing_features_building = []
+                        all_points_rgb, all_points_semantics = [], []
 
-                    
-                    if self.hparams.cached_centroids_type == 'all':
-                        all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
-                                                                device=self.device, num_images=len(indices_to_eval))
-                    elif self.hparams.cached_centroids_type == 'test':
-                        if all_centroids is not None:
-                            
-                            all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                        num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
-        
-                        else:
-                            all_points_instances, all_centroids = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
-                                                        num_images=len(indices_to_eval), use_dbscan=self.hparams.use_dbscan)
-                            output_dir = str(experiment_path_current)
+                        instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
+                            results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, 
+                            experiment_path_current, file_name, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
+                            all_points_rgb, all_points_semantics)
+                        
+                        all_instance_features.append(instances)
+                        all_thing_features.append(p_instances)
+                        
+                        # 'linear_assignment' 是直接得到一个伪标签
+                        if self.hparams.instance_loss_mode == 'linear_assignment':
+                            all_points_instances = torch.stack(all_thing_features, dim=0) # N x d
+                            output_dir = str(experiment_path_current / 'panoptic')
                             if not os.path.exists(output_dir):
-                                Path(output_dir).mkdir(parents=True)
-                                
-                            all_centroids_path = os.path.join(output_dir, f"test_centroids.npy")
-                            with open(all_centroids_path, "wb") as file:
-                                pickle.dump(all_centroids, file)
-                            print(f"save all_centroids_cache to : {all_centroids_path}")
+                                Path(output_dir).mkdir()
+                        else:
+                            # instance clustering
+                            all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+                            all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
                             
-                    if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
-                        Path(str(experiment_path_current / 'pred_semantics')).mkdir()
-                    if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
-                        Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
+                            output_dir = str(experiment_path_current / 'panoptic')
+                            if not os.path.exists(output_dir):
+                                Path(output_dir).mkdir()
+
+                            assert all_centroids is not None
+                            # # 这里送入的是单张图片
+                            # all_points_instances, _ = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                            #                             num_images=1, use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
+                            all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
+                                                                device=self.device, num_images=1)
+                                
+                        if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
+                            Path(str(experiment_path_current / 'pred_semantics')).mkdir()
+                        if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
+                            Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
 
 
+                        for save_i in range(1):
+                            p_rgb = all_points_rgb[save_i]
+                            p_semantics = all_points_semantics[save_i]
+                            p_instances = all_points_instances[save_i]
 
-                    # from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-                    # import matplotlib.pyplot as plt
-                    # lda = LinearDiscriminantAnalysis(n_components=2)
-                    # lda_result = lda.fit_transform(all_thing_features[:,1:], all_points_instances.view(-1,all_points_instances.shape[-1]).argmax(dim=1).cpu().numpy())
-                    # plt.scatter(lda_result[:, 0], lda_result[:, 1], c=p_instances.argmax(dim=1).cpu().numpy(), cmap='viridis')
-                    # plt.xlabel('LDA Component 1')
-                    # plt.ylabel('LDA Component 2')
-                    # plt.title('LDA Visualization')
-                    # # 保存图像为文件（例如，PNG格式）
-                    # plt.savefig(os.path.join(str(experiment_path_current / 'panoptic' / ("lda_visualization.jpg"))))
-                    # # 关闭图形窗口（如果不需要显示图形界面）
-                    # plt.close()
-
-
-                    for save_i in range(len(indices_to_eval)):
-                        p_rgb = all_points_rgb[save_i]
-                        # p_semantics = all_points_semantics[save_i]
-                        p_semantics = gt_points_semantic[save_i]
-                        p_instances = all_points_instances[save_i]
-                        gt_rgb = gt_points_rgb[save_i]
-                        gt_semantics = gt_points_semantic[save_i]
-                        gt_instances = gt_points_instance[save_i]
-
+                            
+                            output_semantics_with_invalid = p_semantics.detach()
+                            Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
+                                    str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % metadata_item.image_index)))
                         
-                        output_semantics_with_invalid = p_semantics.detach()
-                        Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
-                                str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
-                        
-                        Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-                                str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
-                        
-                        stack = visualize_panoptic_outputs(
-                            p_rgb, p_semantics, p_instances, None, gt_rgb, gt_semantics, gt_instances,
-                            self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False
-                        )
-                        grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=3).permute((1, 2, 0)).contiguous()
-                        grid = (grid * 255).cpu().numpy().astype(np.uint8)
-                        
-                        Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % save_i)))
-                    
-                    # calculate the panoptic quality
-                    
-                    path_target_sem = os.path.join(self.hparams.dataset_path, 'val', 'labels_gt')
-                    path_target_inst = os.path.join(self.hparams.dataset_path, 'val', 'instances_gt')
-                    path_pred_sem = str(experiment_path_current / 'pred_semantics')
-                    path_pred_inst = str(experiment_path_current / 'pred_surrogateid')
-                    if Path(path_target_inst).exists():
-                        pq, sq, rq, metrics_each, pred_areas, target_areas, zyq_TP, zyq_FP, zyq_FN, matching = calculate_panoptic_quality_folders(path_pred_sem, path_pred_inst, 
-                                        path_target_sem, path_target_inst, image_size=[self.W, self.H])
-                        val_metrics['pq'] = pq
-                        val_metrics['sq'] = sq
-                        val_metrics['rq'] = rq
-                        val_metrics['metrics_each']=metrics_each
-                        if all_centroids != None:
-                            val_metrics['all_centroids_shape'] = all_centroids.shape
-                    print(f"all_centroids: {all_centroids.shape}")
-                    
+                            Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                                    str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % metadata_item.image_index)))
+                                
+            
+                            stack = visualize_panoptic_outputs(
+                                p_rgb, p_semantics, p_instances, None, None, None, None,
+                                self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False,
+                            )
+                            
+                            grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=4).permute((1, 2, 0)).contiguous()
+                            grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                            
+                            Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % metadata_item.image_index)))
+                                
+                    del results
 
-                # logger
-                write_metric_to_folder_logger(self.metrics_val, CLASSES, experiment_path_current, samantic_each_value, self.wandb, self.writer, train_index, self.hparams)
-                self.metrics_val.reset()
-                
+                    ## 对分类结果进行可视化
                 self.writer.flush()
                 self.writer.close()
                 self.nerf.train()
@@ -2165,8 +2109,204 @@ class Runner:
                 if self.is_master and base_tmp_path is not None:
                     shutil.rmtree(base_tmp_path)
             
-            return val_metrics
-        
+            return val_metrics, all_centroids
+               
+
+    def _run_validation_instance(self, train_index=-1, all_centroids=None) -> Dict[str, float]:
+        from tools.unetformer.uavid2rgb import remapping
+        with torch.inference_mode():
+            #semantic 
+            self.metrics_val = Evaluator(num_class=self.hparams.num_semantic_classes)
+            CLASSES = ('Cluster', 'Building', 'Road', 'Car', 'Tree', 'Vegetation', 'Human', 'Sky', 'Water', 'Ground', 'Mountain')
+            self.nerf.eval()
+            val_metrics = defaultdict(float)
+            base_tmp_path = None
+            
+
+
+
+            val_paths = sorted(list((self.hparams.dataset_path / 'render_supp' / 'metadata').iterdir()))
+
+            train_paths = val_paths
+            train_paths.sort(key=lambda x: x.name)
+            val_paths_set = set(val_paths)
+            image_indices = {}
+            for i, train_path in enumerate(train_paths):
+                image_indices[train_path.name] = i
+            render_items = [
+                self._get_metadata_item(x, image_indices[x.name], self.hparams.val_scale_factor, x in val_paths_set) for x
+                in train_paths]
+
+            H = render_items[0].H
+            W = render_items[0].W
+
+            if self.hparams.start == -1 and self.hparams.end == -1:
+                indices_to_eval = np.arange(len(render_items))
+            else:
+                indices_to_eval = np.arange(len(render_items))[self.hparams.start:self.hparams.end]
+            
+
+
+            val_type = self.hparams.val_type  # train  val
+            print('val_type: ', val_type)
+
+            try:                    
+                experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
+                
+                    
+                samantic_each_value = {}
+                for class_name in CLASSES:
+                    samantic_each_value[f'{class_name}_iou'] = []
+                samantic_each_value['mIoU'] = []
+                samantic_each_value['FW_IoU'] = []
+                samantic_each_value['F1'] = []
+
+                
+                if self.hparams.debug:
+                    indices_to_eval = indices_to_eval[:2]
+                
+                for i in main_tqdm(indices_to_eval):
+                    self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
+                    
+                    metadata_item = render_items[i]
+                    i = int(Path(metadata_item.depth_dji_path).stem)
+                    file_name = int(Path(metadata_item.depth_dji_path).stem)
+                    self.hparams.sampling_mesh_guidance = False
+
+                    save_left_or_right = 'val_rgbs'
+
+                    Path(str(experiment_path_current)).mkdir(exist_ok=True)
+                    Path(str(experiment_path_current / save_left_or_right)).mkdir(exist_ok=True)
+                    
+
+                    results, _ = self.render_image(metadata_item, train_index)
+
+
+                    typ = 'fine' if 'rgb_fine' in results else 'coarse'
+                    
+                    viz_rgbs = metadata_item.load_image().float() / 255.
+                    self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
+                    
+                    # get rendering rgbs
+                    viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
+
+
+                    viz_result_rgbs = viz_result_rgbs.clamp(0,1)
+                    viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
+                    
+                    if not self.hparams.enable_instance:
+
+                        # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                        img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+
+                        image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
+                        image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
+                        image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
+                        img_list.append(torch.from_numpy(image_diff_color))
+                        
+                        prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, file_name,save_left_or_right)
+                        
+                        get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
+                                            file_name, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each,save_left_or_right)
+
+
+                        if not os.path.exists(str(experiment_path_current / save_left_or_right / 'pred_rgb')):
+                            Path(str(experiment_path_current / save_left_or_right / 'pred_rgb')).mkdir()
+                        Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                            str(experiment_path_current / save_left_or_right / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
+                        
+
+                        # NOTE: 对需要可视化的list进行处理
+                        # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                        # 将None元素转换为zeros矩阵
+                        img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                        img_list = torch.stack(img_list).permute(0,3,1,2)
+                        img = make_grid(img_list, nrow=3)
+                        img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+
+                        if not os.path.exists(str(experiment_path_current / save_left_or_right / 'all')):
+                            Path(str(experiment_path_current / save_left_or_right / 'all')).mkdir()
+                        Image.fromarray(img_grid).save(str(experiment_path_current / save_left_or_right / 'all' / ("%06d_all.jpg" % file_name)))
+
+
+                    if self.hparams.enable_instance:  #  这里对每一张instance进行聚类
+                                
+                        all_instance_features, all_thing_features = [], []
+                        all_thing_features_building = []
+                        all_points_rgb, all_points_semantics = [], []
+
+                        instances, p_instances, all_points_rgb, all_points_semantics, gt_points_semantic, p_instances_building = get_instance_pred(
+                            results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, 
+                            experiment_path_current, file_name, self.writer, self.hparams, viz_result_rgbs, self.thing_classes,
+                            all_points_rgb, all_points_semantics)
+                        
+                        all_instance_features.append(instances)
+                        all_thing_features.append(p_instances)
+                        
+                        # 'linear_assignment' 是直接得到一个伪标签
+                        if self.hparams.instance_loss_mode == 'linear_assignment':
+                            all_points_instances = torch.stack(all_thing_features, dim=0) # N x d
+                            output_dir = str(experiment_path_current / 'panoptic')
+                            if not os.path.exists(output_dir):
+                                Path(output_dir).mkdir()
+                        else:
+                            # instance clustering
+                            all_instance_features = torch.cat(all_instance_features, dim=0).cpu().numpy()
+                            all_thing_features = torch.cat(all_thing_features, dim=0).cpu().numpy() # N x d
+                            
+                            output_dir = str(experiment_path_current / 'panoptic')
+                            if not os.path.exists(output_dir):
+                                Path(output_dir).mkdir()
+
+                            assert all_centroids is not None
+                            # # 这里送入的是单张图片
+                            # all_points_instances, _ = cluster(all_thing_features, bandwidth=0.2, device=self.device, 
+                            #                             num_images=1, use_dbscan=self.hparams.use_dbscan, all_centroids=all_centroids)
+                            all_points_instances = assign_clusters(all_thing_features, all_points_semantics, all_centroids, 
+                                                                device=self.device, num_images=1)
+                                
+                        if not os.path.exists(str(experiment_path_current / 'pred_semantics')):
+                            Path(str(experiment_path_current / 'pred_semantics')).mkdir()
+                        if not os.path.exists(str(experiment_path_current / 'pred_surrogateid')):
+                            Path(str(experiment_path_current / 'pred_surrogateid')).mkdir()
+
+
+                        for save_i in range(1):
+                            p_rgb = all_points_rgb[save_i]
+                            p_semantics = all_points_semantics[save_i]
+                            p_instances = all_points_instances[save_i]
+
+                            
+                            output_semantics_with_invalid = p_semantics.detach()
+                            Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
+                                    str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % metadata_item.image_index)))
+                        
+                            Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
+                                    str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % metadata_item.image_index)))
+                                
+            
+                            stack = visualize_panoptic_outputs(
+                                p_rgb, p_semantics, p_instances, None, None, None, None,
+                                self.H, self.W, thing_classes=self.thing_classes, visualize_entropy=False,
+                            )
+                            
+                            grid = make_grid(stack, value_range=(0, 1), normalize=True, nrow=4).permute((1, 2, 0)).contiguous()
+                            grid = (grid * 255).cpu().numpy().astype(np.uint8)
+                            
+                            Image.fromarray(grid).save(str(experiment_path_current / 'panoptic' / ("%06d.jpg" % metadata_item.image_index)))
+                                
+                    del results
+
+                    ## 对分类结果进行可视化
+                self.writer.flush()
+                self.writer.close()
+                self.nerf.train()
+            finally:
+                if self.is_master and base_tmp_path is not None:
+                    shutil.rmtree(base_tmp_path)
+            
+            return val_metrics, all_centroids
+               
 
 
     def val_3d_to_2d(self):
@@ -2615,13 +2755,13 @@ class Runner:
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
             elif self.hparams.depth_dji_type=='mesh':
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_mesh', '%s.npy' % metadata_path.stem) 
-            if 'lerf_or_right' in metadata:
-                lerf_or_right = metadata['lerf_or_right']
+            if 'left_or_right' in metadata:
+                left_or_right = metadata['left_or_right']
             else:
-                lerf_or_right = None
+                left_or_right = None
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,
                                  intrinsics, image_index, None if (is_val and self.hparams.all_val) else mask_path, is_val, label_path, 
-                                 depth_dji_path=depth_dji_path, left_or_right=lerf_or_right, hparams=self.hparams, instance_path=instance_path)
+                                 depth_dji_path=depth_dji_path, left_or_right=left_or_right, hparams=self.hparams, instance_path=instance_path)
 
         else:
             return ImageMetadata(image_path, metadata['c2w'], metadata['W'] // scale_factor, metadata['H'] // scale_factor,

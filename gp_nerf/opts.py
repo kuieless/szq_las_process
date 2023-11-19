@@ -8,7 +8,7 @@ def get_opts_base():
     parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf') 
 
     parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
-    parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train'], help='')
+    parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train', 'train_instance'], help='')
     parser.add_argument('--logger_interval', type=int, default=10, help='training iterations')
     
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
