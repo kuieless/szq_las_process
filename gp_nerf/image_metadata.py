@@ -102,6 +102,7 @@ class ImageMetadata:
             depth = np.load(self.depth_dji_path)
             depth = torch.HalfTensor(depth)
             # depth = torch.Tensor(depth)
+            
             assert depth.shape[0] == self.H and depth.shape[1] == self.W
             return depth
         else:

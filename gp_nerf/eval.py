@@ -35,9 +35,9 @@ def main(hparams: Namespace) -> None:
         hparams.sdf_include_input=False
     
 
-    if 'Longhua' in hparams.dataset_path:
-        hparams.train_scale_factor = 1
-        hparams.val_scale_factor = 1
+    # if 'Longhua' in hparams.dataset_path:
+    #     hparams.train_scale_factor = 1
+    #     hparams.val_scale_factor = 1
         
     if 'linear_assignment' in hparams.instance_loss_mode:
         assert hparams.num_instance_classes > 30

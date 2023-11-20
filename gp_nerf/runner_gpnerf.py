@@ -702,7 +702,7 @@ class Runner:
                         self.hparams.render_zyq = True 
                         if self.hparams.instance_loss_mode == 'linear_assignment':
                             all_centroids=None
-                        
+                        self.hparams.fushi=True
                         _ = self._run_validation_render_zyq(train_iterations, all_centroids)
                 
                 if train_iterations >= self.hparams.train_iterations:
@@ -733,12 +733,13 @@ class Runner:
             else:
                 val_metrics, _ = self._run_validation_train(train_iterations)
         elif self.hparams.val_type == 'train_instance':
-            if self.hparams.enable_instance:
+            if self.hparams.instance_loss_mode == 'linear_assignment':
+                all_centroids=None
+                val_metrics, _ = self._run_validation_instance(train_iterations)
+            else:
                 with open(self.hparams.cached_centroids_path, 'rb') as f:
                     all_centroids = pickle.load(f)
                 val_metrics, all_centroids = self._run_validation_instance(train_iterations, all_centroids)
-            else:
-                val_metrics, _ = self._run_validation_train(train_iterations)
 
         else:
             if self.hparams.enable_instance:
@@ -760,6 +761,7 @@ class Runner:
                 self.hparams.render_zyq = True
                 if self.hparams.instance_loss_mode == 'linear_assignment':
                     all_centroids=None
+                self.hparams.fushi=True
                 val_metrics = self._run_validation_render_zyq(train_iterations, all_centroids)
         
 
@@ -1350,13 +1352,15 @@ class Runner:
             
             dataset_path = Path(self.hparams.dataset_path)
 
-            # val_paths = sorted(list((dataset_path / 'train' / 'metadata').iterdir()))
-            if 'Yingrenshi' in self.hparams.dataset_path:
-                val_paths = sorted(list((dataset_path / 'render_far0.3' / 'metadata').iterdir()))
+            if self.hparams.fushi:
+                    
+                if 'Yingrenshi' in self.hparams.dataset_path:
+                    val_paths = sorted(list((dataset_path / 'render_far0.3' / 'metadata').iterdir()))
+                else:
+                    val_paths = sorted(list((dataset_path / 'render_far0.3_val' / 'metadata').iterdir()))
             else:
-                val_paths = sorted(list((dataset_path / 'render_far0.3_val' / 'metadata').iterdir()))
-            # val_paths = sorted(list((dataset_path / 'render_far0.5' / 'metadata').iterdir()))
-            # val_paths = sorted(list((dataset_path / 'render_line' / 'metadata').iterdir()))
+                val_paths = sorted(list((dataset_path / 'render_supp' / 'metadata').iterdir()))
+
 
             train_paths = val_paths
             train_paths.sort(key=lambda x: x.name)
@@ -1383,7 +1387,7 @@ class Runner:
             # used_files.sort()
             # process_item = [Path(far_p).stem for far_p in used_files]
 
-            if self.hparams.enable_instance and self.hparams.render_zyq:
+            if self.hparams.enable_instance and self.hparams.render_zyq and self.hparams.fushi:
                 experiment_path_current = self.experiment_path / "eval_fushi"
             else:
                 experiment_path_current = self.experiment_path / "eval_{}".format(train_index)
@@ -1403,16 +1407,17 @@ class Runner:
                     all_instance_features, all_thing_features = [], []
                     all_points_rgb, all_points_semantics = [], []
                     gt_points_rgb, gt_points_semantic, gt_points_instance = [], [], []
-                    if 'Yingrenshi' in self.hparams.dataset_path:
-                        indices_to_eval = indices_to_eval[:1]
-                    elif 'Longhua_block2' in self.hparams.dataset_path:
-                        indices_to_eval = indices_to_eval[4:5]
-                    elif 'Longhua_block1' in self.hparams.dataset_path:
-                        indices_to_eval = indices_to_eval[5:6]
-                    elif 'Campus_new' in self.hparams.dataset_path:
-                        # indices_to_eval = indices_to_eval[3:4]
-                        indices_to_eval = indices_to_eval[7:8]
-                        # indices_to_eval = indices_to_eval[7:8]
+                    if self.hparams.fushi:
+                        if 'Yingrenshi' in self.hparams.dataset_path:
+                            indices_to_eval = indices_to_eval[:1]
+                        elif 'Longhua_block2' in self.hparams.dataset_path:
+                            indices_to_eval = indices_to_eval[4:5]
+                        elif 'Longhua_block1' in self.hparams.dataset_path:
+                            indices_to_eval = indices_to_eval[5:6]
+                        elif 'Campus_new' in self.hparams.dataset_path:
+                            # indices_to_eval = indices_to_eval[3:4]
+                            indices_to_eval = indices_to_eval[7:8]
+                            # indices_to_eval = indices_to_eval[7:8]
 
                 
                 for i in main_tqdm(indices_to_eval):
@@ -2123,9 +2128,9 @@ class Runner:
             base_tmp_path = None
             
 
+            val_paths = sorted(list((Path(self.hparams.dataset_path) / 'render_supp' / 'metadata').iterdir()))
+            # val_paths = sorted(list((Path(self.hparams.dataset_path) / 'val' / 'metadata').iterdir()))
 
-
-            val_paths = sorted(list((self.hparams.dataset_path / 'render_supp' / 'metadata').iterdir()))
 
             train_paths = val_paths
             train_paths.sort(key=lambda x: x.name)
@@ -2145,7 +2150,7 @@ class Runner:
             else:
                 indices_to_eval = np.arange(len(render_items))[self.hparams.start:self.hparams.end]
             
-
+            # indices_to_eval = indices_to_eval[-1:]
 
             val_type = self.hparams.val_type  # train  val
             print('val_type: ', val_type)
@@ -2161,9 +2166,6 @@ class Runner:
                 samantic_each_value['FW_IoU'] = []
                 samantic_each_value['F1'] = []
 
-                
-                if self.hparams.debug:
-                    indices_to_eval = indices_to_eval[:2]
                 
                 for i in main_tqdm(indices_to_eval):
                     self.metrics_val_each = Evaluator(num_class=self.hparams.num_semantic_classes)
@@ -2184,8 +2186,8 @@ class Runner:
 
                     typ = 'fine' if 'rgb_fine' in results else 'coarse'
                     
-                    viz_rgbs = metadata_item.load_image().float() / 255.
-                    self.H, self.W = viz_rgbs.shape[0], viz_rgbs.shape[1]
+                    viz_rgbs = torch.zeros((H,W,3)).to(self.device).cpu()
+                    self.H, self.W = H, W
                     
                     # get rendering rgbs
                     viz_result_rgbs = results[f'rgb_{typ}'].view(*viz_rgbs.shape).cpu()
@@ -2194,39 +2196,38 @@ class Runner:
                     viz_result_rgbs = viz_result_rgbs.clamp(0,1)
                     viz_result_rgbs = viz_result_rgbs.view(viz_rgbs.shape[0], viz_rgbs.shape[1], 3).cpu()
                     
-                    if not self.hparams.enable_instance:
+                
 
-                        # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
-                        img_list = [viz_rgbs * 255, viz_result_rgbs * 255]
+                    # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
+                    img_list = [viz_result_rgbs * 255]
+                    
+                    prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, file_name,save_left_or_right)
+                    
 
-                        image_diff = np.abs(viz_rgbs.numpy() - viz_result_rgbs.numpy()).mean(2) # .clip(0.2) / 0.2
-                        image_diff_color = cv2.applyColorMap((image_diff*255).astype(np.uint8), cv2.COLORMAP_JET)
-                        image_diff_color = cv2.cvtColor(image_diff_color, cv2.COLOR_RGB2BGR)
-                        img_list.append(torch.from_numpy(image_diff_color))
-                        
-                        prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, file_name,save_left_or_right)
-                        
-                        get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
-                                            file_name, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each,save_left_or_right)
+                    # get_semantic_gt_pred_render_zyq(results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping,
+                    #                     self.metrics_val, self.metrics_val_each, img_list, experiment_path_current, i, self.writer, self.hparams)
+                    
+                    get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, self.logits_2_label, typ, remapping, img_list, experiment_path_current, 
+                                        file_name, self.writer, self.hparams, viz_result_rgbs * 255, self.metrics_val, self.metrics_val_each,save_left_or_right)
 
 
-                        if not os.path.exists(str(experiment_path_current / save_left_or_right / 'pred_rgb')):
-                            Path(str(experiment_path_current / save_left_or_right / 'pred_rgb')).mkdir()
-                        Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
-                            str(experiment_path_current / save_left_or_right / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
-                        
+                    if not os.path.exists(str(experiment_path_current / save_left_or_right / 'pred_rgb')):
+                        Path(str(experiment_path_current / save_left_or_right / 'pred_rgb')).mkdir()
+                    Image.fromarray((viz_result_rgbs.numpy() * 255).astype(np.uint8)).save(
+                        str(experiment_path_current / save_left_or_right / 'pred_rgb' / ("%06d_pred_rgb.jpg" % i)))
+                    
 
-                        # NOTE: 对需要可视化的list进行处理
-                        # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
-                        # 将None元素转换为zeros矩阵
-                        img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
-                        img_list = torch.stack(img_list).permute(0,3,1,2)
-                        img = make_grid(img_list, nrow=3)
-                        img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
+                    # NOTE: 对需要可视化的list进行处理
+                    # save images: list：  N * (H, W, 3),  -> tensor(N, 3, H, W)
+                    # 将None元素转换为zeros矩阵
+                    img_list = [torch.zeros_like(viz_rgbs) if element is None else element for element in img_list]
+                    img_list = torch.stack(img_list).permute(0,3,1,2)
+                    img = make_grid(img_list, nrow=3)
+                    img_grid = img.permute(1, 2, 0).cpu().numpy().astype(np.uint8)
 
-                        if not os.path.exists(str(experiment_path_current / save_left_or_right / 'all')):
-                            Path(str(experiment_path_current / save_left_or_right / 'all')).mkdir()
-                        Image.fromarray(img_grid).save(str(experiment_path_current / save_left_or_right / 'all' / ("%06d_all.jpg" % file_name)))
+                    if not os.path.exists(str(experiment_path_current / save_left_or_right / 'all')):
+                        Path(str(experiment_path_current / save_left_or_right / 'all')).mkdir()
+                    Image.fromarray(img_grid).save(str(experiment_path_current / save_left_or_right / 'all' / ("%06d_all.jpg" % file_name)))
 
 
                     if self.hparams.enable_instance:  #  这里对每一张instance进行聚类
@@ -2464,7 +2465,7 @@ class Runner:
 
         with torch.cuda.amp.autocast(enabled=self.hparams.amp):
             ###############3 . 俯视图，  render0.3视角下第一张图片
-            if self.hparams.render_zyq and self.hparams.enable_instance:
+            if self.hparams.render_zyq and self.hparams.enable_instance and self.hparams.fushi:
                 if 'Yingrenshi' in self.hparams.dataset_path:
                     image_rays = get_rays(directions, metadata.c2w.to(self.device), self.near, self.far, self.ray_altitude_range)
                     ray_d = image_rays[int(metadata.H/2), int(metadata.W/2), 3:6]
@@ -2540,6 +2541,10 @@ class Runner:
             if self.hparams.render_zyq:
                 image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device)
                 # image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device)
+            elif 'train' in self.hparams.val_type:
+                image_indices = 300 * torch.ones(rays.shape[0], device=rays.device)
+
+                # image_indices = 0 * torch.ones(rays.shape[0], device=rays.device)
             else:
                 image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device) \
                     if self.hparams.appearance_dim > 0 else None
@@ -2559,8 +2564,16 @@ class Runner:
 
             for i in range(0, rays.shape[0], self.hparams.image_pixel_batch_size):
                 if self.hparams.depth_dji_type == "mesh" and self.hparams.sampling_mesh_guidance:
-                    gt_depths = metadata.load_depth_dji().view(-1).to(self.device)
-                    gt_depths = gt_depths / depth_scale    # 这里读的是depth mesh， 存储的是z分量
+                    if 'train' in self.hparams.val_type:
+                        # # print('load depth')
+                        # gt_depths = metadata.load_depth_dji().view(-1).to(self.device)
+                        # gt_depths = gt_depths / depth_scale    # 这里读的是depth mesh， 存储的是z分量
+                        gt_depths = None
+                        
+                    else:
+                            
+                        gt_depths = metadata.load_depth_dji().view(-1).to(self.device)
+                        gt_depths = gt_depths / depth_scale    # 这里读的是depth mesh， 存储的是z分量
                 else: 
                     gt_depths = None
                 result_batch, _ = render_rays(nerf=nerf, bg_nerf=bg_nerf,

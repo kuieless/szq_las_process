@@ -311,7 +311,8 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
         instances = results[f'instance_map_{typ}']
         device = instances.device
         # gt_semantic
-        if not hparams.render_zyq:
+        # if not hparams.render_zyq and hparams.val_type !='train_instance':
+        if not hparams.render_zyq and 'train' not in  hparams.val_type:
             gt_label = metadata_item.load_gt()
             gt_label = remapping(gt_label.view(-1))
             if hparams.val_type == 'val':
@@ -334,7 +335,8 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
             # all_slow_features.append(slow_features)
             instances = instances[...,0:hparams.num_instance_classes] # keep fast features only
         p_instances_building = None
-        if not hparams.render_zyq:
+        # if not hparams.render_zyq and hparams.val_type !='train_instance':
+        if not hparams.render_zyq and 'train' not in  hparams.val_type:
             # p_instances = create_instances_from_semantics(instances, gt_label, thing_classes,device=device)
             #1105晚上改的，改为用pred semantic进行instance的相关计算
             p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
@@ -468,7 +470,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
     
     if f'depth_{typ}' in results:
         ma, mi = None, None 
-        if (hparams.depth_dji_loss or ('memory_depth_dji' in hparams.dataset_type)) and not hparams.render_zyq:  # DJI Gt depth
+        if (hparams.depth_dji_loss or ('memory_depth_dji' in hparams.dataset_type)) and not hparams.render_zyq and 'train' not in hparams.val_type:  # DJI Gt depth
             depth_dji = metadata_item.load_depth_dji().float()
             invalid_mask = torch.isinf(depth_dji)
         

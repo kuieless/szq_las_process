@@ -119,6 +119,7 @@ def get_opts_base():
 
 
     # instance
+    parser.add_argument('--fushi', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--enable_instance', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_instance_classes', type=int, default=25, help='')
     parser.add_argument('--wgt_instance_loss', default=1, type=float, help='')

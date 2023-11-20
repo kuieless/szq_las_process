@@ -1,5 +1,10 @@
 
 # Byte-compiled / optimized / DLL files
+A_Supplementary/render_instance/
+A_Supplementary/render_instance_1119/
+A_Supplementary/rendering_semantic/
+A_important_data/
+paper_results1/
 zyq_2d_to_3d
 zyq_sam_label
 *.txt
