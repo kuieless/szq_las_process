@@ -52,7 +52,7 @@ from mega_nerf.ray_utils import get_rays, get_ray_directions
 @click.command()
 @click.option('--data_dir', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds')
 @click.option('--key_poses', type=str, default='129,408')
-@click.option('--n_out_poses', type=int, default=120)
+@click.option('--n_out_poses', type=int, default=60)
 
 def hello(data_dir, n_out_poses, key_poses):
 

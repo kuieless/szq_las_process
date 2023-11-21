@@ -55,7 +55,7 @@ from mega_nerf.ray_utils import get_rays, get_ray_directions
 # @click.option('--key_poses', type=str, default='643,307')
 @click.option('--key_poses', type=str, default='456,307,285')
 
-@click.option('--n_out_poses', type=int, default=60)
+@click.option('--n_out_poses', type=int, default=120)
 
 def hello(data_dir, n_out_poses, key_poses):
 
@@ -75,7 +75,7 @@ def hello(data_dir, n_out_poses, key_poses):
     key_poses = np.array([int(_) for _ in key_poses.split(',')])
     key_poses_1 = poses[key_poses]
 
-    out_poses = inter_poses(key_poses_1[0:2], 40)
+    out_poses = inter_poses(key_poses_1[0:2], 80)
     # 285的位置
     pose_285_location = key_poses_1[2][:,3:]
     pose_285_rotation = key_poses_1[2][:,:3]
@@ -98,10 +98,10 @@ def hello(data_dir, n_out_poses, key_poses):
     key_poses_285 = np.concatenate([pose_285_rotation,pose_285_location],1)
 
 
-    key_poses_2=np.concatenate([out_poses[30:31], key_poses_285[np.newaxis,:]],0)
+    key_poses_2=np.concatenate([out_poses[60:61], key_poses_285[np.newaxis,:]],0)
 
-    out_poses1 = inter_poses(key_poses_2, 40)
-    out_poses = np.concatenate([out_poses[:30], out_poses1[:30]],0)
+    out_poses1 = inter_poses(key_poses_2, 80)
+    out_poses = np.concatenate([out_poses[:60], out_poses1[:60]],0)
 
     out_poses = np.ascontiguousarray(out_poses.astype(np.float64))
 
