@@ -10,7 +10,7 @@ from glob import glob
 from scipy.spatial.transform import Rotation as R
 from scipy.spatial.transform import Slerp
 import torch
-import math
+
 
 def inter_two_poses(pose_a, pose_b, alpha):
     ret = np.zeros([3, 4], dtype=np.float64)
@@ -50,12 +50,9 @@ from pathlib import Path
 from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 @click.command()
-@click.option('--data_dir', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds')
-# @click.option('--key_poses', type=str, default='585,307')
-# @click.option('--key_poses', type=str, default='643,307')
-@click.option('--key_poses', type=str, default='456,307,285')
-
-@click.option('--n_out_poses', type=int, default=60)
+@click.option('--data_dir', type=str, default='/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds')
+@click.option('--key_poses', type=str, default='239,495,48')
+@click.option('--n_out_poses', type=int, default=30)
 
 def hello(data_dir, n_out_poses, key_poses):
 
@@ -75,41 +72,21 @@ def hello(data_dir, n_out_poses, key_poses):
     key_poses = np.array([int(_) for _ in key_poses.split(',')])
     key_poses_1 = poses[key_poses]
 
-    out_poses = inter_poses(key_poses_1[0:2], 40)
-    # 285的位置
-    pose_285_location = key_poses_1[2][:,3:]
-    pose_285_rotation = key_poses_1[2][:,:3]
-    def rad(x):
-        return math.radians(x)
-    angle=90
-    cosine = math.cos(rad(angle))
-    sine = math.sin(rad(angle))
-    rotation_matrix_x = torch.tensor([[1, 0, 0],
-                    [0, cosine, sine],
-                    [0, -sine, cosine]])
-    angle=0
-    cosine = math.cos(rad(angle))
-    sine = math.sin(rad(angle))
-    rotation_matrix_y = torch.tensor([[cosine, 0, sine],
-                    [0, 1, 0],
-                    [-sine, 0, cosine]])
-    pose_285_rotation=rotation_matrix_y @ (rotation_matrix_x @ pose_285_rotation)
-
-    key_poses_285 = np.concatenate([pose_285_rotation,pose_285_location],1)
+    out_poses = inter_poses(key_poses_1[0:2], n_out_poses)
 
 
-    key_poses_2=np.concatenate([out_poses[30:31], key_poses_285[np.newaxis,:]],0)
+    out_poses1 = inter_poses(key_poses_1[1:], n_out_poses)
+    out_poses = np.concatenate([out_poses, out_poses1],0)
 
-    out_poses1 = inter_poses(key_poses_2, 40)
-    out_poses = np.concatenate([out_poses[:30], out_poses1[:30]],0)
+
+
+
 
     out_poses = np.ascontiguousarray(out_poses.astype(np.float64))
-
 
     source_file = metadata_paths[0]
 
     metadata_old = torch.load(source_file)
-
 
     if not os.path.exists(os.path.join('Output_subset', 'render', 'metadata')):
         Path(os.path.join('Output_subset', 'render', 'metadata')).mkdir(parents=True, exist_ok=True)

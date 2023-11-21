@@ -2542,7 +2542,10 @@ class Runner:
                 image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device)
                 # image_indices = metadata.image_index * torch.ones(rays.shape[0], device=rays.device)
             elif 'train' in self.hparams.val_type:
-                image_indices = 300 * torch.ones(rays.shape[0], device=rays.device)
+                if 'b1' in self.hparams.dataset_path:
+                    image_indices = 200 * torch.ones(rays.shape[0], device=rays.device)
+                else:    
+                    image_indices = 300 * torch.ones(rays.shape[0], device=rays.device)
 
                 # image_indices = 0 * torch.ones(rays.shape[0], device=rays.device)
             else:
