@@ -733,13 +733,17 @@ class Runner:
             else:
                 val_metrics, _ = self._run_validation_train(train_iterations)
         elif self.hparams.val_type == 'train_instance':
-            if self.hparams.instance_loss_mode == 'linear_assignment':
-                all_centroids=None
-                val_metrics, _ = self._run_validation_instance(train_iterations)
+            if self.hparams.enable_instance:
+                if self.hparams.instance_loss_mode == 'linear_assignment':
+                    all_centroids=None
+                    val_metrics, _ = self._run_validation_instance(train_iterations)
+                else:
+                    with open(self.hparams.cached_centroids_path, 'rb') as f:
+                        all_centroids = pickle.load(f)
+                    val_metrics, all_centroids = self._run_validation_instance(train_iterations, all_centroids)
             else:
-                with open(self.hparams.cached_centroids_path, 'rb') as f:
-                    all_centroids = pickle.load(f)
-                val_metrics, all_centroids = self._run_validation_instance(train_iterations, all_centroids)
+                val_metrics, _ = self._run_validation_instance(train_iterations)
+
 
         else:
             if self.hparams.enable_instance:
