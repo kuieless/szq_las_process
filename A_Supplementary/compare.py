@@ -581,6 +581,27 @@ def renderShot(shot,r,w,si,labels):
                 w.frame = draw_text(w.frame,'1/{}倍速'.format(fr),'bm',(255,255,0))
             for j in range(int(fr)):
                 w.write()
+    elif cmds[0] == 's2vs1':
+        t = 5 if not t else t
+        v = True if cmds[0] == 's1v2s' else False
+        linePos = int(lp * r.w)
+        for i in range(int(r.fps * t)):
+            frame1,frame2 = r.getNextFramePairs()
+            if frame1 is None or frame2 is None:
+                break;
+            frame2,frame1 = addLabel(si,labels,frame1,frame2)
+            if v:
+                w.frame[:linePos,:r.w,:] = frame1[:linePos,:r.w,:]
+                w.frame[linePos:r.h,:r.w,:] = frame2[linePos:r.h,:r.w,:]
+                drawLine(w.frame,-1,linePos)
+            else:
+                w.frame[:r.h,:linePos,:] = frame1[:r.h,:linePos,:]
+                w.frame[:r.h,linePos:r.w,:] = frame2[:r.h,linePos:r.w,:]
+                drawLine(w.frame,linePos,-1)
+            if fr != 1 and args.print_speed:
+                w.frame = draw_text(w.frame,'1/{}倍速'.format(fr),'bm',(255,255,0))
+            for j in range(int(fr)):
+                w.write()
     elif cmds[0].find('w') >= 0:
         swipeTime = 1
         t = (lt + swipeTime + 0.1) if not t else t

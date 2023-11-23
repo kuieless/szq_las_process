@@ -21,7 +21,7 @@ for dir_path in "$input_folder"/*/; do
         output_video_path="$mp4_folder/$dir_name.mp4"
 
         # 使用ffmpeg将图像转换为视频
-        ffmpeg -framerate 24 -pattern_type glob -i "$panoptic_folder/*.jpg" -c:v libx264 -pix_fmt yuv420p -vf "crop=1368:912:2742:2"  "$output_video_path"
+        ffmpeg -framerate 24 -pattern_type glob -i "$panoptic_folder/*.jpg" -c:v libx264 -b:v 20M -pix_fmt yuv420p -vf "crop=1368:912:2742:2"  "$output_video_path"
         echo "Video '$output_video_path' created."
     fi
 done
