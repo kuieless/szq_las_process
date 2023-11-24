@@ -121,7 +121,7 @@ def hello(data_dir, n_out_poses, key_poses):
     ## 先拔高
     key3[:,3]= new_o
     traj1 = np.concatenate([key1[np.newaxis,:],key3[np.newaxis,:]],0)
-    out_poses1 = inter_poses(traj1, 15)
+    out_poses1 = inter_poses(traj1, 48)
 
 
     ##再旋转
@@ -147,14 +147,14 @@ def hello(data_dir, n_out_poses, key_poses):
     key4 = np.concatenate([key4_rotation,key4_position[:,np.newaxis]],1)
     # traj3 = np.concatenate([key2[np.newaxis,:],key4[np.newaxis,:]],0)
     traj3 = np.concatenate([key3[np.newaxis,:],key4[np.newaxis,:]],0)
-    out_poses3 = inter_poses(traj3, 15)
+    out_poses3 = inter_poses(traj3, 60)
 
 
 
     ### 8.mp4 后， 飞到尽头
     key5=key_poses_all[4]
     traj4 = np.concatenate([key4[np.newaxis,:],key5[np.newaxis,:]],0)
-    out_poses4 = inter_poses(traj4, 15)
+    out_poses4 = inter_poses(traj4, 60)
     out_poses4 = out_poses4[:int(len(out_poses4)/2)]
 
 
@@ -180,7 +180,7 @@ def hello(data_dir, n_out_poses, key_poses):
     key6[0,3] = 2 * key6[0,3]
 
     traj5 = np.concatenate([out_poses4[-1:],key6[np.newaxis,:]],0)
-    out_poses5 = inter_poses(traj5, 15)
+    out_poses5 = inter_poses(traj5, 24)
 
 
     #### 回到起始点
@@ -207,13 +207,10 @@ def hello(data_dir, n_out_poses, key_poses):
 
 
     traj6 = np.concatenate([key6[np.newaxis,:],key7[np.newaxis,:]],0)
-    out_poses6 = inter_poses(traj6, 15)
+    out_poses6 = inter_poses(traj6, 48)
 
 
 
-    # out_poses = np.concatenate([out_poses1, out_poses2,out_poses3,out_poses4],0)
-    # out_poses = np.concatenate([out_poses4, out_poses5,out_poses6],0)
-    # out_poses = np.concatenate([out_poses1, out_poses2,out_poses3,out_poses4, out_poses5,out_poses6],0)
     out_poses = np.concatenate([out_poses1,out_poses3,out_poses4, out_poses5,out_poses6],0)
     out_poses = np.ascontiguousarray(out_poses.astype(np.float64))
 
