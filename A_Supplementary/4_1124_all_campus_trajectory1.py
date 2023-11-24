@@ -12,6 +12,12 @@ from scipy.spatial.transform import Slerp
 import torch
 
 
+from gp_nerf.runner_gpnerf import Runner
+from gp_nerf.opts import get_opts_base
+from argparse import Namespace
+from tqdm import tqdm
+
+
 def inter_two_poses(pose_a, pose_b, alpha):
     ret = np.zeros([3, 4], dtype=np.float64)
     rot_a = R.from_matrix(pose_a[:3, :3])
@@ -49,13 +55,29 @@ from dji.visual_poses import load_poses
 from pathlib import Path
 from mega_nerf.ray_utils import get_rays, get_ray_directions
 
+
+def _get_train_opts():
+    parser = get_opts_base()
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Campus_new',required=False, help='')
+    parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
+    
+    return parser.parse_args()
+
+
 @click.command()
 @click.option('--data_dir', type=str, default='/data/yuqi/Datasets/DJI/Campus_new')
-# @click.option('--key_poses', type=str, default='632,635,325,236')
-@click.option('--key_poses', type=str, default='632,236')
+@click.option('--key_poses', type=str, default='631,236')
 @click.option('--n_out_poses', type=int, default=120)
 
 def hello(data_dir, n_out_poses, key_poses):
+    hparams=_get_train_opts()
+    ###读入一些相机参数
+
+    hparams.ray_altitude_range = [-95, 54]
+    hparams.dataset_type='memory_depth_dji'
+    
+    runner = Runner(hparams)
+    train_items = runner.train_items
 
     # poses = np.load(pjoin(data_dir, 'cams_meta.npy')).reshape(-1, 27)[:, :12].reshape(-1, 3, 4)    #(N,3,4)
     poses = np.array(load_poses(data_dir))  
@@ -65,15 +87,47 @@ def hello(data_dir, n_out_poses, key_poses):
     all_file_names = train_file_names + val_file_names
     # 根据文件名中的数字进行排序
     metadata_paths = sorted(all_file_names, key=lambda x: int(x.stem))
-
-    
-
     n_poses = len(poses)
-   
     key_poses = np.array([int(_) for _ in key_poses.split(',')])
-    key_poses_1 = poses[key_poses]
+    key_poses_all = poses[key_poses]
 
-    out_poses = inter_poses(key_poses_1, n_out_poses)
+    ###  1. 设定第一帧的位置
+    key1= key_poses_all[0]
+
+    ## 选了part2的中间插值部分的相机，正对场景的长轴，打算把位置替换成far视角
+    inter1_out = inter_poses(key_poses_all, n_out_poses)
+    inter1=inter1_out[40]
+
+    ## 接下来找far视角
+    metadata_item=train_items[key_poses[0]]
+    directions = get_ray_directions(metadata_item.W,
+                                    metadata_item.H,
+                                    metadata_item.intrinsics[0],
+                                    metadata_item.intrinsics[1],
+                                    metadata_item.intrinsics[2],
+                                    metadata_item.intrinsics[3],
+                                    True,
+                                    torch.device('cpu'))
+    image_rays = get_rays(directions, metadata_item.c2w, 0, 1e5, [30, 118])
+    ray_d = image_rays[int(metadata_item.H/2), int(metadata_item.W/2), 3:6]
+    ray_o = image_rays[int(metadata_item.H/2), int(metadata_item.W/2), :3]
+
+    # z_vals_inbound = gt_depths_valid.min() * 1.5
+    z_vals_inbound = 0.25
+    new_o = ray_o - ray_d * z_vals_inbound
+
+    key2_position=new_o
+    key2_rotation=inter1[:3,:3]
+
+    key2 = np.concatenate([key2_rotation,key2_position[:,np.newaxis]],1)
+
+    traj1 = np.concatenate([key1[np.newaxis,:],key2[np.newaxis,:]],0)
+
+    out_poses1 = inter_poses(traj1, 30)
+
+
+    # out_poses = np.concatenate([out_poses[:60], out_poses1[:60]],0)
+    out_poses = out_poses1
     out_poses = np.ascontiguousarray(out_poses.astype(np.float64))
 
 
@@ -94,7 +148,7 @@ def hello(data_dir, n_out_poses, key_poses):
 
     for i in range(len(out_poses)):
         metadata_old['c2w'] = torch.FloatTensor(out_poses[i])
-        torch.save(metadata_old, os.path.join('Output_subset', 'render_supp_tra', 'metadata', f"{i:06d}.pt"))
+        torch.save(metadata_old, os.path.join(data_dir, 'render_supp_tra', 'metadata', f"{i:06d}.pt"))
 
 
     np.save(pjoin(data_dir, 'poses_render.npy'), out_poses)
