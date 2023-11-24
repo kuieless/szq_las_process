@@ -210,8 +210,13 @@ def hello(data_dir, n_out_poses, key_poses):
     out_poses6 = inter_poses(traj6, 72)
 
 
+    traj7 = np.concatenate([key7[np.newaxis,:],key1[np.newaxis,:]],0)
+    out_poses7 = inter_poses(traj7, 36)
 
-    out_poses = np.concatenate([out_poses1,out_poses3,out_poses4, out_poses5,out_poses6],0)
+
+
+    out_poses = np.concatenate([out_poses1,out_poses3,out_poses4, out_poses5,out_poses6, out_poses7],0)
+    # out_poses = np.concatenate([out_poses6, out_poses7],0)
     out_poses = np.ascontiguousarray(out_poses.astype(np.float64))
 
 
