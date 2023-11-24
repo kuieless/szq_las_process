@@ -11,8 +11,8 @@ export CUDA_VISIBLE_DEVICES=6
 
 #!/bin/bash
 # 设置A文件夹路径
-input_folder=A_Supplementary_trajectory/campus/24
-output_video=A_Supplementary_trajectory/24.mp4
+input_folder=A_Supplementary_trajectory/campus/26
+output_video=A_Supplementary_trajectory/26.mp4
 
 
 # 1. 生成instance视频
