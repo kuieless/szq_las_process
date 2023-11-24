@@ -2204,7 +2204,8 @@ class Runner:
 
                     # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                     img_list = [viz_result_rgbs * 255]
-                    
+
+
                     prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, file_name,save_left_or_right, self.ray_altitude_range)
                     
 
@@ -2666,6 +2667,7 @@ class Runner:
     #     return cv2.cvtColor(cv2.applyColorMap(scalar_tensor, cv2.COLORMAP_INFERNO), cv2.COLOR_BGR2RGB)
     
     def visualize_scalars(scalar_tensor: torch.Tensor, ma=None, mi=None, invalid_mask=None) -> np.ndarray:
+        
         if ma is not None and mi is not None:
             pass
         else:
@@ -2679,7 +2681,8 @@ class Runner:
 
             mi = torch.quantile(to_use, 0.05)
             ma = torch.quantile(to_use, 0.95)
-        
+        # print(mi)
+        # print(ma)
         scalar_tensor = (scalar_tensor - mi) / max(ma - mi, 1e-8)  # normalize to 0~1
         scalar_tensor = scalar_tensor.clamp_(0, 1)
 

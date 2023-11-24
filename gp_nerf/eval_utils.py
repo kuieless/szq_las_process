@@ -477,12 +477,9 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
             to_use = depth_dji[~invalid_mask].view(-1)
             while to_use.shape[0] > 2 ** 24:
                 to_use = to_use[::2]
-            if hparams.val_type =='train_instance':
-                mi = ray_altitude_range[0]
-                ma = ray_altitude_range[1]
-            else:
-                mi = torch.quantile(to_use, 0.05)
-                ma = torch.quantile(to_use, 0.95)
+            
+            mi = torch.quantile(to_use, 0.05)
+            ma = torch.quantile(to_use, 0.95)
 
             depth_dji = torch.from_numpy(visualize_scalars(depth_dji, ma, mi))
             img_list.append(depth_dji)
@@ -495,6 +492,16 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
 
         # gt_depth 是z， 网络得到的depth是z_val， 所以需要用scale进行处理
         depth_map = results[f'depth_{typ}'] * depth_scale.view(-1)
+        
+        if hparams.val_type =='train_instance':
+            if 'Yingrenshi' in hparams.dataset_path:
+                mi=0.17
+                ma=0.6
+            elif 'Campus' in hparams.dataset_path:
+                mi=0.2
+                ma=0.65
+
+        
         depth_vis = torch.from_numpy(visualize_scalars(depth_map.view(H, W).cpu(), ma, mi))
         img_list.append(depth_vis)
 
