@@ -13,7 +13,7 @@ export CUDA_VISIBLE_DEVICES=4
 
 
 ## detectron
-python gp_nerf/eval.py --val_type=train_instance  --cached_centroids_path='/data/yuqi/code/GP-NeRF-semantic/zyq/1114_cluster_campus/mean_detectron/mean_depth_200000_1000/test_centroids.npy'  --exp_name A_Supplementary/render_instance/campus/1111_campus_detectron --enable_semantic True --config_file configs/campus_new.yaml --batch_size 16384 --train_iterations 100000 --val_interval 50000 --ckpt_interval 50000 --dataset_type memory_depth_dji_instance --freeze_geo=True --ckpt_path=logs_campus/1104_campus_density_depth_hash22_fusion1018_car2_semantic/0/models/200000.pt --use_subset=True --lr=0.01 --enable_instance=True --freeze_semantic=True --instance_name=instances_detectron --instance_loss_mode=slow_fast --num_instance_classes=25 --ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_campus/1111_campus_detectron/0/models/100000.pt
+python gp_nerf/eval.py --val_type=train_instance --supp_name=render_supp_tra --cached_centroids_path='/data/yuqi/code/GP-NeRF-semantic/zyq/1114_cluster_campus/mean_detectron/mean_depth_200000_1000/test_centroids.npy'  --exp_name A_Supplementary/render_instance/campus/1111_campus_detectron --enable_semantic True --config_file configs/campus_new.yaml --batch_size 16384 --train_iterations 100000 --val_interval 50000 --ckpt_interval 50000 --dataset_type memory_depth_dji_instance --freeze_geo=True --ckpt_path=logs_campus/1104_campus_density_depth_hash22_fusion1018_car2_semantic/0/models/200000.pt --use_subset=True --lr=0.01 --enable_instance=True --freeze_semantic=True --instance_name=instances_detectron --instance_loss_mode=slow_fast --num_instance_classes=25 --ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_campus/1111_campus_detectron/0/models/100000.pt
 
 
 

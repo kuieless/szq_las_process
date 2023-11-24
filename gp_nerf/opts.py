@@ -60,6 +60,8 @@ def get_opts_base():
 
     
 
+    ## supp
+    parser.add_argument('--supp_name', default='render_supp', type=str, choices=['render_supp', 'render_supp_tra'], help='')
 
 
 

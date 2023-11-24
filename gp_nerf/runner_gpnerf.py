@@ -2132,7 +2132,7 @@ class Runner:
             base_tmp_path = None
             
 
-            val_paths = sorted(list((Path(self.hparams.dataset_path) / 'render_supp' / 'metadata').iterdir()))
+            val_paths = sorted(list((Path(self.hparams.dataset_path) / self.hparams.supp_name / 'metadata').iterdir()))
             # val_paths = sorted(list((Path(self.hparams.dataset_path) / 'val' / 'metadata').iterdir()))
 
 
