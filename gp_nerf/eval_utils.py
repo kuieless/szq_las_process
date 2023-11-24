@@ -453,7 +453,7 @@ def write_metric_to_folder_logger(metrics_val, CLASSES, experiment_path_current,
 
 
 
-def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, visualize_scalars, experiment_path_current, i, save_left_or_right='val_rgbs'):
+def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, visualize_scalars, experiment_path_current, i, save_left_or_right='val_rgbs', ray_altitude_range=None):
     depth_map = None
     H, W = metadata_item.H, metadata_item.W
 
@@ -477,8 +477,12 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
             to_use = depth_dji[~invalid_mask].view(-1)
             while to_use.shape[0] > 2 ** 24:
                 to_use = to_use[::2]
-            mi = torch.quantile(to_use, 0.05)
-            ma = torch.quantile(to_use, 0.95)
+            if hparams.val_type =='train_instance':
+                mi = ray_altitude_range[0]
+                ma = ray_altitude_range[1]
+            else:
+                mi = torch.quantile(to_use, 0.05)
+                ma = torch.quantile(to_use, 0.95)
 
             depth_dji = torch.from_numpy(visualize_scalars(depth_dji, ma, mi))
             img_list.append(depth_dji)

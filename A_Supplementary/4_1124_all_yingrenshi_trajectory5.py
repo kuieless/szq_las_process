@@ -15,6 +15,8 @@ from gp_nerf.runner_gpnerf import Runner
 from gp_nerf.opts import get_opts_base
 from argparse import Namespace
 from tqdm import tqdm
+import math
+
 
 def inter_two_poses(pose_a, pose_b, alpha):
     ret = np.zeros([3, 4], dtype=np.float64)
@@ -65,7 +67,9 @@ def _get_train_opts():
 
 @click.command()
 @click.option('--data_dir', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926')
-@click.option('--key_poses', type=str, default='96,329')
+# @click.option('--key_poses', type=str, default='96,366,384')##20
+@click.option('--key_poses', type=str, default='96,323,381,330,123')
+
 @click.option('--n_out_poses', type=int, default=120)
 
 def hello(data_dir, n_out_poses, key_poses):
@@ -98,10 +102,10 @@ def hello(data_dir, n_out_poses, key_poses):
 
 
     
-    ###  1. 设定第一帧的位置
+    ###  0. 设定第一帧的位置
     key1= key_poses_all[0]
 
-
+    ###  1. 拉远far视角
     ## 接下来找far视角
     metadata_item=train_items[key_poses[0]]
     directions = get_ray_directions(metadata_item.W,
@@ -117,18 +121,130 @@ def hello(data_dir, n_out_poses, key_poses):
     ray_o = image_rays[int(metadata_item.H/2), int(metadata_item.W/2), :3]
 
     # z_vals_inbound = gt_depths_valid.min() * 1.5
-    z_vals_inbound = 0.25
+    z_vals_inbound = 0.3
     new_o = ray_o - ray_d * z_vals_inbound
-
-    key2_position=new_o
-
-
-
-
-
+    key2 = metadata_item.c2w
+    ## 先拔高
+    key2[:,3]= new_o
+    traj1 = np.concatenate([key1[np.newaxis,:],key2[np.newaxis,:]],0)
+    out_poses1 = inter_poses(traj1, 10)
 
 
-    out_poses = inter_poses(key_poses_1, n_out_poses)
+
+    #### 2. 旋转视角
+    def rad(x):
+        return math.radians(x)
+    angle=-25
+    cosine = math.cos(rad(angle))
+    sine = math.sin(rad(angle))
+    rotation_matrix_x = torch.tensor([[1, 0, 0],
+                    [0, cosine, sine],
+                    [0, -sine, cosine]])
+    angle=0
+    cosine = math.cos(rad(angle))
+    sine = math.sin(rad(angle))
+    rotation_matrix_y = torch.tensor([[cosine, 0, sine],
+                    [0, 1, 0],
+                    [-sine, 0, cosine]])
+
+    key3=key2.clone()
+    key3[:3,:3]=rotation_matrix_y @ (rotation_matrix_x @ key3[:3,:3])
+
+    traj2 = np.concatenate([key2[np.newaxis,:],key3[np.newaxis,:]],0)
+    out_poses2 = inter_poses(traj2, 7)
+
+
+    ##  这里定义一个正向的角度，后面使用
+    angle=-35
+    cosine = math.cos(rad(angle))
+    sine = math.sin(rad(angle))
+    rotation_matrix_x = torch.tensor([[1, 0, 0],
+                    [0, cosine, sine],
+                    [0, -sine, cosine]])
+    rotation_1 = rotation_matrix_y @ (rotation_matrix_x @ key2[:3,:3])
+
+
+
+    ####3 . 俯冲
+    key4_position=key_poses_all[1][:3,3]
+    key4_rotation=key_poses_all[2][:3,:3]
+    key4 = np.concatenate([key4_rotation,key4_position[:,np.newaxis]],1)
+
+
+    traj3 = np.concatenate([key3[np.newaxis,:],key4[np.newaxis,:]],0)
+    out_poses3 = inter_poses(traj3,15)
+
+
+    ####4 . 往前一段时间
+    key5_position=key_poses_all[3][:3,3]
+    key5_rotation=key_poses_all[2][:3,:3]
+    key5 = np.concatenate([key5_rotation,key5_position[:,np.newaxis]],1)
+
+    traj4 = np.concatenate([key4[np.newaxis,:],key5[np.newaxis,:]],0)
+    out_poses4 = inter_poses(traj4, 10)
+
+
+    ####5 . 掉头
+
+    angle=80
+    cosine = math.cos(rad(angle))
+    sine = math.sin(rad(angle))
+    rotation_matrix_x = torch.tensor([[1, 0, 0],
+                    [0, cosine, sine],
+                    [0, -sine, cosine]])
+    rotation_1 = rotation_matrix_y @ (rotation_matrix_x @ key5[:3,:3])
+
+    key6=key5.copy()
+    key6[:3,:3]=rotation_1
+
+    traj5 = np.concatenate([key5[np.newaxis,:],key6[np.newaxis,:]],0)
+    out_poses5 = inter_poses(traj5, 10)
+
+
+
+
+    ####6 . 往前飞
+
+    angle=120
+    cosine = math.cos(rad(angle))
+    sine = math.sin(rad(angle))
+    rotation_matrix_x = torch.tensor([[1, 0, 0],
+                    [0, cosine, sine],
+                    [0, -sine, cosine]])
+    rotation_1 = rotation_matrix_y @ (rotation_matrix_x @ key5[:3,:3])
+
+    key7 = key_poses_all[4]
+    key7[:3,:3]=rotation_1
+
+    traj6 = np.concatenate([key6[np.newaxis,:],key7[np.newaxis,:]],0)
+    out_poses6 = inter_poses(traj6, 10)
+
+
+
+    # ####7 . 往右甩
+
+    # angle=70
+    # cosine = math.cos(rad(angle))
+    # sine = math.sin(rad(angle))
+    # rotation_matrix_x = torch.tensor([[1, 0, 0],
+    #                 [0, cosine, sine],
+    #                 [0, -sine, cosine]])
+    # rotation_1 = rotation_matrix_y @ (rotation_matrix_x @ key5[:3,:3])
+
+    # key8 = key7.clone()
+    # key8[:3,:3]=rotation_1
+
+    # traj7 = np.concatenate([key7[np.newaxis,:],key8[np.newaxis,:]],0)
+    # out_poses7 = inter_poses(traj7, 10)
+    traj7 = np.concatenate([key7[np.newaxis,:],key1[np.newaxis,:]],0)
+    out_poses7 = inter_poses(traj7, 10)
+
+
+
+
+    out_poses = np.concatenate([out_poses6, out_poses7],0)
+
+
     out_poses = np.ascontiguousarray(out_poses.astype(np.float64))
 
 
@@ -136,12 +252,13 @@ def hello(data_dir, n_out_poses, key_poses):
 
     metadata_old = torch.load(source_file)
 
-    if not os.path.exists(os.path.join('Output_subset', 'render', 'metadata')):
-        Path(os.path.join('Output_subset', 'render', 'metadata')).mkdir(parents=True, exist_ok=True)
+
+    if not os.path.exists(os.path.join(data_dir, 'render_supp_tra', 'metadata')):
+        Path(os.path.join(data_dir, 'render_supp_tra', 'metadata')).mkdir(parents=True, exist_ok=True)
 
     for i in range(len(out_poses)):
         metadata_old['c2w'] = torch.FloatTensor(out_poses[i])
-        torch.save(metadata_old, os.path.join('Output_subset', 'render', 'metadata', f"{i:06d}.pt"))
+        torch.save(metadata_old, os.path.join(data_dir, 'render_supp_tra', 'metadata', f"{i:06d}.pt"))
 
 
     np.save(pjoin(data_dir, 'poses_render.npy'), out_poses)

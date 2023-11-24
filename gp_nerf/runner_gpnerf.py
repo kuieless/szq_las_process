@@ -2205,7 +2205,7 @@ class Runner:
                     # NOTE: 这里初始化了一个list，需要可视化的东西可以后续加上去
                     img_list = [viz_result_rgbs * 255]
                     
-                    prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, file_name,save_left_or_right)
+                    prepare_depth_normal_visual(img_list, self.hparams, metadata_item, typ, results, Runner.visualize_scalars, experiment_path_current, file_name,save_left_or_right, self.ray_altitude_range)
                     
 
                     # get_semantic_gt_pred_render_zyq(results, 'val', metadata_item, viz_result_rgbs, self.logits_2_label, typ, remapping,
