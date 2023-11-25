@@ -65,9 +65,11 @@ class MemoryDataset(Dataset):
             # metadata_items = metadata_items[388:389]
             # metadata_items = metadata_items[::50]
             # metadata_items = metadata_items[239:240]
-            # metadata_items = metadata_items[::10]
+            # metadata_items = metadata_items[::2]
             # metadata_items = metadata_items[151:152]
-            metadata_items = metadata_items[140:160]
+            # metadata_items = metadata_items[140:160]
+            metadata_items = metadata_items[155:156]
+            # metadata_items = metadata_items[546:547]
             pass
 
         load_subset = 0
@@ -236,14 +238,14 @@ class MemoryDataset(Dataset):
             color_crossview = label_to_color(self._instance_crossview[idx].long().view(self.H, self.W)) *(1-alpha) + alpha * self._rgbs[idx].clone().view(self.H, self.W, 3)
             results = label_to_color(instance_viz) *(1-alpha) + alpha * self._rgbs[idx].clone().view(self.H, self.W, 3)
             vis_img = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy(), results.cpu().numpy()], axis=1)
-            # Path(f"zyq/1116_grouping/viz").mkdir(exist_ok=True, parents=True)
-            # cv2.imwrite(f"zyq/1116_grouping/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
+            # Path(f"zyq/1123_supp/viz").mkdir(exist_ok=True, parents=True)
+            # cv2.imwrite(f"zyq/1123_supp/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img)
 
-            # Path(f"zyq/1116_grouping/compare_duo_crossview").mkdir(exist_ok=True, parents=True)
+            # Path(f"zyq/1123_supp/compare_duo_crossview").mkdir(exist_ok=True, parents=True)
             # instance_duo = Image.open(str(metadata_current.instance_path).replace(self.hparams.instance_name, 'instances_mask_0.001'))
             # instance_duo = torch.tensor(np.asarray(instance_duo),dtype=torch.int32)
             # results_duo = label_to_color(instance_duo.long().view(self.H, self.W)) *(1-alpha) + alpha * self._rgbs[idx].clone().view(self.H, self.W, 3)
-            # cv2.imwrite(f"zyq/1116_grouping/compare_duo_crossview/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", 
+            # cv2.imwrite(f"zyq/1123_supp/compare_duo_crossview/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", 
             #             np.concatenate([results_duo.cpu().numpy(), results.cpu().numpy()], axis=1))
             
             
@@ -261,14 +263,14 @@ class MemoryDataset(Dataset):
             vis_img2 = np.concatenate([color.cpu().numpy(), color_crossview.cpu().numpy()], axis=1)
             vis_img3 = np.concatenate([vis_img1, vis_img2], axis=0)
             
-            Path(f"zyq/1116_grouping/viz").mkdir(exist_ok=True, parents=True)
-            cv2.imwrite(f"zyq/1116_grouping/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img3)
+            Path(f"zyq/1123_supp/viz").mkdir(exist_ok=True, parents=True)
+            cv2.imwrite(f"zyq/1123_supp/viz/{self._img_indices[idx]}_{random.randint(1, 100)}.jpg", vis_img3)
 
 
             return None
         
-        # Path(f"zyq/1116_grouping/results").mkdir(exist_ok=True, parents=True)
-        # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1116_grouping/results/%06d.png" % (self._img_indices[idx]))
+        # Path(f"zyq/1123_supp/results").mkdir(exist_ok=True, parents=True)
+        # Image.fromarray(instance.view(self.H, self.W).cpu().numpy().astype(np.uint32)).save(f"zyq/1123_supp/results/%06d.png" % (self._img_indices[idx]))
         
         
         # 找到非零值的索引

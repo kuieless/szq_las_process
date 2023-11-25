@@ -33,4 +33,4 @@ import os
 #           -o A_Supplementary_trajectory_output/combine\
 #           -c s1,t6-s2,t10")
 
-ffmpeg -f concat -i A_Supplementary_trajectory_output/campus.txt  -c copy A_Supplementary_trajectory_output/campus_output.mp4
+# ffmpeg -f concat -i A_Supplementary_trajectory_output/campus.txt  -c copy A_Supplementary_trajectory_output/campus_output.mp4
