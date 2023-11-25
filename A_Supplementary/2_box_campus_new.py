@@ -50,14 +50,15 @@ for video in videos:
         elif i == stop:
             for _ in range(10): 
                 out.write(frame)
+            # cv2.rectangle(frame, (X, Y), (X+W, Y+H), (0, 255, 255), line_size)
+            # for _ in range(PAUSE_DURATION * FPS): 
+            #     out.write(frame)
+            # for _ in range(10): 
+            #     out.write(frame)
             cv2.rectangle(frame, (X, Y), (X+W, Y+H), (0, 255, 255), line_size)
-            for _ in range(PAUSE_DURATION * FPS): 
-                out.write(frame)
-            for _ in range(10): 
-                out.write(frame)
-                
-        else:
             out.write(frame)
+        elif i>stop:
+            pass
 
     cap.release()
     out.release()
