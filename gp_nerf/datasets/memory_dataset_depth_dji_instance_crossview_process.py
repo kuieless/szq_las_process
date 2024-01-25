@@ -123,9 +123,9 @@ class MemoryDataset(Dataset):
         instances_current = self._labels[idx].clone().view(self.H, self.W).to(device)
         depth_current = (self._depth_djis[idx] * self._depth_scales[idx]).view(self.H, self.W).to(device)
         metadata_current = self.metadata_items[self._img_indices[idx]]
-        # aaaaa = 680
-        # if int(Path(metadata_current.image_path).stem) < aaaaa or int(Path(metadata_current.image_path).stem) > (aaaaa +340):
-            # return None
+        # aaaaa = 0
+        # if int(Path(metadata_current.image_path).stem) < aaaaa or int(Path(metadata_current.image_path).stem) > (aaaaa +430):
+        #     return None
         # if int(Path(metadata_current.image_path).stem) != 207:
             # return None
         # if int(Path(metadata_current.image_path).stem) < 638:

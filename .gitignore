@@ -1,5 +1,6 @@
 
 # Byte-compiled / optimized / DLL files
+events.out*
 A_Supplementary/instance_video/
 A_Supplementary/render_instance_60fps/
 A_Supplementary/rendering_semantic_train/

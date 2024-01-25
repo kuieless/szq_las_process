@@ -129,7 +129,7 @@ def save_mask_anns_torch_depth(anns, img_name, hparams, id, output_path, depth):
             coordinate_info = torch.load(Path(hparams.dataset_path) / 'coordinates.pt', map_location='cpu')
             pose_scale_factor = coordinate_info['pose_scale_factor']
             depth_range = get_depth_range(depth, m)
-            if iou > 0.9 or (depth_range < (10 / pose_scale_factor) and (intersection / torch.from_numpy(m).to(exsit_max_label_mask.device).sum()) > 0.9):
+            if iou > 0.9 or (depth_range < (hparams.geo_filter_long / pose_scale_factor) and (intersection / torch.from_numpy(m).to(exsit_max_label_mask.device).sum()) > 0.9):
                 continue
             img[m] = id
             id = id + 1
@@ -178,8 +178,8 @@ def _get_train_opts() -> Namespace:
     # parser.add_argument('--depth_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/depth_mesh',required=False, help='')
     parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--eval', default=False, type=eval, choices=[True, False], help='')
-
     
+    parser.add_argument('--geo_filter_long', default=10, type=float, help='')
     
 
     return parser.parse_args()
@@ -254,7 +254,7 @@ def hello(hparams: Namespace) -> None:
         
         used_files = []
         for ext in ('*.png', '*.jpg'):
-            used_files.extend(glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
+            used_files.extend(glob.glob(os.path.join(hparams.dataset_path, 'subset', 'rgbs', ext)))
         used_files.sort()
         process_item = [Path(far_p).stem for far_p in used_files]
 
@@ -264,6 +264,7 @@ def hello(hparams: Namespace) -> None:
     if visualize_ori:
         id = 1 
     id_depth=1
+    print(f"geo-filter:{hparams.geo_filter_long}")           
     
     for metadata_item in tqdm.tqdm(train_items):
         img_name = Path(metadata_item.image_path).stem
@@ -343,7 +344,6 @@ def hello(hparams: Namespace) -> None:
 
 
 
-                    
     print('done')
     print(id)
 

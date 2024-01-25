@@ -1,0 +1,21 @@
+ray_altitude_range: [-3.28, -1.40]
+num_instance_classes: 100
+
+
+network_type: gpnerf_nr3d
+use_scaling: False
+sampling_mesh_guidance: True
+separate_semantic: True
+dataset_path: /data/yuqi/jx_rebuttal/seq14_ds_10/postprocess
+num_layers_semantic_hidden: 3
+semantic_layer_dim: 128
+balance_weight: True
+num_semantic_classes: 5
+
+label_name: 1028_ml_fusion_0.3
+log2_hashmap_size: 22
+desired_resolution: 8192
+sdf_as_gpnerf: True
+wgt_sem_loss: 1
+train_scale_factor: 1
+val_scale_factor: 1

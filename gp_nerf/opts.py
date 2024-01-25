@@ -133,7 +133,11 @@ def get_opts_base():
                                                                                             #   'instances_mask_0.001_crossview',
                                                                                               "instances_mask_0.001_depth_project",
                                                                                               'instances_gt', 
-                                                                                              'instances_gt_noremapping'], help='')
+                                                                                              'instances_gt_noremapping',
+                                                                                              #rebuttal
+                                                                                              "instances_mask_0.001_depth15",
+                                                                                              "instances_mask_0.001_depth5",
+                                                                                              ], help='')
     parser.add_argument('--instance_loss_mode', type=str, default='slow_fast', choices=['contrastive', 'linear_assignment', 'slow_fast'], help='')
     parser.add_argument('--cached_centroids_path', type=str, default=None, help='path towards serialized model checkpoint')
     parser.add_argument('--cached_centroids_type', type=str, default='test', choices=['test', 'all'], help='')
@@ -147,7 +151,13 @@ def get_opts_base():
                                                                                        'labels_panolift',
                                                                                        'labels_1018_ml_fusion_0.3',
                                                                                        'labels_1018_ml_fusion_0.3_covercar',
-                                                                                       'labels_1028_ml_fusion_0.3'], help='')
+                                                                                       'labels_1028_ml_fusion_0.3',
+                                                                                       # rebuttal
+                                                                                       "labels_0125_rebu_0.1",
+                                                                                       "labels_0125_rebu_0.2",
+                                                                                       "labels_0125_rebu_0.4",
+                                                                                       "labels_0125_rebu_0.5",
+                                                                                       ], help='')
     parser.add_argument('--crossview_process_path', type=str, default='zyq/test', help='')
     parser.add_argument('--crossview_all', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--only_train_building', default=True, type=eval, choices=[True, False], help='')
@@ -167,7 +177,8 @@ def get_opts_base():
                                                                           '1018_ml_fusion_0.3_covercar', 
                                                                           '1016_ml_fusion_0.3', 
                                                                           '1016_ml_fusion_0.5',
-                                                                          'm2f', 'merge', 'gt'], help='')
+                                                                          'm2f', 'merge', 'gt',
+                                                                          '0123_ml_fusion_0.3'], help='')
 
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--num_semantic_classes', type=int, default=5, help='')

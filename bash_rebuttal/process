@@ -1,0 +1,17 @@
+
+##  1. 先生成far 视角 （train和val的代码不一样）
+python /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/1015_augment_set_far_fix_z_eval_yingrenshi.py
+
+##  2. 把生成的视角挪到对应的数据集文件夹 （注意区分train和val）
+
+##  3. 用eval代码生成对应far视角的rgb图 (注意要修改gp_nerf/runner_gpnerf.py L1370 val_paths = sorted(list((dataset_path XXXX   )
+sh /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/render_far_view.sh
+
+##  4.  挑到M2F_a 的代码，把far view 用M2F分割一遍 （做这个之前要先挪一下上一步生成的文件夹结构）
+sh /data/yuqi/code/Mask2Former_a/bash_336/20240125_farview1.sh
+
+##  5. 然后用处理代码处理替换building部分 （rebuttal时 car tree 等 直接使用之前的） 
+sh /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/0125_rebuttal_replace_far_view_building.sh
+
+##  6. 得到label后挪到数据集 train或者val ，改名，进行后面的操作（比如算2d指标、进行语义训练等）
+比如  sh /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/eval_far_view_2d.sh

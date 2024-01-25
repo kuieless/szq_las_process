@@ -1363,7 +1363,12 @@ class Runner:
                 else:
                     val_paths = sorted(list((dataset_path / 'render_far0.3_val' / 'metadata').iterdir()))
             else:
-                val_paths = sorted(list((dataset_path / 'render_supp' / 'metadata').iterdir()))
+                # val_paths = sorted(list((dataset_path / 'render_supp' / 'metadata').iterdir()))
+                #####  2024/01/20   demo 改的，  上面是补充材料时候用的
+                # val_paths = sorted(list((dataset_path / 'render_far0.3' / 'metadata').iterdir()))
+                #####  2024/01/25   cvpr rebuttal
+                val_paths = sorted(list((dataset_path / 'render_far0.5_val' / 'metadata').iterdir()))
+
 
 
             train_paths = val_paths
