@@ -23,8 +23,8 @@ import open3d as o3d
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--rgbs_path', type=str, default='/data/yuqi/jx_rebuttal/seq_m2f/seq31/val_origin',required=False, help='')
-    parser.add_argument('--save_path', type=str, default='/data/yuqi/jx_rebuttal/seq_m2f/seq31/val_rgbs',required=False, help='experiment name')
+    parser.add_argument('--rgbs_path', type=str, default='/data/yuqi/jx_rebuttal/seq_m2f/seq15/train_origin',required=False, help='')
+    parser.add_argument('--save_path', type=str, default='/data/yuqi/jx_rebuttal/seq_m2f/seq15/train_rgbs',required=False, help='experiment name')
 
     
     return parser.parse_args()
