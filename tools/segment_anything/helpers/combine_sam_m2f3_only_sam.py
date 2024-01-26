@@ -154,7 +154,10 @@ def hello(hparams: Namespace) -> None:
 
         img_name = m2fs[i].split('/')[-1][:6]
 
-        img_p = os.path.join(img_path, img_name+'.jpg')
+        if 'seq' in hparams.rgbs_path:
+            img_p = os.path.join(img_path, img_name+'.png')
+        else:
+            img_p = os.path.join(img_path, img_name+'.jpg')
 
         image = cv2.imread(img_p)
         # image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))

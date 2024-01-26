@@ -8,9 +8,9 @@ export CUDA_VISIBLE_DEVICES=1
 
 
 dataset_path=/data/yuqi/Datasets/DJI/Campus_new
-output_path=/data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_campus_farview_0.5_val
+output_path=/data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_campus_farview_0.6_val
 far_paths=$output_path/1_labels_m2f_only_sam/labels_merge
-render_type=render_far0.5_val
+render_type=render_far0.6_val
 eval=True
 
 

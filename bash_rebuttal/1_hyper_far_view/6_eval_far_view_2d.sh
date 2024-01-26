@@ -1,5 +1,5 @@
 export OMP_NUM_THREADS=16
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=5
 
 
 
@@ -14,5 +14,5 @@ python gp_nerf/eval.py \
     --semantic_layer_dim=128 --use_subset=True --lr=0.01 --balance_weight=True --num_semantic_classes=5 \
     --ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_dji/1018_yingrenshi_density_depth_hash22_far0.3_car2/0/continue150k/0/models/170000.pt \
     --eval_others=True \
-    --eval_others_name=labels_0125_rebu_0.5  \
-    --exp_name logs_rebuttal/0125_farview_0.5_val_metric 
+    --eval_others_name=labels_0125_rebu_1.0  \
+    --exp_name logs_rebuttal/0125_farview_1.0_val_metric 

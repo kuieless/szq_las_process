@@ -54,7 +54,7 @@ from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Campus_new',required=False, help='')
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/Yingrenshi_20230926',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
     
     return parser.parse_args()
@@ -72,7 +72,6 @@ def hello(hparams: Namespace) -> None:
     # for metadata_item in tqdm(train_items[200:240]):
     for metadata_item in tqdm(train_items):
         file_name = Path(metadata_item.image_path).stem
-        
         
         pose = metadata_item.c2w
         
@@ -94,7 +93,7 @@ def hello(hparams: Namespace) -> None:
         gt_depths_valid = gt_depths[valid_depth_mask]
 
         # z_vals_inbound = gt_depths_valid.min() * 1.5
-        z_vals_inbound = 0.5
+        z_vals_inbound = 1.0
         new_o = ray_o - ray_d * z_vals_inbound
 
         new_pose = pose

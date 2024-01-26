@@ -1,4 +1,4 @@
-ray_altitude_range: [-3.28, -1.40]
+ray_altitude_range: [-3.2, -1.4]
 num_instance_classes: 100
 
 
@@ -17,5 +17,5 @@ log2_hashmap_size: 22
 desired_resolution: 8192
 sdf_as_gpnerf: True
 wgt_sem_loss: 1
-train_scale_factor: 1
-val_scale_factor: 1
+train_scale_factor: 2
+val_scale_factor: 2

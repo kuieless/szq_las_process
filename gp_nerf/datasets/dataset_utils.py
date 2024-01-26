@@ -89,7 +89,7 @@ def get_rgb_index_mask_depth_dji(metadata: ImageMetadata) -> Optional[
         labels = labels.view(-1)
         if keep_mask is not None :
             labels = labels[keep_mask == True]
-
+    
     depth_dji = metadata.load_depth_dji()
     if depth_dji is not None:
         depth_dji = depth_dji.view(-1)

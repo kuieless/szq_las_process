@@ -88,7 +88,8 @@ class MemoryDataset(Dataset):
             indices.append(image_indices)
             if label is not None:
                 labels.append(torch.tensor(label, dtype=torch.int))
-            depth_djis.append(depth_dji / depth_scale)
+            if depth_dji != None:
+                depth_djis.append(depth_dji / depth_scale)
             # depth_scales.append(depth_scale)
 
         print(f"load_subset: {load_subset}")

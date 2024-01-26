@@ -44,7 +44,7 @@ from tools.unetformer.metric import Evaluator
 
 import pandas as pd
 
-from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map, get_semantic_gt_pred_render_zyq, get_instance_pred, calculate_panoptic_quality_folders
+from gp_nerf.eval_utils import get_depth_vis, get_semantic_gt_pred, get_sdf_normal_map, get_semantic_gt_pred_render_zyq, eval_others, get_instance_pred, calculate_panoptic_quality_folders
 from tools.contrastive_lift.utils import cluster, visualize_panoptic_outputs, assign_clusters
 from gp_nerf.eval_utils import calculate_metric_rendering, write_metric_to_folder_logger, save_semantic_metric
 from gp_nerf.eval_utils import prepare_depth_normal_visual
@@ -1367,7 +1367,8 @@ class Runner:
                 #####  2024/01/20   demo 改的，  上面是补充材料时候用的
                 # val_paths = sorted(list((dataset_path / 'render_far0.3' / 'metadata').iterdir()))
                 #####  2024/01/25   cvpr rebuttal
-                val_paths = sorted(list((dataset_path / 'render_far0.5_val' / 'metadata').iterdir()))
+                # val_paths = sorted(list((dataset_path / 'render_far0.3_val' / 'metadata').iterdir()))
+                val_paths = sorted(list((dataset_path / self.hparams.render_zyq_far_view / 'metadata').iterdir()))
 
 
 
@@ -1436,8 +1437,8 @@ class Runner:
                     # file_name = Path(metadata_item.image_path).stem
                     # if file_name not in process_item:
                     #     continue
-
                     i = int(Path(metadata_item.depth_dji_path).stem)
+                    # i = metadata_item.image_index
                     self.hparams.sampling_mesh_guidance = False
                     results, _ = self.render_image(metadata_item, train_index)
                     typ = 'fine' if 'rgb_fine' in results else 'coarse'
@@ -1562,8 +1563,9 @@ class Runner:
                     # elif 'building'in self.hparams.dataset_path or 'campus'in self.hparams.dataset_path:
                         # self.val_items=self.val_items[:10]
                     indices_to_eval = np.arange(len(self.val_items))
-                elif val_type == 'train':
+                elif 'train' in val_type:
                     indices_to_eval = np.arange(len(self.train_items))
+                    print(len(self.train_items))
                     # indices_to_eval = np.arange(370,490)  
                     
                 if self.hparams.enable_instance:
@@ -1599,13 +1601,20 @@ class Runner:
                         #     break
                         if val_type == 'val':
                             metadata_item = self.val_items[i]
-                        elif val_type == 'train':
+                        elif 'train' in val_type:
                             metadata_item = self.train_items[i]
+                            if metadata_item.is_val:
+                                continue
 
                         if self.hparams.enable_instance:
                             gt_instance_label = metadata_item.load_instance_gt()
                             gt_points_instance.append(gt_instance_label.view(-1))
                         
+                        if self.hparams.eval_others:
+
+                            eval_others(val_type, metadata_item,remapping,self.hparams, self.metrics_val, self.metrics_val_each)
+                            continue
+
                         results, _ = self.render_image(metadata_item, train_index)
 
 
@@ -2783,6 +2792,9 @@ class Runner:
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_dji', '%s.npy' % metadata_path.stem) 
             elif self.hparams.depth_dji_type=='mesh':
                 depth_dji_path = os.path.join(metadata_path.parent.parent, 'depth_mesh', '%s.npy' % metadata_path.stem) 
+            
+            if not Path(depth_dji_path).exists() and not self.hparams.render_zyq:
+                depth_dji_path=None
             if 'left_or_right' in metadata:
                 left_or_right = metadata['left_or_right']
             else:

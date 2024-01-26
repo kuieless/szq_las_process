@@ -482,7 +482,7 @@ def _inference(point_type,
     
 
     gradient, normals = None, None
-    if point_type == 'fg' and (hparams.visual_normal or hparams.normal_loss): # for surface normal extraction
+    if point_type == 'fg' and (hparams.visual_normal or hparams.normal_loss) and not hparams.save_depth: # for surface normal extraction
         gradient, normals = extract_gradients(nerf, xyz_, train_iterations, hparams, N_rays_, N_samples_)
 
     if hparams.enable_semantic:

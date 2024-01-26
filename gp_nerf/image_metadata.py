@@ -99,12 +99,15 @@ class ImageMetadata:
     
     def load_depth_dji(self):
         if self.hparams != None and (self.hparams.render_zyq == False):
-            depth = np.load(self.depth_dji_path)
-            depth = torch.HalfTensor(depth)
-            # depth = torch.Tensor(depth)
-            
-            assert depth.shape[0] == self.H and depth.shape[1] == self.W
-            return depth
+            if self.depth_dji_path != None:
+                depth = np.load(self.depth_dji_path)
+                depth = torch.HalfTensor(depth)
+                # depth = torch.Tensor(depth)
+                
+                assert depth.shape[0] == self.H and depth.shape[1] == self.W
+                return depth
+            else:
+                return None
         else:
             return None
 
@@ -131,18 +134,29 @@ class ImageMetadata:
         if self.instance_path is None:
             return None
         crossview_path = str(self.instance_path).replace(self.hparams.instance_name, self.hparams.instance_name+'_crossview_process')
-
-        if self.instance_path.suffix == '.npy':
-            labels = np.load(crossview_path)
-            return torch.tensor(labels.astype(np.int32),dtype=torch.int32)
-
+        # print(crossview_path)
+        if not os.path.exists(crossview_path):
+            if Path(crossview_path).suffix == '.npy':
+                crossview_path = crossview_path.replace('.npy', '.png')
+                labels = Image.open(crossview_path)    #.convert('RGB')
+                size = labels.size
+                if size[0] != self.W or size[1] != self.H:
+                    labels = labels.resize((self.W, self.H), Image.NEAREST)
+                return torch.tensor(np.asarray(labels),dtype=torch.int32)
+            else:
+                crossview_path = crossview_path.replace('.png', '.npy')
+                labels = np.load(crossview_path)
+                return torch.tensor(labels.astype(np.int32),dtype=torch.int32)
         else:
-            labels = Image.open(crossview_path)    #.convert('RGB')
-            size = labels.size
-            if size[0] != self.W or size[1] != self.H:
-                labels = labels.resize((self.W, self.H), Image.NEAREST)
-
-            return torch.tensor(np.asarray(labels),dtype=torch.int32)
+            if self.instance_path.suffix == '.npy':
+                labels = np.load(crossview_path)
+                return torch.tensor(labels.astype(np.int32),dtype=torch.int32)
+            else:
+                labels = Image.open(crossview_path)    #.convert('RGB')
+                size = labels.size
+                if size[0] != self.W or size[1] != self.H:
+                    labels = labels.resize((self.W, self.H), Image.NEAREST)
+                return torch.tensor(np.asarray(labels),dtype=torch.int32)
         
     def load_instance_64(self) -> torch.Tensor:
 

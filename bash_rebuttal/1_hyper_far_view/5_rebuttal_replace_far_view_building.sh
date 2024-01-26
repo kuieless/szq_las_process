@@ -2,10 +2,10 @@
 export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=1
 
-dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
-output_path=/data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_farview_0.5_val
+dataset_path=/data/yuqi/jx_rebuttal/seq14_ds_10_val/postprocess
+output_path=/data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_seq14_geo_farview0.3_val/4/eval_40000/val_rgbs
 far_paths=$output_path/1_labels_m2f_only_sam/labels_merge
-render_type=render_far0.5_val
+render_type=render_far0.3_val
 eval=True
 
 # 先对nerf渲染的far图像进行sam feature提取   
@@ -53,13 +53,13 @@ python tools/segment_anything/helpers/combine_sam_m2f3_only_sam.py  \
 # # 用/data/yuqi/code/GP-NeRF-semantic/tools/segment_anything/helpers/combine_sam_m2f2_ds2crop_1022process_b1.sh
 
 
-/data/yuqi/anaconda3/envs/gpnerf/bin/python     /data/yuqi/code/GP-NeRF-semantic/scripts/1016_2_further_replace_car_tree_from_crop.py  \
-    --dataset_path=$dataset_path    \
-    --exp_name=logs_357/test    \
-    --only_sam_m2f_far_project_path=$output_path/4_replace_building/replace_building_label  \
-    --crop_m2f=/data/yuqi/code/GP-NeRF-semantic/A_important_data/Mask2former_a_output/yingrenshi/yingrenshi_crop_ds2_val/labels_m2f_final_sam/labels_merge  \
-    --output_path=$output_path/5_replace_building_cartree  \
-    --eval=$eval
+# /data/yuqi/anaconda3/envs/gpnerf/bin/python     /data/yuqi/code/GP-NeRF-semantic/scripts/1016_2_further_replace_car_tree_from_crop.py  \
+#     --dataset_path=$dataset_path    \
+#     --exp_name=logs_357/test    \
+#     --only_sam_m2f_far_project_path=$output_path/4_replace_building/replace_building_label  \
+#     --crop_m2f=/data/yuqi/code/GP-NeRF-semantic/A_important_data/Mask2former_a_output/yingrenshi/yingrenshi_crop_ds2_val/labels_m2f_final_sam/labels_merge  \
+#     --output_path=$output_path/5_replace_building_cartree  \
+#     --eval=$eval
 
 
 

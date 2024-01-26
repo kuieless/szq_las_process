@@ -154,11 +154,18 @@ def hello(hparams: Namespace) -> None:
         img_name = m2fs[i].split('/')[-1][:6]
         if img_name not in process_item:
             continue
-
-        img_p = os.path.join(img_path, img_name+'.jpg')
+        
+        if 'seq' in hparams.rgbs_path:
+            img_p = os.path.join(img_path, img_name+'.png')
+        else:
+            img_p = os.path.join(img_path, img_name+'.jpg')
 
         image = cv2.imread(img_p)
-        image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))
+        if 'seq' in hparams.rgbs_path:
+            image = cv2.resize(image, (image.shape[1], image.shape[0]))
+
+        else:
+            image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         sam_p = os.path.join(sam_path, img_name+'.npy')

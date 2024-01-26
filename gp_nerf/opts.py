@@ -8,7 +8,7 @@ def get_opts_base():
     parser.add_argument('--gpnerf', default=True, type=eval, choices=[True, False], help='if true use gp-nerf, else mega-nerf') 
 
     parser.add_argument('--debug', type=eval, default=False, help='shuffle=False and ignore the trained data')
-    parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train', 'train_instance'], help='')
+    parser.add_argument('--val_type', type=str, default='val', choices=['val', 'train', 'train_instance', 'train_save_depth'], help='')
     parser.add_argument('--logger_interval', type=int, default=10, help='training iterations')
     
     parser.add_argument('--separate_semantic', type=eval, default=True, choices=[True, False], help='')
@@ -155,8 +155,15 @@ def get_opts_base():
                                                                                        # rebuttal
                                                                                        "labels_0125_rebu_0.1",
                                                                                        "labels_0125_rebu_0.2",
+                                                                                       "labels_0125_rebu_0.3",
                                                                                        "labels_0125_rebu_0.4",
                                                                                        "labels_0125_rebu_0.5",
+                                                                                       "labels_0125_rebu_0.6",
+                                                                                       "labels_0125_rebu_0.7",
+                                                                                       "labels_0125_rebu_0.8",
+                                                                                       "labels_0125_rebu_0.9",
+                                                                                       "labels_0125_rebu_1.0",
+                                                                                       "labels_seq_rebu_0.3_4",
                                                                                        ], help='')
     parser.add_argument('--crossview_process_path', type=str, default='zyq/test', help='')
     parser.add_argument('--crossview_all', default=False, type=eval, choices=[True, False], help='')
@@ -294,6 +301,8 @@ def get_opts_base():
     parser.add_argument('--detect_anomalies', default=False, action='store_true')
     parser.add_argument('--random_seed', type=int, default=42)
     parser.add_argument('--render_zyq', default=False, action='store_true')
+    parser.add_argument('--render_zyq_far_view', type=str, default='render_far0.3_val')
+
 
 
     return parser

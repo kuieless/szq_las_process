@@ -1,11 +1,11 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=5
 
 ####  1104_campus_render_far.sh
 
 # python gp_nerf/eval.py \
-#     --exp_name logs_rebuttal/0125_campus_farview_0.4_val \
+#     --exp_name logs_rebuttal/0125_campus_farview_1.0_val \
 #     --enable_semantic False \
 #     --network_type gpnerf_nr3d \
 #     --config_file configs/campus_new.yaml \
@@ -21,11 +21,11 @@ export CUDA_VISIBLE_DEVICES=3
 
 
 
-output=/data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_campus_farview_0.4_val/mask2former_output
+output=/data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_campus_farview_1.0_val/mask2former_output
 
 /data/yuqi/anaconda3/envs/mask2former/bin/python /data/yuqi/code/Mask2Former_a/demo/demo_zyq_0502_augment.py  \
     --config-file  /data/yuqi/code/Mask2Former_a/configs/ade20k/panoptic-segmentation/swin/maskformer2_swin_large_IN21k_384_bs16_160k.yaml \
-    --input  /data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_campus_farview_0.4_val/pred_rgb  \
+    --input  /data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_campus_farview_1.0_val/pred_rgb  \
     --output  $output \
     --zyq_code  True  \
     --zyq_mapping True \

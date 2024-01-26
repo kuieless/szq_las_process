@@ -169,6 +169,37 @@ def get_semantic_gt_pred_render_zyq(results, val_type, metadata_item, viz_rgbs, 
         # Image.fromarray((visualize_sem).astype(np.uint8)).save(str(experiment_path_current / 'val_rgbs' / ("%06d_pred_label.jpg" % i)))
     return
 
+def eval_others(val_type, metadata_item, remapping, hparams,metrics_val, metrics_val_each):
+    if hparams.eval_others:
+        m2f_path = os.path.join(hparams.dataset_path, 'val', hparams.eval_others_name, str(Path(metadata_item.image_path.stem))+'.png')
+        sem_label = Image.open(m2f_path)    #.convert('RGB')
+        size = sem_label.size
+        sem_label = torch.ByteTensor(np.asarray(sem_label))
+    
+    sem_label = remapping(sem_label)
+    if val_type == 'val':
+        gt_label = metadata_item.load_gt()
+        gt_label = remapping(gt_label)
+        gt_label_rgb = custom2rgb(gt_label.view(*sem_label.shape[:-1]).cpu().numpy())
+
+        if hparams.remove_cluster:
+
+            # ignore_cluster_index = gt_label.view(-1)
+            # gt_label_ig = gt_label.view(-1)[ignore_cluster_index.nonzero()].view(-1)
+            # sem_label_ig = sem_label[ignore_cluster_index.nonzero()].view(-1)
+            # metrics_val.add_batch(gt_label_ig.cpu().numpy(), sem_label_ig.cpu().numpy())
+            # metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+            gt_label = gt_label.view(-1)
+            sem_label = sem_label.view(-1)
+            gt_no_zero_mask = (gt_label != 0)
+            gt_label_ig = gt_label[gt_no_zero_mask]
+            sem_label_ig = sem_label[gt_no_zero_mask]
+            metrics_val.add_batch(gt_label_ig.cpu().numpy(), sem_label_ig.cpu().numpy())
+            metrics_val_each.add_batch(gt_label_ig.view(-1).cpu().numpy(), sem_label_ig.cpu().numpy())
+        else:
+            metrics_val.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+            metrics_val_each.add_batch(gt_label.view(-1).cpu().numpy(), sem_label.cpu().numpy())
+
 def get_semantic_gt_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label, typ, remapping, img_list, 
                         experiment_path_current, i, writer, hparams, viz_result_rgbs, metrics_val, metrics_val_each, save_left_or_right=None):
     if f'sem_map_{typ}' in results:
@@ -470,7 +501,7 @@ def prepare_depth_normal_visual(img_list, hparams, metadata_item, typ, results, 
     
     if f'depth_{typ}' in results:
         ma, mi = None, None 
-        if (hparams.depth_dji_loss or ('memory_depth_dji' in hparams.dataset_type)) and not hparams.render_zyq and 'train' not in hparams.val_type:  # DJI Gt depth
+        if (hparams.depth_dji_loss and ('memory_depth_dji' in hparams.dataset_type)) and not hparams.render_zyq and 'train' not in hparams.val_type:  # DJI Gt depth
             depth_dji = metadata_item.load_depth_dji().float()
             invalid_mask = torch.isinf(depth_dji)
         

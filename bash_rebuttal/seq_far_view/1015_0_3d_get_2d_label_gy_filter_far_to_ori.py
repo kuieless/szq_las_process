@@ -227,7 +227,9 @@ def hello(hparams: Namespace) -> None:
 
 
         ########### 考虑遮挡
-        threshold= 0.02
+        # threshold= 0.02
+        threshold= 0.2
+
         # threshold= 0.005
 
         large_int = 1e6

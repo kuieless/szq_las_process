@@ -13,5 +13,5 @@ python gp_nerf/eval.py \
     --semantic_layer_dim=128 --use_subset=True --lr=0.01 --balance_weight=True --num_semantic_classes=5 \
     --ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_campus/1104_campus_density_depth_hash22_m2f_car2_semantic/0/models/200000.pt \
     --eval_others=True \
-    --eval_others_name=labels_0125_rebu_0.5    \
-    --exp_name logs_rebuttal/0125_campus_farview_0.5_val_metric 
+    --eval_others_name=labels_0125_rebu_1.0    \
+    --exp_name logs_rebuttal/0125_campus_farview_1.0_val_metric 
