@@ -20,9 +20,6 @@ import cv2
 from dji.visual_poses import visualize_poses, load_poses
 from bs4 import BeautifulSoup
 
-RDF_TO_DRB = torch.FloatTensor([[0, 1, 0],
-                                [1, 0, 0],
-                                [0, 0, -1]])
 
 def rad(x):
     return math.radians(x)
@@ -46,41 +43,6 @@ def euler2rotation(theta, ):
     return R3d
 
 
-def compute_vert_v2(flat_vertices):
-    import numpy as np
-    from sklearn.decomposition import PCA
-
-    # 假设 vertices 包含了 mesh 的顶点数据
-    pca = PCA(n_components=3)
-    pca.fit(flat_vertices)
-    normal_vector = pca.components_[2]  # 第三个主成分即为法线向量
-
-    return normal_vector
-
-def matrix_rotateB2A(A, B):
-    A = A / np.linalg.norm(A)
-    B = B / np.linalg.norm(B)
-    rot_axis = np.cross(A, B)
-    rot_axis = rot_axis / np.linalg.norm(rot_axis)
-    rot_angle = np.arccos(np.dot(A, B))
-
-    # rotate Matrix according to Rodrigues formula
-    a = np.cos(rot_angle / 2.0)
-    b, c, d = -rot_axis * np.sin(rot_angle / 2.0)  # flip the rot_axis
-    rotation_matrix = np.array([
-        [a * a + b * b - c * c - d * d, 2 * (b * c - a * d), 2 * (b * d + a * c)],
-        [2 * (b * c + a * d), a * a - b * b + c * c - d * d, 2 * (c * d - a * b)],
-        [2 * (b * d - a * c), 2 * (c * d + a * b), a * a - b * b - c * c + d * d]
-    ])
-    return rotation_matrix
-
-
-def compute_MRM(flat_vertices):
-    X_axis = np.array([1, 0, 0])
-    # target_axis = compute_vert(flat_vertices)
-    target_axis = compute_vert_v2(flat_vertices)
-    MRM = matrix_rotateB2A(X_axis, target_axis)
-    return MRM
 
 def _get_opts():
 
@@ -134,27 +96,26 @@ def main(hparams):
     camera_rotations = pose_dji[:, 3:6]#.astype(np.float32)
 
 
-    MRM = compute_MRM(camera_positions)
-    MRM = torch.FloatTensor(MRM)
-
-
     c2w_R = []
     for i in range(len(camera_rotations)):
         R_temp = euler2rotation(camera_rotations[i])
         c2w_R.append(R_temp)
 
+    ZYQ = torch.DoubleTensor([[0, 0, -1],
+                             [0, 1, 0],
+                             [1, 0, 0]])
+    ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
+                              [0, math.cos(rad(135)), math.sin(rad(135))],
+                              [0, -math.sin(rad(135)), math.cos(rad(135))]])
+
     c2w = []
     for i in range(len(c2w_R)):
-        w2c = torch.eye(4)
-        w2c[:3, :3] = torch.FloatTensor(c2w_R[i])
-        w2c[:3, 3] = torch.FloatTensor(camera_positions[i].T)
-        temp = torch.inverse(w2c)
-
-        temp = torch.hstack((
-            MRM @ temp[:3, :3] @ torch.inverse(RDF_TO_DRB),
-            MRM @ temp[:3, 3:]
-        ))
-        c2w.append(temp.numpy())
+        temp = np.concatenate((c2w_R[i], camera_positions[i:i + 1].T), axis=1)
+        temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
+        temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
+        temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
+        temp = temp.numpy()
+        c2w.append(temp)
     c2w = np.array(c2w)
 
     min_position = np.min(c2w[:,:, 3], axis=0)
