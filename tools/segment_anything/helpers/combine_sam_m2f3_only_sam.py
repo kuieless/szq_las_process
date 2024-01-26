@@ -148,13 +148,13 @@ def hello(hparams: Namespace) -> None:
     m2fs.sort()
     m2fs = m2fs[1:]
     # m2fs = m2fs[330:]
+    print(m2fs)
     
 
     for i in tqdm(range(len(m2fs))):
-
         img_name = m2fs[i].split('/')[-1][:6]
 
-        if 'seq' in hparams.rgbs_path:
+        if 'seq' in hparams.rgbs_path and 'train' not in hparams.rgbs_path:
             img_p = os.path.join(img_path, img_name+'.png')
         else:
             img_p = os.path.join(img_path, img_name+'.jpg')

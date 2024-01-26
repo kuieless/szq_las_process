@@ -1,0 +1,12 @@
+## 1. 先训练几何
+
+## 2。 训练完成后使用 render_depth 生成深度，并挪到对应train/val文件夹下：     
+sh   /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/3_render_depth.sh
+
+
+## 使用3 渲染far view
+
+
+## 使用5 用far view 替换 原始view
+
+## 拿去验证

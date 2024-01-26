@@ -155,7 +155,8 @@ def hello(hparams: Namespace) -> None:
         if img_name not in process_item:
             continue
         
-        if 'seq' in hparams.rgbs_path:
+        if 'seq' in hparams.rgbs_path and 'train' not in hparams.rgbs_path:
+        # if 'seq' in hparams.rgbs_path:
             img_p = os.path.join(img_path, img_name+'.png')
         else:
             img_p = os.path.join(img_path, img_name+'.jpg')
