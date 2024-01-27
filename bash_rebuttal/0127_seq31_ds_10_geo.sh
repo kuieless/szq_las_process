@@ -1,10 +1,10 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=7
 
 
 dataset_path=/data/yuqi/Datasets/DJI/uavid/seq31
-config_file=configs/seq14.yaml
+config_file=configs/seq31.yaml
 
 
 batch_size=10240
@@ -17,14 +17,13 @@ dataset_type=memory_depth_dji
 
 enable_semantic=False
 use_scaling=False
-sampling_mesh_guidance=False
+sampling_mesh_guidance=False 
 
 
 depth_dji_loss=False
 wgt_depth_mse_loss=0
 
-exp_name=logs_rebuttal/0125_seq14_geo
-ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0125_seq14_geo/3/models/20000.pt
+exp_name=logs_rebuttal/0127_seq31_geo
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
     --network_type   $network_type   --config_file  $config_file   \
@@ -34,4 +33,3 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --sampling_mesh_guidance   $sampling_mesh_guidance   --sdf_as_gpnerf  True  \
     --geo_init_method=idr   \
     --depth_dji_loss   $depth_dji_loss   --wgt_depth_mse_loss  $wgt_depth_mse_loss  --wgt_sigma_loss  0  \
-    --ckpt_path=$ckpt_path

@@ -53,9 +53,9 @@ def euler2rotation(theta, ):
 def _get_opts():
 
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
-    parser.add_argument('--images_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene2/photos',type=str, required=False)
-    parser.add_argument('--infos_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene2/photos-info-pyr.xml',type=str, required=False)
-    parser.add_argument('--output_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene2/output',type=str, required=False)
+    parser.add_argument('--images_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene1/photos',type=str, required=False)
+    parser.add_argument('--infos_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene1/photos-info-pyr.xml',type=str, required=False)
+    parser.add_argument('--output_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene1/output',type=str, required=False)
     parser.add_argument('--resume', default=True, action='store_false')  # debug
     parser.add_argument('--num_val', type=int, default=1000, help='Number of images to hold out in validation set')
     return parser.parse_known_args()[0]
@@ -156,32 +156,19 @@ def main(hparams):
     }
     torch.save(coordinates, output_path / 'coordinates.pt')
 
-    camera1 = np.array([float(root.findall('Photogroup/FocalLength')[0].text),
+    camera = np.array([float(root.findall('Photogroup/FocalLength')[0].text),
                        float(root.findall('Photogroup/PrincipalPoint/x')[0].text),
                        float(root.findall('Photogroup/PrincipalPoint/y')[0].text)])
-    aspect_ratio1 = float(root.findall('Photogroup/AspectRatio')[0].text)
-    camera_matrix1 = np.array([[camera1[0], 0, camera1[1]],
-                              [0, camera1[0]*aspect_ratio1, camera1[2]],
+    aspect_ratio = float(root.findall('Photogroup/AspectRatio')[0].text)
+    camera_matrix = np.array([[camera[0], 0, camera[1]],
+                              [0, camera[0]*aspect_ratio, camera[2]],
                               [0, 0, 1]])
-    distortion1 = np.array([float(root.findall('Photogroup/Distortion/K1')[0].text),
+    distortion = np.array([float(root.findall('Photogroup/Distortion/K1')[0].text),
                            float(root.findall('Photogroup/Distortion/K2')[0].text),
                            float(root.findall('Photogroup/Distortion/P1')[0].text),
                            float(root.findall('Photogroup/Distortion/P2')[0].text),
                            float(root.findall('Photogroup/Distortion/K3')[0].text)])  # k1 k2 p1 p2 k3
 
-
-    camera2 = np.array([float(root.findall('Photogroup/FocalLength')[1].text),
-                       float(root.findall('Photogroup/PrincipalPoint/x')[1].text),
-                       float(root.findall('Photogroup/PrincipalPoint/y')[1].text)])
-    aspect_ratio2 = float(root.findall('Photogroup/AspectRatio')[1].text)
-    camera_matrix2 = np.array([[camera2[0], 0, camera2[1]],
-                              [0, camera2[0]*aspect_ratio2, camera2[2]],
-                              [0, 0, 1]])
-    distortion2 = np.array([float(root.findall('Photogroup/Distortion/K1')[1].text),
-                           float(root.findall('Photogroup/Distortion/K2')[1].text),
-                           float(root.findall('Photogroup/Distortion/P1')[1].text),
-                           float(root.findall('Photogroup/Distortion/P2')[1].text),
-                           float(root.findall('Photogroup/Distortion/K3')[1].text)])  # k1 k2 p1 p2 k3
 
 
 

@@ -1,21 +1,20 @@
-ray_altitude_range: [-3.2, -1.4]
-num_instance_classes: 100
-
-
+ray_altitude_range: [107, 132]
+num_instance_classes: 50
 network_type: gpnerf_nr3d
 use_scaling: False
 sampling_mesh_guidance: True
 separate_semantic: True
-dataset_path: /data/yuqi/Datasets/DJI/uavid/seq14
+dataset_path: /data/yuqi/Datasets/InstanceBuilding/3D/scene2/output
 num_layers_semantic_hidden: 3
 semantic_layer_dim: 128
 balance_weight: True
 num_semantic_classes: 5
 
-label_name: 1028_ml_fusion_0.3
+label_name: 1018_ml_fusion_0.3
 log2_hashmap_size: 22
 desired_resolution: 8192
 sdf_as_gpnerf: True
 wgt_sem_loss: 1
 train_scale_factor: 2
 val_scale_factor: 2
+

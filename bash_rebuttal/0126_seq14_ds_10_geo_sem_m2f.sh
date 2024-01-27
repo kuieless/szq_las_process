@@ -3,7 +3,7 @@ export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=6
 
 
-dataset_path=/data/yuqi/jx_rebuttal/seq14_ds_10_val/postprocess
+dataset_path=/data/yuqi/Datasets/DJI/uavid/seq31
 config_file=configs/seq14.yaml
 
 

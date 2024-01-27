@@ -2754,6 +2754,7 @@ class Runner:
 
         metadata = torch.load(metadata_path, map_location='cpu')
         intrinsics = metadata['intrinsics'] / scale_factor
+        # print(f"{metadata['W']} {metadata['H']} {scale_factor}")
         assert metadata['W'] % scale_factor == 0
         assert metadata['H'] % scale_factor == 0
 

@@ -1,4 +1,4 @@
-ray_altitude_range: [-3.2, -1.4]
+ray_altitude_range: [1.5, 2.2]
 num_instance_classes: 100
 
 
@@ -6,7 +6,7 @@ network_type: gpnerf_nr3d
 use_scaling: False
 sampling_mesh_guidance: True
 separate_semantic: True
-dataset_path: /data/yuqi/Datasets/DJI/uavid/seq14
+dataset_path: /data/yuqi/Datasets/DJI/uavid/seq31
 num_layers_semantic_hidden: 3
 semantic_layer_dim: 128
 balance_weight: True
