@@ -180,7 +180,7 @@ def eval_others(val_type, metadata_item, remapping, hparams,metrics_val, metrics
     if val_type == 'val':
         gt_label = metadata_item.load_gt()
         gt_label = remapping(gt_label)
-        gt_label_rgb = custom2rgb(gt_label.view(*sem_label.shape[:-1]).cpu().numpy())
+        gt_label_rgb = custom2rgb(gt_label.view(*sem_label.shape[0:2]).cpu().numpy())
 
         if hparams.remove_cluster:
 

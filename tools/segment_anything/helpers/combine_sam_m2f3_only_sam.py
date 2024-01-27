@@ -154,11 +154,11 @@ def hello(hparams: Namespace) -> None:
     for i in tqdm(range(len(m2fs))):
         img_name = m2fs[i].split('/')[-1][:6]
 
-        if 'seq' in hparams.rgbs_path and 'train' not in hparams.rgbs_path:
+        if 'seq' in hparams.rgbs_path and 'train' not in hparams.rgbs_path and 'val_rgbs' not in hparams.rgbs_path:
             img_p = os.path.join(img_path, img_name+'.png')
         else:
             img_p = os.path.join(img_path, img_name+'.jpg')
-
+        # print(img_p)
         image = cv2.imread(img_p)
         # image = cv2.resize(image, (image.shape[1] // 4, image.shape[0] // 4))
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)

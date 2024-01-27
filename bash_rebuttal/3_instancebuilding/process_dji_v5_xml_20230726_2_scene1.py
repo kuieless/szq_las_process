@@ -21,6 +21,9 @@ from dji.visual_poses import visualize_poses, load_poses
 from bs4 import BeautifulSoup
 
 from scipy.spatial.transform import Rotation
+
+from scripts_from_jx.viz_pose_obj import visualize_poses_and_points
+
 def ypr_to_opk(input):
     yaw, pitch, roll = input[0], input[1], input[2]
     r = Rotation.from_euler('ZYX',[yaw,pitch,roll],degrees=True)
@@ -93,7 +96,7 @@ def main(hparams):
     # process the poses info to the requirement of nerf
     pose_dji = xml_pose
     camera_positions = pose_dji[:,0:3]#.astype(np.float32)
-
+    np.savetxt('scene1_camera.txt', camera_positions)
     #
     # min_position = np.min(camera_positions, axis=0)
     # max_position = np.max(camera_positions, axis=0)
@@ -148,6 +151,7 @@ def main(hparams):
 
 
     # visualize_poses(c2w)
+    visualize_poses_and_points(c2w,mesh=trimesh.load_mesh('/data/yuqi/jx_rebuttal/IB_test/norm.obj'))
 
 
     coordinates = {
@@ -168,7 +172,6 @@ def main(hparams):
                            float(root.findall('Photogroup/Distortion/P1')[0].text),
                            float(root.findall('Photogroup/Distortion/P2')[0].text),
                            float(root.findall('Photogroup/Distortion/K3')[0].text)])  # k1 k2 p1 p2 k3
-
 
 
 
@@ -198,7 +201,7 @@ def main(hparams):
                 'c2w': torch.FloatTensor(c2w[i]),
                 'intrinsics': torch.FloatTensor(
                     [camera_matrix[0][0], camera_matrix[1][1], camera_matrix[0][2], camera_matrix[1][2]]),
-                'distortion': torch.FloatTensor(distortion),
+                'distortion': torch.FloatTensor([0,0,0,0,0]),
                 # 'label': label
             }, split_dir / 'metadata' / metadata_name)
 

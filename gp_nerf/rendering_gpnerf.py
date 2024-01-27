@@ -198,7 +198,8 @@ def render_rays(nerf: nn.Module,
         visualize_points_list = [xyz_coarse_fg.view(-1, 3).cpu().numpy()]
         visualize_points(visualize_points_list)
         print('save the sampling points.')
-        SystemExit
+        import sys
+        sys.exit(0)
     
 
     if hparams.contract_new:

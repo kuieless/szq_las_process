@@ -54,7 +54,7 @@ from mega_nerf.ray_utils import get_rays, get_ray_directions
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/jx_rebuttal/seq14_ds_10_val/postprocess',required=False, help='')
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/uavid/seq31',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_357/test',required=False, help='experiment name')
     parser.add_argument('--eval', type=bool, default=False,required=False, help='experiment name')
     
@@ -85,9 +85,9 @@ def hello(hparams: Namespace) -> None:
     # for metadata_item in tqdm(train_items[200:240]):
     for metadata_item in tqdm(train_items):
         file_name = Path(metadata_item.image_path).stem
-
-        if file_name not in process_item and not hparams.eval:
-            continue
+        if not hparams.eval:
+            if file_name not in process_item:
+                continue
         
         pose = metadata_item.c2w
         
@@ -109,7 +109,7 @@ def hello(hparams: Namespace) -> None:
         # gt_depths_valid = gt_depths[valid_depth_mask]
 
         # z_vals_inbound = gt_depths_valid.min() * 1.5
-        z_vals_inbound = 0.3
+        z_vals_inbound = 0.2
         new_o = ray_o - ray_d * z_vals_inbound
 
         new_pose = pose

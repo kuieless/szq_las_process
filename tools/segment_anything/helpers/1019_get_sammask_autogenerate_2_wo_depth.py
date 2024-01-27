@@ -212,8 +212,8 @@ def hello(hparams: Namespace) -> None:
                 continue
         image = metadata_item.load_image()
         
-        feature = torch.from_numpy(np.load(str(metadata_item.depth_dji_path).replace('depth_mesh', 'sam_features')))
-        
+        feature_path = str(metadata_item.image_path).replace('rgbs', 'sam_features')[:-4]+'.npy'
+        feature = torch.from_numpy(np.load(feature_path))
 
         ### NOTE: 有时候会报维度不匹配的错误，修改下面的代码
         masks = mask_generator.generate(image, feature[0])
