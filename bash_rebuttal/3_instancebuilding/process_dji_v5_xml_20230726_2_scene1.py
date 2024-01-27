@@ -129,12 +129,19 @@ def main(hparams):
                               [0, math.cos(rad(135)), math.sin(rad(135))],
                               [0, -math.sin(rad(135)), math.cos(rad(135))]])
 
+    Y_180 = torch.DoubleTensor([[-1, 0, 0],
+                             [0, 1, 0],
+                             [0, 0, -1]])
+
     c2w = []
     for i in range(len(c2w_R)):
         temp = np.concatenate((c2w_R[i], camera_positions[i:i + 1].T), axis=1)
         temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
         temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
         temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
+        temp = torch.hstack((Y_180 @ temp[:3, :3], Y_180 @ temp[:3, 3:]))
+
+
         temp = temp.numpy()
         c2w.append(temp)
     c2w = np.array(c2w)
