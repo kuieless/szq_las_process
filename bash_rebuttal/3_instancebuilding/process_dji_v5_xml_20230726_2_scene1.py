@@ -151,7 +151,7 @@ def main(hparams):
 
 
     # visualize_poses(c2w)
-    visualize_poses_and_points(c2w,mesh=trimesh.load_mesh('/data/yuqi/jx_rebuttal/IB_test/norm.obj'))
+    visualize_poses_and_points(c2w,mesh=trimesh.load_mesh('/data/yuqi/Datasets/InstanceBuilding/3D/scene1/norm.obj'))
 
 
     coordinates = {
