@@ -50,12 +50,12 @@ def visualize_poses(poses1, poses2=None, size=0.01, flipz=True):
 
 
         # o1 = pos + dir * size *10
-        o1 = pos + dir * size * 30
+        o1 = pos + dir * size * 300
 
         segs2 = np.array([[pos, o1]])
         segs2 = trimesh.load_path(segs2)
         segs2.colors = np.array([[255, 0, 0]] * len(segs2.entities))
-        # objects.append(segs2)
+        objects.append(segs2)
     if poses2 is not None:
         for pose in poses2:
             # a camera is visualized with 8 line segments.

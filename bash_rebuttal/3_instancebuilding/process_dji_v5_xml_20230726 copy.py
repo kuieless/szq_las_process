@@ -69,12 +69,18 @@ def main(hparams):
     (output_path / 'val' / 'rgbs').mkdir(parents=True,exist_ok=True)
 
     root = ET.parse(hparams.infos_path).getroot()
-    xml_pose = np.array([[ float(pose.find('Center/x').text),
-                        float(pose.find('Center/y').text),
-                        float(pose.find('Center/z').text),
-                        float(pose.find('Rotation/Yaw').text),
-                        float(pose.find('Rotation/Pitch').text),
-                        float(pose.find('Rotation/Roll').text)] for pose in root.findall('Photogroup/Photo/Pose')])
+    # xml_pose = np.array([[ float(pose.find('Center/x').text),
+    #                     float(pose.find('Center/y').text),
+    #                     float(pose.find('Center/z').text),
+    #                     float(pose.find('Rotation/Yaw').text),
+    #                     float(pose.find('Rotation/Pitch').text),
+    #                     float(pose.find('Rotation/Roll').text)] for pose in root.findall('Photogroup/Photo/Pose')])
+    xml_pose = np.array([[float(pose.find('Center/x').text),
+                          float(pose.find('Center/y').text),
+                          float(pose.find('Center/z').text),
+                          float(pose.find('Rotation/Pitch').text),
+                          float(pose.find('Rotation/Roll').text),
+                          float(pose.find('Rotation/Yaw').text)] for pose in root.findall('Photogroup/Photo/Pose')])
     images_name = [Images_path.text.split("\\")[-1] for Images_path in root.findall('Photogroup/Photo/ImageName')]
 
 
@@ -82,7 +88,7 @@ def main(hparams):
     pose_dji = xml_pose
     camera_positions = pose_dji[:,0:3]#.astype(np.float32)
 
-
+    #
     # min_position = np.min(camera_positions, axis=0)
     # max_position = np.max(camera_positions, axis=0)
     # print('Coord range: {} {}'.format(min_position, max_position))
@@ -95,26 +101,31 @@ def main(hparams):
 
     camera_rotations = pose_dji[:, 3:6]#.astype(np.float32)
 
-
     c2w_R = []
     for i in range(len(camera_rotations)):
         R_temp = euler2rotation(camera_rotations[i])
         c2w_R.append(R_temp)
 
-    ZYQ = torch.DoubleTensor([[0, 0, -1],
-                             [0, 1, 0],
-                             [1, 0, 0]])
-    ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
-                              [0, math.cos(rad(135)), math.sin(rad(135))],
-                              [0, -math.sin(rad(135)), math.cos(rad(135))]])
+
+
+
+
+
+    #
+    # ZYQ = torch.DoubleTensor([[0, 0, -1],
+    #                          [0, 1, 0],
+    #                          [1, 0, 0]])
+    # ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
+    #                           [0, math.cos(rad(135)), math.sin(rad(135))],
+    #                           [0, -math.sin(rad(135)), math.cos(rad(135))]])
 
     c2w = []
     for i in range(len(c2w_R)):
         temp = np.concatenate((c2w_R[i], camera_positions[i:i + 1].T), axis=1)
-        temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
-        temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
-        temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
-        temp = temp.numpy()
+        # temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
+        # temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
+        # temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
+        # temp = temp.numpy()
         c2w.append(temp)
     c2w = np.array(c2w)
 
@@ -129,6 +140,7 @@ def main(hparams):
     assert np.logical_and(c2w[:,:, 3] >= -1, c2w[:,:, 3] <= 1).all()
 
 
+    visualize_poses(c2w)
 
     # pose_dji = load_poses(dataset_path='/disk1/Datasets/dji/DJI-XML-colmap')
     # # 这里pose dji只有1071个，而c2w有1092个，可视化的时候要注意

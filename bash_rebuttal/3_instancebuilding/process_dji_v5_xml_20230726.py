@@ -167,6 +167,7 @@ def main(hparams):
     c2w[:,:, 3] = (c2w[:,:, 3] - origin) / scale
     assert np.logical_and(c2w[:,:, 3] >= -1, c2w[:,:, 3] <= 1).all()
 
+    visualize_poses(c2w)
 
 
     # pose_dji = load_poses(dataset_path='/disk1/Datasets/dji/DJI-XML-colmap')
