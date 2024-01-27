@@ -20,13 +20,19 @@ import cv2
 from dji.visual_poses import visualize_poses, load_poses
 from bs4 import BeautifulSoup
 
+from scipy.spatial.transform import Rotation
+def ypr_to_opk(input):
+    yaw, pitch, roll = input[0], input[1], input[2]
+    r = Rotation.from_euler('ZYX',[yaw,pitch,roll],degrees=True)
+    opk=r.as_rotvec()
+    return opk
 
 def rad(x):
     return math.radians(x)
 
 def euler2rotation(theta, ):
     theta = [rad(i) for i in theta]
-    omega, phi, kappa = theta[0], theta[1], theta[2]
+    omega, phi, kappa = theta[2], theta[1], theta[0]
     # omega, phi, kappa = rad(180)-theta[0], rad(180)-theta[1], rad(180)-theta[2]
     # omega, phi, kappa = rad(180)-theta[0], rad(180)-theta[1], theta[2]
     R_omega = np.array([[1, 0, 0],
@@ -69,18 +75,18 @@ def main(hparams):
     (output_path / 'val' / 'rgbs').mkdir(parents=True,exist_ok=True)
 
     root = ET.parse(hparams.infos_path).getroot()
-    # xml_pose = np.array([[ float(pose.find('Center/x').text),
-    #                     float(pose.find('Center/y').text),
-    #                     float(pose.find('Center/z').text),
-    #                     float(pose.find('Rotation/Yaw').text),
-    #                     float(pose.find('Rotation/Pitch').text),
-    #                     float(pose.find('Rotation/Roll').text)] for pose in root.findall('Photogroup/Photo/Pose')])
-    xml_pose = np.array([[float(pose.find('Center/x').text),
-                          float(pose.find('Center/y').text),
-                          float(pose.find('Center/z').text),
-                          float(pose.find('Rotation/Pitch').text),
-                          float(pose.find('Rotation/Roll').text),
-                          float(pose.find('Rotation/Yaw').text)] for pose in root.findall('Photogroup/Photo/Pose')])
+    xml_pose = np.array([[ float(pose.find('Center/x').text),
+                        float(pose.find('Center/y').text),
+                        float(pose.find('Center/z').text),
+                        float(pose.find('Rotation/Yaw').text),
+                        float(pose.find('Rotation/Pitch').text),
+                        float(pose.find('Rotation/Roll').text)] for pose in root.findall('Photogroup/Photo/Pose')])
+    # xml_pose = np.array([[float(pose.find('Center/x').text),
+    #                       float(pose.find('Center/y').text),
+    #                       float(pose.find('Center/z').text),
+    #                       float(pose.find('Rotation/Pitch').text),
+    #                       float(pose.find('Rotation/Roll').text),
+    #                       float(pose.find('Rotation/Yaw').text)] for pose in root.findall('Photogroup/Photo/Pose')])
     images_name = [Images_path.text.split("\\")[-1] for Images_path in root.findall('Photogroup/Photo/ImageName')]
 
 
@@ -103,7 +109,8 @@ def main(hparams):
 
     c2w_R = []
     for i in range(len(camera_rotations)):
-        R_temp = euler2rotation(camera_rotations[i])
+        opk = ypr_to_opk(camera_rotations[i])
+        R_temp = euler2rotation(opk)
         c2w_R.append(R_temp)
 
 
@@ -111,21 +118,21 @@ def main(hparams):
 
 
 
-    #
-    # ZYQ = torch.DoubleTensor([[0, 0, -1],
-    #                          [0, 1, 0],
-    #                          [1, 0, 0]])
-    # ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
-    #                           [0, math.cos(rad(135)), math.sin(rad(135))],
-    #                           [0, -math.sin(rad(135)), math.cos(rad(135))]])
+
+    ZYQ = torch.DoubleTensor([[0, 0, -1],
+                             [0, 1, 0],
+                             [1, 0, 0]])
+    ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
+                              [0, math.cos(rad(135)), math.sin(rad(135))],
+                              [0, -math.sin(rad(135)), math.cos(rad(135))]])
 
     c2w = []
     for i in range(len(c2w_R)):
         temp = np.concatenate((c2w_R[i], camera_positions[i:i + 1].T), axis=1)
-        # temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
-        # temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
-        # temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
-        # temp = temp.numpy()
+        temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
+        temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
+        temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
+        temp = temp.numpy()
         c2w.append(temp)
     c2w = np.array(c2w)
 

@@ -147,14 +147,8 @@ def main(hparams):
     assert np.logical_and(c2w[:,:, 3] >= -1, c2w[:,:, 3] <= 1).all()
 
 
-    visualize_poses(c2w)
+    # visualize_poses(c2w)
 
-    # pose_dji = load_poses(dataset_path='/disk1/Datasets/dji/DJI-XML-colmap')
-    # # 这里pose dji只有1071个，而c2w有1092个，可视化的时候要注意
-    # visualize_poses(c2w[0:2], pose_dji[0:2])
-    # visualize_poses
-
-    # visualize_poses(random.sample(c2w,200))
 
     coordinates = {
         'origin_drb': torch.Tensor(origin),
