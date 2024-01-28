@@ -151,7 +151,7 @@ def hello(hparams: Namespace) -> None:
 
 
         img = metadata_item.load_image()
-        merge = 0.7 * img.numpy() + 0.3 * color_label
+        merge = 0.5 * img.numpy() + 0.5 * color_label
         Image.fromarray(merge.astype(np.uint8)).save(os.path.join(output_path, 'alpha',f"{file_name}.jpg"))
         
 

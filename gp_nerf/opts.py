@@ -187,6 +187,7 @@ def get_opts_base():
                                                                           'm2f', 'merge', 'gt',
                                                                           '0123_ml_fusion_0.3',
                                                                           '0125_rebu_0.3',  ##uavid seq14的fusion label
+                                                                          '0125_rebu_0.2',  ##uavid seq31的fusion label
                                                                           ], help='')
 
     parser.add_argument('--enable_semantic', default=False, type=eval, choices=[True, False], help='')

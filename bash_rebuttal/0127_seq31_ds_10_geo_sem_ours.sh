@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=4
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=4
 
 
 dataset_path=/data/yuqi/Datasets/DJI/uavid/seq31

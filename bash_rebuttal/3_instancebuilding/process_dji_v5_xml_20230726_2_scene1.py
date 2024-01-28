@@ -139,7 +139,7 @@ def main(hparams):
         temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
         temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
         temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
-        temp = torch.hstack((Y_180 @ temp[:3, :3], Y_180 @ temp[:3, 3:]))
+        # temp = torch.hstack((Y_180 @ temp[:3, :3], Y_180 @ temp[:3, 3:]))
 
 
         temp = temp.numpy()
@@ -158,7 +158,7 @@ def main(hparams):
 
 
     # visualize_poses(c2w)
-    visualize_poses_and_points(c2w,mesh=trimesh.load_mesh('/data/yuqi/Datasets/InstanceBuilding/3D/scene1/norm.obj'))
+    # visualize_poses_and_points(c2w,mesh=trimesh.load_mesh('/data/yuqi/Datasets/InstanceBuilding/3D/scene1/norm.obj'))
 
 
     coordinates = {
@@ -170,9 +170,19 @@ def main(hparams):
     camera = np.array([float(root.findall('Photogroup/FocalLength')[0].text),
                        float(root.findall('Photogroup/PrincipalPoint/x')[0].text),
                        float(root.findall('Photogroup/PrincipalPoint/y')[0].text)])
+    Width = float(root.findall('Photogroup/ImageDimensions/Width')[0].text)
+    Height = float(root.findall('Photogroup/ImageDimensions/Height')[0].text)
+    FocalLength = float(root.findall('Photogroup/FocalLength')[0].text)
+    SensorSize = float(root.findall('Photogroup/SensorSize')[0].text)
+
+    focal_x = Width*FocalLength /SensorSize
+    focal_y = Height*FocalLength /SensorSize
+
+
+
     aspect_ratio = float(root.findall('Photogroup/AspectRatio')[0].text)
-    camera_matrix = np.array([[camera[0], 0, camera[1]],
-                              [0, camera[0]*aspect_ratio, camera[2]],
+    camera_matrix = np.array([[focal_x, 0, camera[1]],
+                              [0, focal_y, camera[2]],
                               [0, 0, 1]])
     distortion = np.array([float(root.findall('Photogroup/Distortion/K1')[0].text),
                            float(root.findall('Photogroup/Distortion/K2')[0].text),
