@@ -8,7 +8,6 @@ network_type: gpnerf_nr3d
 use_scaling: False
 sampling_mesh_guidance: True
 separate_semantic: True
-dataset_path: /data/yuqi/Datasets/InstanceBuilding/3D/scene1/output
 num_layers_semantic_hidden: 3
 semantic_layer_dim: 128
 balance_weight: True

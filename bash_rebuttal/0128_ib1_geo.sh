@@ -2,9 +2,9 @@
 export OMP_NUM_THREADS=16
 export CUDA_VISIBLE_DEVICES=6
 
-
-dataset_path=/data/yuqi/Datasets/InstanceBuilding/3D/scene1/output
 config_file=configs/instancebuilding1.yaml
+
+dataset_path=/data/yuqi/Datasets/InstanceBuilding/3D/scene1/output_fix
 
 
 batch_size=10240

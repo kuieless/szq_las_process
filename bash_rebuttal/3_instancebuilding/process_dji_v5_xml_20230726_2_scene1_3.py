@@ -24,6 +24,11 @@ from scipy.spatial.transform import Rotation
 
 from scripts_from_jx.viz_pose_obj import visualize_poses_and_points
 
+
+RDF_TO_DRB = torch.DoubleTensor([[0, 1, 0],
+                                [1, 0, 0],
+                                [0, 0, -1]])
+
 def ypr_to_opk(input):
     yaw, pitch, roll = input[0], input[1], input[2]
     # r = Rotation.from_euler('ZYX',[yaw,pitch,roll],degrees=True)
@@ -133,8 +138,8 @@ def main(hparams):
         # R_temp = euler2rotation(opk)
         R_temp = ypr2rotation(camera_rotations[i])
         c2w_R.append(R_temp)
-    
-    
+
+
 
 
 
@@ -154,10 +159,17 @@ def main(hparams):
     c2w = []
     for i in range(len(c2w_R)):
         temp = np.concatenate((c2w_R[i], camera_positions[i:i + 1].T), axis=1)
-        temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
-        temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
-        temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
-        # temp = torch.hstack((Y_180 @ temp[:3, :3], Y_180 @ temp[:3, 3:]))
+
+        # temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
+        # temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
+        # temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
+        # # temp = torch.hstack((Y_180 @ temp[:3, :3], Y_180 @ temp[:3, 3:]))
+
+        temp = torch.from_numpy(temp)
+        temp = torch.hstack((
+            RDF_TO_DRB @ temp[:3, :3] @ torch.inverse(RDF_TO_DRB),
+            RDF_TO_DRB @ temp[:3, 3:]
+        ))
 
 
         temp = temp.numpy()
@@ -200,9 +212,8 @@ def main(hparams):
 
     aspect_ratio = float(root.findall('Photogroup/AspectRatio')[0].text)
     camera_matrix = np.array([[focal_x, 0, camera[1]],
-                              [0, focal_x, camera[2]],
+                              [0, focal_y, camera[2]],
                               [0, 0, 1]])
-
     distortion = np.array([float(root.findall('Photogroup/Distortion/K1')[0].text),
                            float(root.findall('Photogroup/Distortion/K2')[0].text),
                            float(root.findall('Photogroup/Distortion/P1')[0].text),
@@ -233,7 +244,9 @@ def main(hparams):
             torch.save({
                 'H': distorted.shape[0],
                 'W': distorted.shape[1],
-                # 'c2w': torch.cat([camera_in_drb[:, 1:2], -camera_in_drb[:, :1], camera_in_drb[:, 2:4]], -1),
+                'c2w': torch.cat(
+                    [torch.FloatTensor(c2w[i])[:, 1:2], -torch.FloatTensor(c2w[i])[:, :1], torch.FloatTensor(c2w[i])[:, 2:4]],
+                    -1),
                 'c2w': torch.FloatTensor(c2w[i]),
                 'intrinsics': torch.FloatTensor(
                     [camera_matrix[0][0], camera_matrix[1][1], camera_matrix[0][2], camera_matrix[1][2]]),

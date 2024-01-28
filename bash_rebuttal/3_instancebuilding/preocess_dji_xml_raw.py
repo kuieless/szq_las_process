@@ -17,12 +17,12 @@ import trimesh
 import random
 import math
 import cv2
-from dji.visual_poses import visualize_poses, load_poses
+# from dji.visual_poses import visualize_poses, load_poses
 from bs4 import BeautifulSoup
 
 from scipy.spatial.transform import Rotation
 
-from scripts_from_jx.viz_pose_obj import visualize_poses_and_points
+# from scripts_from_jx.viz_pose_obj import visualize_poses_and_points
 
 def ypr_to_opk(input):
     yaw, pitch, roll = input[0], input[1], input[2]
@@ -75,7 +75,7 @@ def _get_opts():
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
     parser.add_argument('--images_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene1/photos',type=str, required=False)
     parser.add_argument('--infos_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene1/photos-info-pyr.xml',type=str, required=False)
-    parser.add_argument('--output_path', default='/data/yuqi/Datasets/InstanceBuilding/3D/scene1/output',type=str, required=False)
+    parser.add_argument('--output_path', default='/data/yuqi/jx_rebuttal/IB_test/3D/scene1/output',type=str, required=False)
     parser.add_argument('--resume', default=True, action='store_false')  # debug
     parser.add_argument('--num_val', type=int, default=1000, help='Number of images to hold out in validation set')
     return parser.parse_known_args()[0]
@@ -133,9 +133,6 @@ def main(hparams):
         # R_temp = euler2rotation(opk)
         R_temp = ypr2rotation(camera_rotations[i])
         c2w_R.append(R_temp)
-    
-    
-
 
 
 
@@ -154,13 +151,13 @@ def main(hparams):
     c2w = []
     for i in range(len(c2w_R)):
         temp = np.concatenate((c2w_R[i], camera_positions[i:i + 1].T), axis=1)
-        temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
-        temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
-        temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
+        # temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
+        # temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
+        # temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
         # temp = torch.hstack((Y_180 @ temp[:3, :3], Y_180 @ temp[:3, 3:]))
 
 
-        temp = temp.numpy()
+        temp = temp
         c2w.append(temp)
     c2w = np.array(c2w)
 
@@ -171,8 +168,8 @@ def main(hparams):
     dist = (torch.tensor(c2w[:,:, 3]) - torch.tensor(origin)).norm(dim=-1)
     diagonal = dist.max()
     scale = diagonal.numpy()
-    c2w[:,:, 3] = (c2w[:,:, 3] - origin) / scale
-    assert np.logical_and(c2w[:,:, 3] >= -1, c2w[:,:, 3] <= 1).all()
+    # c2w[:,:, 3] = (c2w[:,:, 3] - origin) / scale
+    # assert np.logical_and(c2w[:,:, 3] >= -1, c2w[:,:, 3] <= 1).all()
 
 
     # visualize_poses(c2w)
@@ -200,9 +197,8 @@ def main(hparams):
 
     aspect_ratio = float(root.findall('Photogroup/AspectRatio')[0].text)
     camera_matrix = np.array([[focal_x, 0, camera[1]],
-                              [0, focal_x, camera[2]],
+                              [0, focal_y, camera[2]],
                               [0, 0, 1]])
-
     distortion = np.array([float(root.findall('Photogroup/Distortion/K1')[0].text),
                            float(root.findall('Photogroup/Distortion/K2')[0].text),
                            float(root.findall('Photogroup/Distortion/P1')[0].text),

@@ -1,5 +1,6 @@
 
 # Byte-compiled / optimized / DLL files
+/data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/4_pointcloud_method/data
 events.out*
 A_Supplementary/instance_video/
 A_Supplementary/render_instance_60fps/
