@@ -92,6 +92,10 @@ def process_point(point):
 
 
 def hello(hparams: Namespace) -> None:
+    if 'Longhua' in hparams.dataset_path:
+        hparams.train_scale_factor=1
+        hparams.val_scale_factor=1
+
     hparams.ray_altitude_range = [-95, 54]
     hparams.dataset_type='memory_depth_dji'
     device = 'cpu'
