@@ -26,9 +26,9 @@ from scripts_from_jx.viz_pose_obj import visualize_poses_and_points
 
 def ypr_to_opk(input):
     yaw, pitch, roll = input[0], input[1], input[2]
-    r = Rotation.from_euler('ZYX',[yaw,pitch,roll],degrees=True)
-    # r = Rotation.from_euler('ZXY',[yaw,pitch,roll],degrees=True)
+    # r = Rotation.from_euler('ZYX',[yaw,pitch,roll],degrees=True)
     # r = Rotation.from_euler('XYZ',[yaw,pitch,roll],degrees=True)
+    # r = Rotation.from_euler('ZXY',[yaw,pitch,roll],degrees=True)
     # r = Rotation.from_euler('XZY',[yaw,pitch,roll],degrees=True)
     # r = Rotation.from_euler('YZX',[yaw,pitch,roll],degrees=True)
     # r = Rotation.from_euler('YXZ',[yaw,pitch,roll],degrees=True)
@@ -55,6 +55,17 @@ def euler2rotation(theta, ):
                       [0, 0, 1]])
     R3d = R_omega @ R_phi @ R_kappa
     # R3d = R_kappa @ R_phi @ R_omega
+    return R3d
+
+def ypr2rotation(input):
+    input = [rad(i) for i in input]
+    Y, P, R = input[0], input[1], input[2]
+    
+    R3d = np.array([  
+        [math.cos(R) * math.cos(Y) - math.sin(R) * math.sin(P) * math.sin(Y), -math.cos(R) * math.sin(Y) - math.cos(Y) * math.sin(R) * math.sin(P), math.cos(P) * math.sin(R)],  
+        [math.cos(Y) * math.sin(R) + math.cos(R) * math.sin(P) * math.sin(Y), math.cos(R) * math.cos(Y) * math.sin(P) - math.sin(R) * math.sin(Y), -math.cos(R) * math.cos(P)],  
+        [math.cos(P) * math.sin(Y), math.cos(P) * math.cos(Y), math.sin(P)]  
+    ])
     return R3d
 
 
@@ -118,8 +129,9 @@ def main(hparams):
 
     c2w_R = []
     for i in range(len(camera_rotations)):
-        opk = ypr_to_opk(camera_rotations[i])
-        R_temp = euler2rotation(opk)
+        # opk = ypr_to_opk(camera_rotations[i])
+        # R_temp = euler2rotation(opk)
+        R_temp = ypr2rotation(camera_rotations[i])
         c2w_R.append(R_temp)
 
 
@@ -142,7 +154,7 @@ def main(hparams):
     c2w = []
     for i in range(len(c2w_R)):
         temp = np.concatenate((c2w_R[i], camera_positions[i:i + 1].T), axis=1)
-        # temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
+        temp = np.concatenate((temp[:,0:1], -temp[:,1:2], -temp[:,2:3], temp[:,3:]), axis=1)
         temp = torch.hstack((ZYQ @ temp[:3, :3], ZYQ @ temp[:3, 3:]))
         temp = torch.hstack((ZYQ_1 @ temp[:3, :3], ZYQ_1 @ temp[:3, 3:]))
         # temp = torch.hstack((Y_180 @ temp[:3, :3], Y_180 @ temp[:3, 3:]))

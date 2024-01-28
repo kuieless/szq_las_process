@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=16
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=2
 
 
 dataset_path=/data/yuqi/Datasets/InstanceBuilding/3D/scene1/output
@@ -23,7 +23,7 @@ sampling_mesh_guidance=False
 depth_dji_loss=False
 wgt_depth_mse_loss=0
 
-exp_name=logs_rebuttal/0128_ib1_geo
+exp_name=logs_rebuttal/0128_ib1_geo_test
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
     --network_type   $network_type   --config_file  $config_file   \
@@ -32,6 +32,5 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --dataset_type $dataset_type     --use_scaling  $use_scaling  \
     --sampling_mesh_guidance   $sampling_mesh_guidance   --sdf_as_gpnerf  True  \
     --geo_init_method=idr   \
-    --depth_dji_loss   $depth_dji_loss   --wgt_depth_mse_loss  $wgt_depth_mse_loss  --wgt_sigma_loss  0 
-    # \
-    # --check_depth=True
+    --depth_dji_loss   $depth_dji_loss   --wgt_depth_mse_loss  $wgt_depth_mse_loss  --wgt_sigma_loss  0 \
+    --check_depth=True
