@@ -162,6 +162,9 @@ def hello(hparams: Namespace) -> None:
 
     hparams.ray_altitude_range = [-95, 54]
     hparams.dataset_type='memory_depth_dji'
+    if 'Longhua' in hparams.dataset_path:
+        hparams.train_scale_factor=1
+        hparams.val_scale_factor=1
     
     device = 'cpu' #'cuda'
     threshold=0.015
@@ -196,8 +199,9 @@ def hello(hparams: Namespace) -> None:
         block_item = val_items[start_idx:end_idx]
         args_list.append((block_item, points_nerf, points_color, threshold, device, hparams))
 
-    num_processes = len(val_items)
-
+    # num_processes = len(val_items)
+    num_processes = 6
+        
     with Pool(num_processes) as pool:
         print("Pool is started.")
         pool.map(process_sample, args_list)

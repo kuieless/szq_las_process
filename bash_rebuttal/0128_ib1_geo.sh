@@ -1,10 +1,10 @@
 #!/bin/bash
 export OMP_NUM_THREADS=16
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=3
 
 config_file=configs/instancebuilding1_jx.yaml
 
-dataset_path=/data/yuqi/Datasets/InstanceBuilding/3D/scene1/colmap_jx
+dataset_path=/data/yuqi/Datasets/InstanceBuilding/3D/scene1/colmap_jx_new
 
 
 batch_size=10240

@@ -10,19 +10,79 @@
 
 
 export OMP_NUM_THREADS=4
+export CUDA_VISIBLE_DEVICES=0
+
+#######################################################################################################
+
+#需要修改的值
+# far_project_m2f_paths   新的标签路径
+label_test=labels_1028_ml_fusion_0.3
+far_project_m2f_paths=/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds/train/$label_test
+output_path=/data/yuqi/code/GP-NeRF-semantic/zyq_rebuttal_4/DJI/b1_$label_test
+
+dataset_path=/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds
+metaXml_path=/data/yuqi/Datasets/DJI/others/origin/Longhua_origin/block1/terra_point_ply/metadata.xml
+load_ply_path=/data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/4_pointcloud_method/data/dji/djiPly_seg_b1.txt
+
+
+# #  1.  3d get 2d label
+
+echo '1 start'
+/data/yuqi/anaconda3/envs/gpnerf/bin/python /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/4_pointcloud_method/1015_1_3d_get_2d_label_gy_filter_1015_farproject3.py  \
+    --dataset_path=$dataset_path  \
+    --exp_name='logs_357/test' \
+    --output_path=$output_path  \
+    --far_project_m2f_paths=$far_project_m2f_paths  \
+    --metaXml_path=$metaXml_path    \
+    --load_ply_path=$load_ply_path
+
+#######################################################################################################
+
+
+
+
+# #需要修改的值
+# # far_project_m2f_paths   新的标签路径
+label_test=labels_m2f
+far_project_m2f_paths=/data/yuqi/Datasets/DJI/Longhua_block1_20231020_ds/train/$label_test
+output_path=/data/yuqi/code/GP-NeRF-semantic/zyq_rebuttal_4/DJI/b1_$label_test
+
+
+
+# #  1.  3d get 2d label
+
+echo '1 start'
+/data/yuqi/anaconda3/envs/gpnerf/bin/python /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/4_pointcloud_method/1015_1_3d_get_2d_label_gy_filter_1015_farproject3.py  \
+    --dataset_path=$dataset_path  \
+    --exp_name='logs_357/test' \
+    --output_path=$output_path  \
+    --far_project_m2f_paths=$far_project_m2f_paths  \
+    --metaXml_path=$metaXml_path    \
+    --load_ply_path=$load_ply_path
+
+
+
+#######################################################################################################
+
+
+
+
+
+
+export OMP_NUM_THREADS=4
 export CUDA_VISIBLE_DEVICES=1
 
 #######################################################################################################
 
 #需要修改的值
 # far_project_m2f_paths   新的标签路径
-label_test=labels_1018_ml_fusion_0.3
-far_project_m2f_paths=/data/yuqi/Datasets/DJI/Campus_new/train/$label_test
-output_path=/data/yuqi/code/GP-NeRF-semantic/zyq_rebuttal_4/campus_$label_test
+label_test=labels_1028_ml_fusion_0.3
+far_project_m2f_paths=/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds/train/$label_test
+output_path=/data/yuqi/code/GP-NeRF-semantic/zyq_rebuttal_4/DJI/b2_$label_test
 
-dataset_path=/data/yuqi/Datasets/DJI/Campus_new
-metaXml_path=/data2/jxchen/jxchen_copy_1121/data/jxchen/dataset/dji/campus/metadata.xml
-load_ply_path=/data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/4_pointcloud_method/data/gt/yuehai_gt_label_fineReg.txt
+dataset_path=/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds
+metaXml_path=/data/yuqi/Datasets/DJI/others/origin/Longhua_origin/block2/terra_point_ply/metadata.xml
+load_ply_path=/data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/4_pointcloud_method/data/dji/djiPly_seg_b2.txt
 
 
 # #  1.  3d get 2d label
@@ -44,68 +104,9 @@ echo '1 start'
 # #需要修改的值
 # # far_project_m2f_paths   新的标签路径
 label_test=labels_m2f
-far_project_m2f_paths=/data/yuqi/Datasets/DJI/Campus_new/train/$label_test
-output_path=/data/yuqi/code/GP-NeRF-semantic/zyq_rebuttal_4/campus_$label_test
+far_project_m2f_paths=/data/yuqi/Datasets/DJI/Longhua_block2_20231020_ds/train/$label_test
+output_path=/data/yuqi/code/GP-NeRF-semantic/zyq_rebuttal_4/DJI/b2_$label_test
 
-
-# #  1.  3d get 2d label
-
-echo '1 start'
-/data/yuqi/anaconda3/envs/gpnerf/bin/python /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/4_pointcloud_method/1015_1_3d_get_2d_label_gy_filter_1015_farproject3.py  \
-    --dataset_path=$dataset_path  \
-    --exp_name='logs_357/test' \
-    --output_path=$output_path  \
-    --far_project_m2f_paths=$far_project_m2f_paths  \
-    --metaXml_path=$metaXml_path    \
-    --load_ply_path=$load_ply_path
-
-
-
-#######################################################################################################
-
-
-
-
-
-
-
-
-
-
-#######################################################################################################
-
-# #需要修改的值
-# # far_project_m2f_paths   新的标签路径
-# label_test=labels_1018_ml_fusion_0.3
-# far_project_m2f_paths=/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/$label_test
-# output_path=/data/yuqi/code/GP-NeRF-semantic/zyq_rebuttal_4/yingrenshi_$label_test
-
-dataset_path=/data/yuqi/Datasets/DJI/Yingrenshi_20230926
-metaXml_path=/data/yuqi/Datasets/DJI/others/origin/Yingrenshi_20230926_origin/terra_point_ply/metadata.xml
-load_ply_path=/data2/jxchen/jxchen_copy_1121/data/jxchen/dataset/dji/Yingrenshi/Yingrenshi_fine-registered.txt
-
-
-# #  1.  3d get 2d label
-
-echo '1 start'
-/data/yuqi/anaconda3/envs/gpnerf/bin/python /data/yuqi/code/GP-NeRF-semantic/bash_rebuttal/4_pointcloud_method/1015_1_3d_get_2d_label_gy_filter_1015_farproject3.py  \
-    --dataset_path=$dataset_path  \
-    --exp_name='logs_357/test' \
-    --output_path=$output_path  \
-    --far_project_m2f_paths=$far_project_m2f_paths  \
-    --metaXml_path=$metaXml_path    \
-    --load_ply_path=$load_ply_path
-
-#######################################################################################################
-
-
-
-
-#需要修改的值
-# far_project_m2f_paths   新的标签路径
-label_test=labels_m2f
-far_project_m2f_paths=/data/yuqi/Datasets/DJI/Yingrenshi_20230926/train/$label_test
-output_path=/data/yuqi/code/GP-NeRF-semantic/zyq_rebuttal_4/yingrenshi_$label_test
 
 
 # #  1.  3d get 2d label

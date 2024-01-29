@@ -1,8 +1,8 @@
 #!/bin/bash
 #  depth_mesh  rgbs     image_metadata    metadata
 # .1npy        .1jpg   .1pt     
-source_dir="/data/yuqi/Datasets/InstanceBuilding/3D/scene1/colmap_jx/train/rgbs"
-destination_dir="/data/yuqi/Datasets/InstanceBuilding/3D/scene1/colmap_jx/val/rgbs"
+source_dir="/data/yuqi/Datasets/InstanceBuilding/3D/scene1/colmap_jx_new/train/rgbs"
+destination_dir="/data/yuqi/Datasets/InstanceBuilding/3D/scene1/colmap_jx_new/val/rgbs"
 filenames=("000005.jpg" "000010.jpg" "000015.jpg" "000020.jpg" "000025.jpg" "000030.jpg" "000035.jpg" "000040.jpg" "000045.jpg" "000050.jpg"  "000055.jpg" "000060.jpg" "000065.jpg" "000070.jpg" "000075.jpg")
 
 # 进入源文件夹

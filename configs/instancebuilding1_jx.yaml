@@ -1,4 +1,4 @@
-ray_altitude_range: [2.6, 3.6]     
+ray_altitude_range: [-2, 51]     
 # [-90, 20] #6
 # -60  10      Ray altitude range in [-1, 1] space: [tensor(0.2126, dtype=torch.float64), tensor(0.6346, dtype=torch.float64)]
 #  应该在0.26-0.58间
