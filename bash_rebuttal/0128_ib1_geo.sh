@@ -1,10 +1,10 @@
 #!/bin/bash
 export OMP_NUM_THREADS=16
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=7
 
-config_file=configs/instancebuilding1.yaml
+config_file=configs/instancebuilding1_jx.yaml
 
-dataset_path=/data/yuqi/Datasets/InstanceBuilding/3D/scene1/output_fix
+dataset_path=/data/yuqi/Datasets/InstanceBuilding/3D/scene1/colmap_jx
 
 
 batch_size=10240
@@ -23,7 +23,7 @@ sampling_mesh_guidance=False
 depth_dji_loss=False
 wgt_depth_mse_loss=0
 
-exp_name=logs_rebuttal/0128_ib1_geo
+exp_name=logs_rebuttal/0129_ib1_geo
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \
     --network_type   $network_type   --config_file  $config_file   \

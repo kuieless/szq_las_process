@@ -60,24 +60,24 @@ def rgb2custom(rgb):
     # mask_rgb = cv2.cvtColor(mask_rgb, cv2.COLOR_RGB2BGR)
     return mask
 
-### 20240126 rebuttal 计算uavid指标时，vegetation映射到cluster（不参与指标的计算）
-def remapping(mask):
-    mask[mask==5] = 0               # vegetation -> road
-    mask[mask==6] = 0               # human  /
-    mask[mask==7] = 0               # sky    /
-    mask[mask==8] = 0               # water  /
-    mask[mask==9] = 2               # ground -> road
-    mask[mask==10] = 0              # mountain   /
-    return mask
-
+# ### 20240126 rebuttal 计算uavid指标时，vegetation映射到cluster（不参与指标的计算）
 # def remapping(mask):
-#     mask[mask==5] = 2               # vegetation -> road
+#     mask[mask==5] = 0               # vegetation -> road
 #     mask[mask==6] = 0               # human  /
 #     mask[mask==7] = 0               # sky    /
 #     mask[mask==8] = 0               # water  /
 #     mask[mask==9] = 2               # ground -> road
 #     mask[mask==10] = 0              # mountain   /
 #     return mask
+
+def remapping(mask):
+    mask[mask==5] = 2               # vegetation -> road
+    mask[mask==6] = 0               # human  /
+    mask[mask==7] = 0               # sky    /
+    mask[mask==8] = 0               # water  /
+    mask[mask==9] = 2               # ground -> road
+    mask[mask==10] = 0              # mountain   /
+    return mask
 
 def remapping_1001_bk(mask):
     mask[mask==6] = 0               # human

@@ -15,7 +15,7 @@ from gp_nerf.opts import get_opts_base
 from argparse import Namespace
 from tqdm import tqdm
 import cv2
-from tools.unetformer.uavid2rgb import rgb2custom, custom2rgb,remapping
+from tools.unetformer.uavid2rgb import rgb2custom, custom2rgb
 
 from PIL import Image
 from pathlib import Path
@@ -39,6 +39,17 @@ def calculate_entropy(labels):
     entropy = -np.sum(probabilities * np.log2(probabilities))
 
     return entropy
+
+
+def remapping(mask):
+    mask[mask==5] = 2               # vegetation -> road
+    mask[mask==6] = 0               # human  /
+    mask[mask==7] = 0               # sky    /
+    mask[mask==8] = 0               # water  /
+    mask[mask==9] = 2               # ground -> road
+    mask[mask==10] = 0              # mountain   /
+    return mask
+
 
 
 def custom2rgb_1(mask):

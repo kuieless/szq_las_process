@@ -1,5 +1,5 @@
 export OMP_NUM_THREADS=16
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=7
 
 
 python  gp_nerf/eval.py \
@@ -12,6 +12,6 @@ python  gp_nerf/eval.py \
     --ckpt_path=/data/yuqi/code/GP-NeRF-semantic/logs_rebuttal/0127_seq31_geo/0/models/60000.pt \
     --eval_others=True \
     --eval_others_name=labels_0125_rebu_0.2  \
-    --exp_name logs_rebuttal/0127_seq31_eval_2d_ours_0.2
+    --exp_name logs_rebuttal/0127_seq31_eval_2d_ours_0.2_remapping
 
 
