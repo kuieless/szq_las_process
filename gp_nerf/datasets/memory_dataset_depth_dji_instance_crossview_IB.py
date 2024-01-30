@@ -24,7 +24,7 @@ class MemoryDataset(Dataset):
                  center_pixels: bool, device: torch.device, hparams=None):
         super(MemoryDataset, self).__init__()
         if hparams.debug:
-            self.visualization=True
+            self.visualization=False
         else:
             self.visualization=False
 
@@ -58,7 +58,7 @@ class MemoryDataset(Dataset):
         
         main_print('Loading data')
         if hparams.debug:
-            # metadata_items = metadata_items[::20]
+            metadata_items = metadata_items[::20]
             # metadata_items = metadata_items[200:210]
             # metadata_items = metadata_items[207:208]
             # metadata_items = metadata_items[230:235]
@@ -68,7 +68,7 @@ class MemoryDataset(Dataset):
             # metadata_items = metadata_items[::2]
             # metadata_items = metadata_items[151:152]
             # metadata_items = metadata_items[140:160]
-            metadata_items = metadata_items[155:156]
+            # metadata_items = metadata_items[155:156]
             # metadata_items = metadata_items[546:547]
             pass
 
@@ -301,7 +301,7 @@ class MemoryDataset(Dataset):
             'rays': self._rays[idx][sampling_idx],
             'img_indices': self._img_indices[idx] * torch.ones(sampling_idx.shape[0], dtype=torch.int32),
             'labels': instance_new[sampling_idx].int(),
-            'semantic_labels': self._labels[idx][sampling_idx],
+            'semantic_labels': self._labels[idx][sampling_idx].int(),
         }
         if self._depth_djis[idx] is not None:
             item['depth_dji'] = self._depth_djis[idx][sampling_idx]

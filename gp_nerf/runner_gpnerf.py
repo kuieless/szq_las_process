@@ -463,7 +463,11 @@ class Runner:
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
         elif self.hparams.dataset_type == 'memory_depth_dji_instance':
-            from gp_nerf.datasets.memory_dataset_depth_dji_instance import MemoryDataset
+            if 'InstanceBuilding' not in self.hparams.dataset_path:
+                from gp_nerf.datasets.memory_dataset_depth_dji_instance import MemoryDataset
+            else:
+                from gp_nerf.datasets.memory_dataset_depth_dji_instance_IB import MemoryDataset
+                
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
@@ -1112,7 +1116,7 @@ class Runner:
                 sem_label = self.logits_2_label(sem_logits)
                 sem_label = remapping(sem_label)
             else:
-                sem_label = 
+                sem_label = item['semantic_labels']
 
 
             # contrastive loss or slow-fast loss
@@ -1533,10 +1537,10 @@ class Runner:
                     
                     output_semantics_with_invalid = p_semantics.detach()
                     Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
-                            str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                            str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % int(self.val_items[i].image_path.stem))))
                     
                     Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-                            str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                            str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % int(self.val_items[i].image_path.stem))))
                     
                     stack = visualize_panoptic_outputs(
                         p_rgb, p_semantics, p_instances, None, None, None, None,
@@ -1857,13 +1861,13 @@ class Runner:
                         
                         output_semantics_with_invalid = p_semantics.detach()
                         Image.fromarray(output_semantics_with_invalid.reshape(self.H, self.W).cpu().numpy().astype(np.uint8)).save(
-                                str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                str(experiment_path_current / 'pred_semantics'/ ("%06d.png" % int(self.val_items[i].image_path.stem))))
                         if not self.hparams.only_train_building:
                             Image.fromarray(p_instances_building.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-                                    str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                    str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % int(self.val_items[i].image_path.stem))))
                         else:
                             Image.fromarray(p_instances.argmax(dim=1).reshape(self.H, self.W).cpu().numpy().astype(np.uint16)).save(
-                                    str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % self.val_items[save_i].image_index)))
+                                    str(experiment_path_current / 'pred_surrogateid'/ ("%06d.png" % int(self.val_items[i].image_path.stem))))
                             
                         
                     # calculate the panoptic quality

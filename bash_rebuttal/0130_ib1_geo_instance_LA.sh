@@ -54,4 +54,4 @@ python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_sema
     --use_subset=True      --lr=$lr    --balance_weight=True   --num_semantic_classes=5   \
     --enable_instance=$enable_instance   --freeze_semantic=True  --instance_name=$instance_name   \
     --instance_loss_mode=$instance_loss_mode  \
-    --num_instance_classes=$num_instance_classes
+    --num_instance_classes=$num_instance_classes  --debug=True

@@ -350,7 +350,7 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
                 gt_points_semantic.append(gt_label)
 
         # 如果pred semantic存在，则使用
-        # 若不存在， 则创建一个全是things的semantic
+        # 若不存在， 则创建一个全是things的semantic 
         if f'sem_map_{typ}' in results:
             sem_logits = results[f'sem_map_{typ}']
             sem_label = logits_2_label(sem_logits)
@@ -358,8 +358,11 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
             # if not hparams.render_zyq:
                 # invalid_mask = gt_label==0
                 # sem_label[invalid_mask.view(sem_label.shape)] = 0
-        else:
-            sem_label = torch.ones_like(instances)
+        
+        # else:
+
+            # sem_label = torch.ones_like(instances)
+
         
         if hparams.instance_loss_mode == 'slow_fast':
             slow_features = instances[...,hparams.num_instance_classes:] 
@@ -368,9 +371,13 @@ def get_instance_pred(results, val_type, metadata_item, viz_rgbs, logits_2_label
         p_instances_building = None
         # if not hparams.render_zyq and hparams.val_type !='train_instance':
         if not hparams.render_zyq and 'train' not in  hparams.val_type:
-            # p_instances = create_instances_from_semantics(instances, gt_label, thing_classes,device=device)
-            #1105晚上改的，改为用pred semantic进行instance的相关计算
-            p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
+            ####(2024/0130 rebuttal 判断是不是instancebuilding数据集)
+            if 'InstanceBuilding' in hparams.dataset_path:
+                p_instances = create_instances_from_semantics(instances, gt_label, thing_classes,device=device)
+                sem_label = gt_label
+            else:
+                #1105晚上改的，改为用pred semantic进行instance的相关计算
+                p_instances = create_instances_from_semantics(instances, sem_label, thing_classes,device=device)
             if not hparams.only_train_building:
                 p_instances_building = create_instances_from_semantics(instances.clone().detach(), sem_label.clone().detach(), [1], device=device)
         else:
