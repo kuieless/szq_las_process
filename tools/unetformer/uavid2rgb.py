@@ -41,6 +41,30 @@ def custom2rgb(mask):
     return mask_rgb
 
 
+def custom2rgb_point(mask):
+    size = mask.shape[0]
+    mask_rgb = np.zeros(shape=(size,3), dtype=np.uint8)
+
+    mask_convert = mask
+
+    mask_rgb[mask_convert == 0] = [0, 0, 0]             # cluster       black
+    
+    mask_rgb[mask_convert ==1] = [128, 0, 0]           # building      red
+    mask_rgb[mask_convert ==2] = [192, 192, 192]       # road        grey  
+    mask_rgb[mask_convert ==3] = [192, 0, 192]         # car           light violet
+    mask_rgb[mask_convert ==4] = [0, 128, 0]           # tree          green
+    mask_rgb[mask_convert ==5] = [128, 128, 0]         # vegetation    dark green
+    mask_rgb[mask_convert ==6] = [255, 255, 0]         # human         yellow
+    mask_rgb[mask_convert ==7] = [135, 206, 250]       # sky           light blue
+    mask_rgb[mask_convert ==8] = [0, 0, 128]           # water         blue
+
+    mask_rgb[mask_convert ==9] = [252,230,201]          # ground       egg
+    mask_rgb[mask_convert ==10] = [128, 64, 128]        # mountain     dark violet
+
+    # mask_rgb = cv2.cvtColor(mask_rgb, cv2.COLOR_RGB2BGR)
+    return mask_rgb
+
+
 def rgb2custom(rgb):
     h, w = rgb.shape[0], rgb.shape[1]
     mask = np.zeros(shape=(h, w), dtype=np.uint8)

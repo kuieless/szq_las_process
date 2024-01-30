@@ -40,6 +40,7 @@ from torchvision.utils import make_grid
 
 #semantic
 from tools.unetformer.uavid2rgb import uavid2rgb, custom2rgb, remapping, remapping_remove_ground
+from tools.unetformer.uavid2rgb import custom2rgb_point
 from tools.unetformer.metric import Evaluator
 
 import pandas as pd
@@ -69,6 +70,9 @@ from scipy.spatial import cKDTree
 import pickle
 
 from tools.contrastive_lift.utils import create_instances_from_semantics
+
+import xml.etree.ElementTree as ET
+from pyntcloud import PyntCloud
 
 
 to8b = lambda x : (255*np.clip(x,0,1)).astype(np.uint8)
@@ -127,6 +131,34 @@ def contrastive_loss(features, instance_labels, temperature):
     prob_masked = torch.masked_select(prob, prob.ne(0))
     loss = -prob_masked.log().sum()/bsize
     return loss
+
+
+def rad(x):
+    return math.radians(x)
+
+def zhitu_2_nerf(dataset_path, metaXml_path, points_xyz):
+    # to process points_rgb
+    coordinate_info = torch.load(dataset_path + '/coordinates.pt')
+    origin_drb = coordinate_info['origin_drb'].numpy()
+    pose_scale_factor = coordinate_info['pose_scale_factor']
+
+    root = ET.parse(metaXml_path).getroot()
+    translation = np.array(root.find('SRSOrigin').text.split(',')).astype(np.float)    
+
+    #######################################
+    ZYQ = torch.DoubleTensor([[0, 0, -1],
+                            [0, 1, 0],
+                            [1, 0, 0]])
+    ZYQ_1 = torch.DoubleTensor([[1, 0, 0],
+                            [0, math.cos(rad(135)), math.sin(rad(135))],
+                            [0, -math.sin(rad(135)), math.cos(rad(135))]])      
+    # points_nerf = np.array(xyz)
+    points_nerf = points_xyz
+    points_nerf += translation
+    points_nerf = ZYQ.numpy() @ points_nerf.T
+    points_nerf = (ZYQ_1.numpy() @ points_nerf).T
+    points_nerf = (points_nerf - origin_drb) / pose_scale_factor
+    return points_nerf
 
 
 class Runner:
@@ -344,6 +376,73 @@ class Runner:
             if self.wandb is not None:
                 self.wandb.log({"parameters/fg": fg_parameters})
                 self.wandb.log({"parameters/bg": bg_parameters})
+
+
+    def query_nerf_result(self):
+        with torch.no_grad():
+            nerf = self.nerf
+            hparams = self.hparams
+            output_path = hparams.output_path
+            metaXml_path = hparams.metaXml_path
+            ply_path = hparams.ply_path
+            
+
+            # if not os.path.exists(output_path):
+            #     os.makedirs(output_path)
+
+
+            # pointcloud
+            ply_data = np.loadtxt(ply_path)
+            points_xyz_raw = ply_data[:,:3]
+            points_xyz = zhitu_2_nerf(hparams.dataset_path, metaXml_path, points_xyz_raw)
+            xyz_ = torch.from_numpy(points_xyz).to(self.device)
+            xyz_ = contract_to_unisphere_new(xyz_,hparams)
+            out_chunks = []
+            out_semantic_chunk = [] 
+            B = xyz_.shape[0]
+            model_chunk_size = 1024*1024
+            for i in range(0, B, model_chunk_size):
+
+                xyz_chunk = xyz_[i:i + model_chunk_size]
+                chunk_size = xyz_chunk.shape[0]
+                rays_d_ = torch.zeros((chunk_size,3)).to(self.device)
+                image_indices_ = torch.ones((chunk_size,1)).to(self.device)
+
+                xyz_chunk = torch.cat([xyz_chunk,
+                                    rays_d_,
+                                    image_indices_], 1)
+                
+                sigma_noise=None
+
+                    
+                model_chunk, semantic_chunk= nerf('fg', xyz_chunk.float(), sigma_noise=sigma_noise, train_iterations=200000)
+                out_chunks += [model_chunk]
+                out_semantic_chunk += [semantic_chunk]
+            
+            out_semantic = torch.cat(out_semantic_chunk, 0)
+            
+
+                # alphas = 0
+                # T = torch.cumprod(1 - alphas + 1e-8, -1)
+                # T = torch.cat((torch.ones_like(T[..., 0:1]), T[..., :-1]), dim=-1)  # [..., N_samples]
+                # weights = alphas * T
+                # sem_map = torch.sum(weights[..., None] * sem_logits, -2)
+                
+            # ?
+            sem_label = self.logits_2_label(out_semantic)
+            sem_label = remapping(sem_label)
+
+            sem_rgb = custom2rgb_point(sem_label.cpu().numpy())
+
+            print('save pc...')
+            cloud = PyntCloud(pd.DataFrame(
+                # same arguments that you are passing to visualize_pcl
+                data=np.hstack((ply_data[:,:3], np.uint8(sem_rgb))),
+                columns=["x", "y", "z", "red", "green", "blue"]))
+            cloud.to_file(f"{hparams.output_path}")
+
+            print('done')
+
 
 
     def train(self):
