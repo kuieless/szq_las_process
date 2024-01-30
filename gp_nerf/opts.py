@@ -148,25 +148,26 @@ def get_opts_base():
     
     
     parser.add_argument('--eval_others', default=False, type=eval, choices=[True, False], help='')
-    parser.add_argument('--eval_others_name', type=str, default='labels_m2f', choices=['labels_m2f', 
-                                                                                       'labels_unetformer',
-                                                                                       'labels_panolift',
-                                                                                       'labels_1018_ml_fusion_0.3',
-                                                                                       'labels_1018_ml_fusion_0.3_covercar',
-                                                                                       'labels_1028_ml_fusion_0.3',
-                                                                                       # rebuttal
-                                                                                       "labels_0125_rebu_0.1",
-                                                                                       "labels_0125_rebu_0.2",
-                                                                                       "labels_0125_rebu_0.3",
-                                                                                       "labels_0125_rebu_0.4",
-                                                                                       "labels_0125_rebu_0.5",
-                                                                                       "labels_0125_rebu_0.6",
-                                                                                       "labels_0125_rebu_0.7",
-                                                                                       "labels_0125_rebu_0.8",
-                                                                                       "labels_0125_rebu_0.9",
-                                                                                       "labels_0125_rebu_1.0",
-                                                                                       "labels_seq_rebu_0.3_4",
-                                                                                       ], help='')
+    parser.add_argument('--eval_others_name', type=str, default='labels_m2f')
+                                                                                    #    , choices=['labels_m2f', 
+                                                                                    #    'labels_unetformer',
+                                                                                    #    'labels_panolift',
+                                                                                    #    'labels_1018_ml_fusion_0.3',
+                                                                                    #    'labels_1018_ml_fusion_0.3_covercar',
+                                                                                    #    'labels_1028_ml_fusion_0.3',
+                                                                                    #    # rebuttal
+                                                                                    #    "labels_0125_rebu_0.1",
+                                                                                    #    "labels_0125_rebu_0.2",
+                                                                                    #    "labels_0125_rebu_0.3",
+                                                                                    #    "labels_0125_rebu_0.4",
+                                                                                    #    "labels_0125_rebu_0.5",
+                                                                                    #    "labels_0125_rebu_0.6",
+                                                                                    #    "labels_0125_rebu_0.7",
+                                                                                    #    "labels_0125_rebu_0.8",
+                                                                                    #    "labels_0125_rebu_0.9",
+                                                                                    #    "labels_0125_rebu_1.0",
+                                                                                    #    "labels_seq_rebu_0.3_4",
+                                                                                    #    ], help='')
     parser.add_argument('--crossview_process_path', type=str, default='zyq/test', help='')
     parser.add_argument('--crossview_all', default=False, type=eval, choices=[True, False], help='')
     parser.add_argument('--only_train_building', default=True, type=eval, choices=[True, False], help='')
