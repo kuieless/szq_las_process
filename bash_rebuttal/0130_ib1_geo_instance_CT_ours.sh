@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=16
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=1
 
 config_file=configs/instancebuilding1_jx.yaml
 
@@ -13,7 +13,7 @@ val_interval=20000
 ckpt_interval=20000
 
 network_type=gpnerf_nr3d     #  gpnerf   sdf
-dataset_type=memory_depth_dji_instance
+dataset_type=memory_depth_dji_instance_crossview
 
 
 enable_semantic=False
@@ -33,12 +33,12 @@ lr=0.01
 log2_hashmap_size=22
 desired_resolution=8192
 
-instance_loss_mode=linear_assignment
+instance_loss_mode=slow_fast
 
 enable_instance=True
-instance_name=instances_mask_0.001
-num_instance_classes=200
-exp_name=logs_rebuttal/0130_ib1_geo_$instance_loss_mode-$instance_name
+instance_name=instances_mask_0.001_depth20
+num_instance_classes=100
+exp_name=logs_rebuttal/0130_ib1_geo_$instance_loss_mode-$instance_name-ours
 
 
 python gp_nerf/train.py  --exp_name  $exp_name   --enable_semantic  $enable_semantic  \

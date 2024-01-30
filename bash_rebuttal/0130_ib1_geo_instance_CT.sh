@@ -1,6 +1,6 @@
 #!/bin/bash
 export OMP_NUM_THREADS=16
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=0
 
 config_file=configs/instancebuilding1_jx.yaml
 
@@ -33,11 +33,11 @@ lr=0.01
 log2_hashmap_size=22
 desired_resolution=8192
 
-instance_loss_mode=linear_assignment
+instance_loss_mode=slow_fast
 
 enable_instance=True
 instance_name=instances_mask_0.001
-num_instance_classes=200
+num_instance_classes=100
 exp_name=logs_rebuttal/0130_ib1_geo_$instance_loss_mode-$instance_name
 
 
