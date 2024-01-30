@@ -382,7 +382,7 @@ class Runner:
                 for p_base in self.nerf.encoder.parameters():
                     p_base.requires_grad = False
             # 训练instance，冻结semantic
-            if self.hparams.freeze_semantic:
+            if self.hparams.freeze_semantic and 'InstanceBuilding' not in self.hparams.dataset_path:
                 for p_base in self.nerf.semantic_linear.parameters():
                     p_base.requires_grad = False
                 for p_base in self.nerf.semantic_linear_bg.parameters():
@@ -469,7 +469,10 @@ class Runner:
             self.H = dataset.H
             self.W = dataset.W
         elif self.hparams.dataset_type == 'memory_depth_dji_instance_crossview':
-            from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview import MemoryDataset
+            if 'InstanceBuilding' not in self.hparams.dataset_path:
+                from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview import MemoryDataset
+            else:
+                from gp_nerf.datasets.memory_dataset_depth_dji_instance_crossview_IB import MemoryDataset
             dataset = MemoryDataset(self.train_items, self.near, self.far, self.ray_altitude_range,
                                     self.hparams.center_pixels, self.device, self.hparams)
             self.H = dataset.H
@@ -1104,10 +1107,13 @@ class Runner:
         if self.hparams.enable_instance:
             instance_features = results[f'instance_map_{typ}']
             labels_gt = labels.type(torch.long)
+            if 'InstanceBuilding' not in self.hparams.dataset_path:
+                sem_logits = results[f'sem_map_{typ}']
+                sem_label = self.logits_2_label(sem_logits)
+                sem_label = remapping(sem_label)
+            else:
+                sem_label = 
 
-            sem_logits = results[f'sem_map_{typ}']
-            sem_label = self.logits_2_label(sem_logits)
-            sem_label = remapping(sem_label)
 
             # contrastive loss or slow-fast loss
             instance_loss, concentration_loss = self.calculate_instance_clustering_loss(instance_features, labels_gt)

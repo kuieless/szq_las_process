@@ -27,7 +27,7 @@ plt.xticks(x_positions, x_labels, size=fontsize, fontproperties='Times New Roman
 plt.yticks(size=fontsize, fontproperties='Times New Roman')
 
 plt.xlabel('Altitude Offset', fontproperties='Times New Roman', size=fontsize_label)
-plt.ylabel('PSNR of Building', fontproperties='Times New Roman', size=fontsize_label)
+plt.ylabel('IoU of Building', fontproperties='Times New Roman', size=fontsize_label)
 
 plt.rcParams.update({'font.size': fontsize_legend})
 plt.legend(loc='lower right', prop='Times New Roman')

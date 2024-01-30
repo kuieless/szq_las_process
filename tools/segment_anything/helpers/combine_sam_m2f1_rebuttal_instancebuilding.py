@@ -85,6 +85,28 @@ def custom2rgb(mask):
     # mask_rgb = cv2.cvtColor(mask_rgb, cv2.COLOR_RGB2BGR)
     return mask_rgb
 
+
+
+def visualize_labels(labels_tensor):
+    non_zero_labels = labels_tensor[labels_tensor != 0]
+    unique_labels = torch.unique(non_zero_labels)
+    num_labels = len(unique_labels)
+
+    # 创建颜色映射
+    label_colors = torch.rand((num_labels, 3))  # 生成随机颜色
+    colored_image = torch.zeros((labels_tensor.size(0), labels_tensor.size(1), 3))  # 创建空的彩色图像
+
+    for i, label in enumerate(unique_labels):
+        label_mask = (labels_tensor == label)
+        colored_image[label_mask] = label_colors[i]
+
+    # 将 PyTorch 张量转换为 NumPy 数组
+    colored_image_np = (colored_image.numpy() * 255).astype(np.uint8)
+
+    return colored_image_np
+
+
+
 def _get_train_opts() -> Namespace:
     parser = configargparse.ArgParser(config_file_parser_class=configargparse.YAMLConfigFileParser)
 
@@ -98,19 +120,21 @@ def _get_train_opts() -> Namespace:
 
 
 def hello(hparams: Namespace) -> None:
-    if len(sys.argv) != 3:
-        print("zyq: wrong input argv number")
-        sys.exit(1)
+    # if len(sys.argv) != 3:
+    #     print("zyq: wrong input argv number")
+    #     sys.exit(1)
 
     
-    root_path = sys.argv[1]
+    root_path = '/data/yuqi/Datasets/InstanceBuilding/3D/scene1/colmap_jx_new/train'
     SAM_path = os.path.join(root_path, 'sam_features')
-    m2f_path = os.path.join(root_path, 'labels_m2f')
     img_path = os.path.join(root_path, 'rgbs')
     
+    m2f_path = '/data/yuqi/jx_rebuttal/IB_test/2d_label/instance_dilated10_erode10/img/train'
+
     
     
-    save_path_o = sys.argv[2]
+    
+    save_path_o = os.path.join(str(Path(m2f_path).parent),'sam_zyq')
     save_path = os.path.join(save_path_o, 'labels_merge')
     save_path_vis = os.path.join(save_path_o, 'labels_merge_vis')
     Path(save_path).mkdir(exist_ok=True,parents=True)
@@ -174,10 +198,14 @@ def hello(hparams: Namespace) -> None:
         # plt.margins(0, 0)
         # dict['id'] = dict['id'].cpu().numpy()
         _mask = get_mask(dict, semantics)
+
         Image.fromarray(_mask.astype(np.uint16)).save(os.path.join(save_path,sams[i].split('/')[-1][:6]+".png"))
 
-        mask_rgb = custom2rgb(_mask)
-        Image.fromarray(mask_rgb).save(os.path.join(save_path_vis,sams[i].split('/')[-1][:6]+".png"))
+        # mask_rgb = custom2rgb(_mask)
+        mask_rgb = visualize_labels(torch.from_numpy(_mask))
+
+        mask_rgb = image1 *0.3+mask_rgb*0.7
+        Image.fromarray(mask_rgb.astype(np.uint8)).save(os.path.join(save_path_vis,sams[i].split('/')[-1][:6]+".png"))
         # end = time.time()
         # print(end-start)
         

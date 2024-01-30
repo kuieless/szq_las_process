@@ -6,14 +6,14 @@ ray_altitude_range: [-2, 51]
 num_instance_classes: 100
 network_type: gpnerf_nr3d
 use_scaling: False
-sampling_mesh_guidance: True
+sampling_mesh_guidance: False
 separate_semantic: True
 num_layers_semantic_hidden: 3
 semantic_layer_dim: 128
 balance_weight: True
 num_semantic_classes: 5
 
-label_name: 1018_ml_fusion_0.3
+label_name: gt
 log2_hashmap_size: 22
 desired_resolution: 8192
 sdf_as_gpnerf: True
