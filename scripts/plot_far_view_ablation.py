@@ -13,10 +13,12 @@ plt.figure(dpi=225, figsize=(5, 3))
 # fontsize_label = 13
 # fontsize = 17
 # fontsize_legend = 13
-fontsize_label = 17
-fontsize = 17
-fontsize_legend = 17
-ticksize=14
+fontsize_label = 18
+fontsize = 18
+fontsize_legend = 18
+ticksize=18
+
+
 markersize = 7
 linewidth = 3
 ours_color = 'lightcoral'
@@ -28,21 +30,21 @@ plt.plot(x_positions, y_hash, color=hash_color, marker='o', label='Yuehai-Campus
 
 
 # plt.xlabel('Altitude Offset', , size=fontsize_label)
-plt.ylabel('IoU of Building', size=fontsize_label)
+plt.ylabel('IoU of Building', size=fontsize_label, fontproperties='Times New Roman', )
 
 plt.rcParams.update({'font.size': fontsize_legend})
-plt.legend(loc='lower right')
+plt.legend(loc='lower right', prop='Times New Roman')
 
 # 设置横坐标两侧留有空白
-plt.xlim(xmin=-0.1, xmax=len(x_labels)-0.9)
+plt.xlim(xmin=-0.25, xmax=len(x_labels)-0.75)
 
 # ymax, ymin = max(max(y_ours), max(y_hash)), min(min(y_ours), min(y_hash))
-plt.ylim(0.7, 0.95)
+plt.ylim(0.67, 0.95)
 
 
 # 设置横坐标刻度位置和标签
-plt.xticks(x_positions[::3], x_labels[::3], fontsize=ticksize, )
-plt.yticks(fontsize=ticksize)
+plt.xticks(x_positions[::3], x_labels[::3], fontsize=ticksize, fontproperties='Times New Roman', )
+plt.yticks(fontsize=ticksize, fontproperties='Times New Roman', )
 
 plt.savefig(os.path.join('./scripts/plot_far_view_ablation.pdf'), bbox_inches='tight')
 plt.show()
