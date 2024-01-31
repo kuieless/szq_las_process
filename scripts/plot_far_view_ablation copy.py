@@ -27,11 +27,11 @@ plt.plot(x_positions, y_hash, color=hash_color, marker='o', label='Yuehai-Campus
 
 
 
-# plt.xlabel('Altitude Offset', , size=fontsize_label)
-plt.ylabel('IoU of Building', size=fontsize_label)
+# plt.xlabel('Altitude Offset', fontproperties='Times New Roman', size=fontsize_label)
+plt.ylabel('IoU of Building', fontproperties='Times New Roman', size=fontsize_label)
 
 plt.rcParams.update({'font.size': fontsize_legend})
-plt.legend(loc='lower right')
+plt.legend(loc='lower right', prop='Times New Roman')
 
 # 设置横坐标两侧留有空白
 plt.xlim(xmin=-0.1, xmax=len(x_labels)-0.9)
@@ -41,8 +41,8 @@ plt.ylim(0.7, 0.95)
 
 
 # 设置横坐标刻度位置和标签
-plt.xticks(x_positions[::3], x_labels[::3], fontsize=ticksize, )
-plt.yticks(fontsize=ticksize)
+plt.xticks(x_positions[::3], x_labels[::3], fontsize=ticksize, fontproperties='Times New Roman')
+plt.yticks(fontsize=ticksize, fontproperties='Times New Roman')
 
 plt.savefig(os.path.join('./scripts/plot_far_view_ablation.pdf'), bbox_inches='tight')
 plt.show()
