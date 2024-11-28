@@ -320,7 +320,7 @@ class FilesystemDataset(Dataset):
 
     def _write_to_disk(self, executor: ThreadPoolExecutor, rgbs: torch.Tensor, rays: torch.FloatTensor,
                        img_indices: torch.Tensor, parquet_writers: List[pq.ParquetWriter],
-                       img_indices_dtype: Type[Union[np.ushort, np.int]], labels: torch.Tensor, desired_chunks=1000) -> List[Future[None]]:
+                       img_indices_dtype: Type[Union[np.ushort, int]], labels: torch.Tensor, desired_chunks=1000) -> List[Future[None]]:
         indices = torch.randperm(rgbs.shape[0])
         shuffled_rgbs = rgbs[indices]
         shuffled_rays = rays[indices]
