@@ -143,6 +143,7 @@ def main(hparams):
         if i % int(camera_positions.shape[0] / hparams.num_val) == 0:
             split_dir = dataset_path / 'val'
         else:
+            continue
             split_dir = dataset_path / 'train'
         
 

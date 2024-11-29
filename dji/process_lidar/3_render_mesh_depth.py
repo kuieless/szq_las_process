@@ -424,10 +424,10 @@ from tqdm import tqdm
 def _get_opts():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--nerf_metadata_dir', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan', help='')
-    parser.add_argument('--obj_filename', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan_lidar/original_image/terra_obj/Block/Block.obj', help='')
-    parser.add_argument('--save_dir', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan', help='')
-    parser.add_argument('--metadataXml_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan_lidar/original_image/terra_obj/metadata.xml', help='')
+    parser.add_argument('--nerf_metadata_dir', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan2', help='')
+    parser.add_argument('--obj_filename', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan_lidar2/original_image/terra_obj/Block/Block.obj', help='')
+    parser.add_argument('--save_dir', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan2', help='')
+    parser.add_argument('--metadataXml_path', default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan_lidar2/original_image/terra_obj/metadata.xml', help='')
     parser.add_argument('--down', default=4, type=float, help='')
     parser.add_argument('--camera_type', default='perspective', help='')
     parser.add_argument('--save_mesh', default=False, action='store_true')

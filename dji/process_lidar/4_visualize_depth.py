@@ -1,5 +1,8 @@
 '''
 对稀疏 lidar depth 和 mesh 投影的depth进行对比
+
+Depth Anything 的可以用 /data/yuqi/code/Depth-Anything-V2/test_lidar.py 处理得到 
+(做了lidar depth 和 Depth Anything 的对齐)
 '''
 
 
@@ -31,8 +34,9 @@ import random
 
 def _get_train_opts() -> Namespace:
     parser = get_opts_base()
-    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan',required=False, help='')
+    parser.add_argument('--dataset_path', type=str, default='/data/yuqi/Datasets/DJI/DJI_20230726_xiayuan2',required=False, help='')
     parser.add_argument('--exp_name', type=str, default='logs_313/test',required=False, help='experiment name')
+    parser.add_argument('--depth_type', type=str, default='DAv2',required=False, choices=['DAv2', 'mesh', 'lidar'],help='experiment name')
     
     return parser.parse_args()
 
@@ -45,18 +49,21 @@ def hello(hparams: Namespace) -> None:
 
 
     runner = Runner(hparams)
-    train_items = runner.train_items
+    train_items = runner.val_items
 
 
     split_list = []
     world_points = []
     for i, metadata_item in enumerate(tqdm(train_items, desc="Processing project 2d to 3d point")):
-        if i > 0:
-            break
-        
-        # depth_map = metadata_item.load_depth_dji().squeeze(-1)
-        depth_map = torch.HalfTensor(np.load(metadata_item.depth_dji_path.replace('depth_mesh', 'depth_dji'))).squeeze(-1)
-        
+        # if i > 0:
+            # break
+        if hparams.depth_type == 'mesh':
+            depth_map = metadata_item.load_depth_dji().squeeze(-1)
+        elif hparams.depth_type == 'lidar':
+            depth_map = torch.HalfTensor(np.load(metadata_item.depth_dji_path.replace('depth_mesh', 'depth_dji'))).squeeze(-1)
+        elif hparams.depth_type == 'DAv2':
+            depth_map = torch.HalfTensor(np.load(metadata_item.depth_dji_path.replace('depth_mesh', 'depth_DAv2'))).squeeze(-1)
+
 
         H, W = depth_map.shape
         valid_depth_mask = ~torch.isinf(depth_map)
@@ -117,7 +124,7 @@ def hello(hparams: Namespace) -> None:
         # same arguments that you are passing to visualize_pcl
         data=np.hstack((combined_array[:, :3], np.uint8(combined_array[:, 3:6])/ 255.0)),
         columns=["x", "y", "z", "red", "green", "blue"]))
-    cloud.to_file("point_cloud_full.ply")
+    cloud.to_file(f"point_cloud_full_{hparams.depth_type}.ply")
     print('full pc saved')
 
 
