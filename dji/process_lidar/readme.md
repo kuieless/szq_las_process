@@ -27,8 +27,8 @@
 # szq_302-visdepth.sh
 把前面得到的npy进行尺度缩放，回归到正常比例，然后得到metric depth以及对应的可视化图
 
-#
-进行mesh的投影得到mesh深度图
+# szq_3_render_mesh_depthcc-vis.sh
+进行mesh的投影得到mesh深度图 （我的mesh的las导入cc重建的，分块建的快，然后后面再把obj导入cc合并）
 
-#
+# 5compare-lidar-mesh-depth.py
 把点云的深度图和mesh的深度图进行对比，设置一个阈值（1米或者3m），从而过滤掉遮挡的点。
