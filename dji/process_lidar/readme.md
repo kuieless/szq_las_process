@@ -1,4 +1,4 @@
-
+### 学长的代码库
 ### 首先，用之前处理 gpnerf 的代码先对图像进行重命名, 划分 train / val , 得到 nerf 坐标系下的pose
 0_process_dji_v8_color.py
 
@@ -10,6 +10,8 @@
 
 ### 使用mesh投影得到dense depth
 3_render_mesh_depth
+
+### SZQ的代码
 
 
 
