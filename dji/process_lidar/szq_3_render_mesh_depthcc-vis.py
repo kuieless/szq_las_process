@@ -473,26 +473,234 @@ def chunks(lst, n):
 # ==============================================================
 # =================== 完整的 MAIN 函数 ===================
 # ==============================================================
+# def main(args):
+#     save_dir = args.save_dir
+#     os.makedirs(save_dir, exist_ok=True)
+    
+#     # Create output directories without 'split'
+#     if args.visualize:
+#         os.makedirs(os.path.join(save_dir, 'cat_results'), exist_ok=True)
+#         os.makedirs(os.path.join(save_dir, 'altitude_depth_vis'), exist_ok=True)
+        
+#     os.makedirs(os.path.join(save_dir, 'depth_mesh'), exist_ok=True)
+
+#     nerf_metadata_dir = args.nerf_metadata_dir    
+
+#     # --- Load Image Names ---
+#     names = sorted(glob.glob(os.path.join(nerf_metadata_dir, 'rgbs/*.jpg')))
+#     if not names:
+#         print(f"Error: No images found in {os.path.join(nerf_metadata_dir, 'rgbs/')}")
+#         print("Please check --nerf_metadata_dir. It should contain an 'rgbs' subfolder.")
+#         return
+        
+#     print(f"Found {len(names)} images to process.")
+
+#     # --- Load NeRF Metadata for first image (needed for mesh transform) ---
+#     print("Loading metadata from first image to get coordinate transform...")
+#     filename_first = os.path.basename(names[0])[:-4]
+#     nerf_metadata_for_coords = load_nerf_metadata(args, nerf_metadata_dir, filename_first) 
+#     if nerf_metadata_for_coords is None:
+#         print(f"Error loading metadata for {filename_first}. Exiting.")
+#         return
+
+#     # --- Get Mesh Filenames (但不加载) ---
+#     obj_filenames = sorted(glob.glob(os.path.join(args.obj_dir, '*.obj')))
+#     if not obj_filenames:
+#         print(f"Error: No .obj files found in {args.obj_dir}")
+#         print("Please check --obj_dir.")
+#         return
+        
+#     print(f"Found {len(obj_filenames)} .obj files in {args.obj_dir}")
+
+#     # --- [!!] OOM 修复：修改网格加载逻辑 [!!] ---
+    
+#     debug_mesh = None
+#     if args.debug:
+#         print(f"--- DEBUG MODE ---")
+#         print(f"Loading and debugging ONLY the first mesh: {obj_filenames[0]}")
+#         # 在 debug 模式下，我们加载并保留第一个网格
+#         debug_mesh = load_mesh_debug(obj_filenames[0], nerf_metadata_for_coords, save_mesh=args.save_mesh)      
+    
+#     elif args.save_mesh:
+#         # 在非 debug 模式下，如果 save_mesh=True, 
+#         # 我们只在开始前加载一次所有网格，以保存组合文件
+#         print("--- Pre-processing: Loading all meshes ONCE to save combined .obj ---")
+#         mesh_to_save = load_all_meshes(args, obj_filenames, nerf_metadata_for_coords, save_mesh=True)
+#         # 保存后立即删除，释放 VRAM
+#         del mesh_to_save
+#         if torch.cuda.is_available():
+#             torch.cuda.empty_cache()
+#         print("--- Combined mesh saved. Proceeding to batch rendering loop. ---")
+    
+#     # 在正常（非 debug, 非 save_mesh）模式下，我们什么都不做，
+#     # 因为网格将在下面的循环中分批加载。
+
+#     print("**********************************")
+#     print(f"Now rendering {len(names)} images...")
+#     print(f"Using mesh batch size: {args.mesh_batch_size}")
+#     print("**********************************")
+    
+#     # 定义网格批次大小
+#     MESH_BATCH_SIZE = args.mesh_batch_size
+    
+#     for name in tqdm(names[:]):
+#         filename = os.path.basename(name)[:-4]
+#         # 详细模式 (verbose=False) 关闭，避免在循环中打印过多信息
+#         nerf_metadata = load_nerf_metadata(args, nerf_metadata_dir, filename, verbose=False)
+#         if nerf_metadata is None:
+#             print(f"Skipping {filename} due to metadata loading error.")
+#             continue
+            
+#         render_setup = setup_renderer(args, nerf_metadata, verbose=False)
+#         renderer = render_setup['renderer']
+        
+#         # 获取图像尺寸用于初始化深度图
+#         H, W = render_setup['raster_settings'].image_size
+        
+#         # 1. 初始化一个空的 (或全为无穷大) 的深度缓冲
+#         # 我们用一个很大的值 (1e10) 来表示"未渲染"
+#         final_depth_buffer = torch.full((H, W), 1e10, device=device, dtype=torch.float32)
+        
+#         if args.debug:
+#             # --- DEBUG 渲染路径 ---
+#             # 只渲染已加载的 'debug_mesh'
+#             if debug_mesh is not None:
+#                 images, fragments = renderer(debug_mesh)
+#                 current_depth = fragments.zbuf[0, ..., 0]
+#                 valid_mask = current_depth > -1
+#                 current_depth[~valid_mask] = 1e10 # 将无效 (-1) 设置为无穷大
+#                 final_depth_buffer = current_depth # 覆盖
+            
+#         else:
+#             # --- 分批渲染路径 (正常操作) ---
+#             # 2. 将所有 obj 文件名分成小批次
+#             for mesh_file_batch in chunks(obj_filenames, MESH_BATCH_SIZE):
+                
+#                 # 3. 加载这一小批 mesh
+#                 # 使用 nerf_metadata_for_coords 进行坐标变换
+#                 batched_mesh = load_all_meshes(args, mesh_file_batch, nerf_metadata_for_coords, save_mesh=False)
+                
+#                 # 4. 渲染这一小批 mesh
+#                 images, fragments = renderer(batched_mesh)
+                
+#                 # 5. 获取当前批次的深度图
+#                 current_depth = fragments.zbuf[0, ..., 0] 
+                
+#                 # 6. 将当前深度图合并到最终的深度缓冲中
+#                 valid_mask = current_depth > -1
+#                 current_depth[~valid_mask] = 1e10 # 将无效 (-1) 设置为无穷大
+                
+#                 # 关键一步：取两个深度图的逐像素最小值 (Z-buffering)
+#                 final_depth_buffer = torch.minimum(final_depth_buffer, current_depth)
+                
+#                 # 7. (关键) 清理 VRAM，为下一批做准备
+#                 del batched_mesh, images, fragments, current_depth
+#                 if torch.cuda.is_available():
+#                     torch.cuda.empty_cache()
+
+#         # --- 循环结束 ---
+#         # 此时, final_depth_buffer 包含了所有 mesh 的组合深度
+        
+#         # 将最终的 torch 深度张量转为 numpy
+#         depth = final_depth_buffer.cpu().numpy()
+
+#         # 从元数据中获取尺度恢复因子
+#         pose_scale_factor = nerf_metadata['coordinates']['pose_scale_factor']
+
+#         # 将有效的深度值乘以尺度因子
+#         valid_mask = depth < 1e9 # 我们的"无效"值是 1e10
+#         depth[valid_mask] *= pose_scale_factor
+        
+#         # 将无效值设置为 1e6 以便保存
+#         depth[~valid_mask] = 1e6
+
+#         if args.simplify == 1:
+#             # Save to the non-split directory
+#             np.save(os.path.join(save_dir, 'depth_mesh', f'{filename}.npy'), depth[:,:,None].astype(np.float32))
+        
+#         # --- Visualization Logic ---
+#         if args.visualize:
+#             # Set invalid depth back to -1 for visualization processing
+#             depth[depth == 1e6] = -1
+
+#             # --- 修复后的原始可视化 ---
+#             # 我们现在使用最终的 'depth' 来生成两个 colormap
+#             depth_color, _ = np_depth_to_colormap(depth, normalize=False)
+#             lidar_depth_color, _ = np_depth_to_colormap(depth, normalize=False)
+            
+#             ori_image = nerf_metadata['rgb']
+#             ori_image = cv2.resize(ori_image, (depth_color.shape[1], depth_color.shape[0]))
+            
+#             # `rgb_np_color` (来自'images') 在分批逻辑下是无效的，
+#             # 所以我们只连接原始图像和最终深度图。
+#             cat_results = np.concatenate([ori_image, depth_color], 1)
+#             cv2.imwrite(os.path.join(save_dir, 'cat_results', f'{filename}_cat_results.jpg'), cat_results.astype(np.uint8))
+            
+#             # ==========================================================================================
+#             # ======================== NEW VISUALIZATION LOGIC (不变) ===============================
+#             # ==========================================================================================
+            
+#             valid_depth = depth[depth > -0.9]
+#             if valid_depth.size > 0:
+#                 # 1. Get altitude from metadata and annotate the original image
+#                 c2w = nerf_metadata['metadata']['c2w']
+#                 altitude = c2w[2, 3].item()  # Camera's Z position in world coordinates
+#                 image_with_text = ori_image.copy()
+#                 altitude_text = f"Altitude: {altitude:.2f}m"
+                
+#                 # Add a black background for better text readability
+#                 (text_width, text_height), baseline = cv2.getTextSize(altitude_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
+#                 cv2.rectangle(image_with_text, (10, 10), (20 + text_width, 20 + text_height + baseline), (0,0,0), -1)
+#                 cv2.putText(image_with_text, altitude_text, (15, 20 + text_height), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2, cv2.LINE_AA)
+
+#                 # 2. Prepare the depth map and its color bar
+#                 min_d, max_d = np.percentile(valid_depth, [5, 95])
+                
+#                 # Handle case where depth is constant
+#                 if max_d <= min_d: max_d = min_d + 1.0
+
+#                 colorbar = create_depth_colorbar(height=depth_color.shape[0], width=120, min_val=min_d, max_val=max_d)
+                
+#                 # 3. Combine the images into the new visualization format
+#                 new_visualization = np.concatenate([image_with_text, depth_color, colorbar], axis=1)
+
+#                 # 4. Save the new visualization
+#                 new_vis_dir = os.path.join(save_dir, 'altitude_depth_vis')
+#                 save_path = os.path.join(new_vis_dir, f'{filename}_comparison.jpg')
+#                 cv2.imwrite(save_path, new_visualization)
+#             # ==========================================================================================
+#             # ========================== NEW VISUALIZATION LOGIC ENDS HERE =============================
+#             # ==========================================================================================
+
+#     # 循环后清理 debug_mesh (如果存在)
+#     if debug_mesh is not None:
+#         del debug_mesh
+#         if torch.cuda.is_available():
+#             torch.cuda.empty_cache()
+
+# if __name__ == '__main__':
+#     main(_get_opts())
+
+# ==============================================================
+# =================== 完整的 MAIN 函数 (已修改) ===================
+# ==============================================================
 def main(args):
     save_dir = args.save_dir
     os.makedirs(save_dir, exist_ok=True)
     
-    # Create output directories without 'split'
+    # Create output directories
     if args.visualize:
         os.makedirs(os.path.join(save_dir, 'cat_results'), exist_ok=True)
         os.makedirs(os.path.join(save_dir, 'altitude_depth_vis'), exist_ok=True)
-        
     os.makedirs(os.path.join(save_dir, 'depth_mesh'), exist_ok=True)
 
-    nerf_metadata_dir = args.nerf_metadata_dir    
+    nerf_metadata_dir = args.nerf_metadata_dir 
 
     # --- Load Image Names ---
     names = sorted(glob.glob(os.path.join(nerf_metadata_dir, 'rgbs/*.jpg')))
     if not names:
         print(f"Error: No images found in {os.path.join(nerf_metadata_dir, 'rgbs/')}")
-        print("Please check --nerf_metadata_dir. It should contain an 'rgbs' subfolder.")
         return
-        
     print(f"Found {len(names)} images to process.")
 
     # --- Load NeRF Metadata for first image (needed for mesh transform) ---
@@ -503,180 +711,149 @@ def main(args):
         print(f"Error loading metadata for {filename_first}. Exiting.")
         return
 
-    # --- Get Mesh Filenames (但不加载) ---
+    # --- Get Mesh Filenames ---
     obj_filenames = sorted(glob.glob(os.path.join(args.obj_dir, '*.obj')))
     if not obj_filenames:
         print(f"Error: No .obj files found in {args.obj_dir}")
-        print("Please check --obj_dir.")
         return
-        
-    print(f"Found {len(obj_filenames)} .obj files in {args.obj_dir}")
+    
+    # =====================================================================
+    # ======================== 核心修改：加载一次 MESH ========================
+    # =====================================================================
+    
+    # 假设你已经合并了，所以 obj_filenames 列表应该只有一个（或几个）文件
+    # 我们使用 load_all_meshes 函数一次性加载所有找到的 .obj 文件
+    # 并且我们传入 save_mesh=False 来避免它再次保存
+    print(f"--- Loading and transforming {len(obj_filenames)} mesh file(s) ONCE... ---")
+    print("This may take a while if the mesh is large...")
+    
+    # load_all_meshes 会加载列表中的所有 obj，将它们全部转换到 NeRF 空间，
+    # 并返回一个单一的、在 GPU 上的 batched Meshes 对象。
+    # 这正是我们想要的。
+    persistent_mesh = load_all_meshes(
+        args, 
+        obj_filenames, 
+        nerf_metadata_for_coords, 
+        save_mesh=False # 确保不要再次保存
+    )
+    
+    print("--- Mesh is now loaded and persistent on GPU. Starting render loop. ---")
+    # =====================================================================
+    # ========================   修改结束   ========================
+    # =====================================================================
 
-    # --- [!!] OOM 修复：修改网格加载逻辑 [!!] ---
+    # [!!] 我们不再需要这个逻辑，因为 mesh 已经在 persistent_mesh 中了
+    # if args.debug: ...
+    # elif args.save_mesh: ...
     
-    debug_mesh = None
-    if args.debug:
-        print(f"--- DEBUG MODE ---")
-        print(f"Loading and debugging ONLY the first mesh: {obj_filenames[0]}")
-        # 在 debug 模式下，我们加载并保留第一个网格
-        debug_mesh = load_mesh_debug(obj_filenames[0], nerf_metadata_for_coords, save_mesh=args.save_mesh)      
-    
-    elif args.save_mesh:
-        # 在非 debug 模式下，如果 save_mesh=True, 
-        # 我们只在开始前加载一次所有网格，以保存组合文件
-        print("--- Pre-processing: Loading all meshes ONCE to save combined .obj ---")
-        mesh_to_save = load_all_meshes(args, obj_filenames, nerf_metadata_for_coords, save_mesh=True)
-        # 保存后立即删除，释放 VRAM
-        del mesh_to_save
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        print("--- Combined mesh saved. Proceeding to batch rendering loop. ---")
-    
-    # 在正常（非 debug, 非 save_mesh）模式下，我们什么都不做，
-    # 因为网格将在下面的循环中分批加载。
-
     print("**********************************")
     print(f"Now rendering {len(names)} images...")
-    print(f"Using mesh batch size: {args.mesh_batch_size}")
+    # MESH_BATCH_SIZE 也不再需要了
+    # print(f"Using mesh batch size: {args.mesh_batch_size}") 
     print("**********************************")
     
-    # 定义网格批次大小
-    MESH_BATCH_SIZE = args.mesh_batch_size
     
     for name in tqdm(names[:]):
         filename = os.path.basename(name)[:-4]
-        # 详细模式 (verbose=False) 关闭，避免在循环中打印过多信息
         nerf_metadata = load_nerf_metadata(args, nerf_metadata_dir, filename, verbose=False)
         if nerf_metadata is None:
             print(f"Skipping {filename} due to metadata loading error.")
             continue
             
+        # 这一步必须在循环内，因为每张图的相机都不同
         render_setup = setup_renderer(args, nerf_metadata, verbose=False)
         renderer = render_setup['renderer']
         
-        # 获取图像尺寸用于初始化深度图
+        # 获取图像尺寸
         H, W = render_setup['raster_settings'].image_size
         
-        # 1. 初始化一个空的 (或全为无穷大) 的深度缓冲
-        # 我们用一个很大的值 (1e10) 来表示"未渲染"
-        final_depth_buffer = torch.full((H, W), 1e10, device=device, dtype=torch.float32)
+        # =====================================================================
+        # ======================== 核心修改：渲染 =========================
+        # =====================================================================
         
-        if args.debug:
-            # --- DEBUG 渲染路径 ---
-            # 只渲染已加载的 'debug_mesh'
-            if debug_mesh is not None:
-                images, fragments = renderer(debug_mesh)
-                current_depth = fragments.zbuf[0, ..., 0]
-                valid_mask = current_depth > -1
-                current_depth[~valid_mask] = 1e10 # 将无效 (-1) 设置为无穷大
-                final_depth_buffer = current_depth # 覆盖
-            
-        else:
-            # --- 分批渲染路径 (正常操作) ---
-            # 2. 将所有 obj 文件名分成小批次
-            for mesh_file_batch in chunks(obj_filenames, MESH_BATCH_SIZE):
-                
-                # 3. 加载这一小批 mesh
-                # 使用 nerf_metadata_for_coords 进行坐标变换
-                batched_mesh = load_all_meshes(args, mesh_file_batch, nerf_metadata_for_coords, save_mesh=False)
-                
-                # 4. 渲染这一小批 mesh
-                images, fragments = renderer(batched_mesh)
-                
-                # 5. 获取当前批次的深度图
-                current_depth = fragments.zbuf[0, ..., 0] 
-                
-                # 6. 将当前深度图合并到最终的深度缓冲中
-                valid_mask = current_depth > -1
-                current_depth[~valid_mask] = 1e10 # 将无效 (-1) 设置为无穷大
-                
-                # 关键一步：取两个深度图的逐像素最小值 (Z-buffering)
-                final_depth_buffer = torch.minimum(final_depth_buffer, current_depth)
-                
-                # 7. (关键) 清理 VRAM，为下一批做准备
-                del batched_mesh, images, fragments, current_depth
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+        # [!!] 删除了内部的 "chunks" 循环
+        # 我们不再需要分批加载 mesh，我们直接渲染那个持久化的 mesh
+        
+        images, fragments = renderer(persistent_mesh)
+        
+        # 获取深度图 (zbuf)
+        # (B, H, W, K) -> (H, W)
+        current_depth = fragments.zbuf[0, ..., 0] 
+        
+        # [!!] 删除了 Z-buffering 逻辑 (torch.minimum)
+        # 因为我们一次性渲染了整个合并的 mesh，
+        # 渲染器已经帮我们处理好了 Z-buffering。
+        
+        # [!!] 删除了 VRAM 清理逻辑 (del batched_mesh)
+        # 我们希望 persistent_mesh 一直存在。
+
+        # =====================================================================
+        # ========================   修改结束   ========================
+        # =====================================================================
 
         # --- 循环结束 ---
-        # 此时, final_depth_buffer 包含了所有 mesh 的组合深度
+        # 此时, current_depth 包含了组合深度
         
         # 将最终的 torch 深度张量转为 numpy
-        depth = final_depth_buffer.cpu().numpy()
+        depth = current_depth.cpu().numpy()
 
         # 从元数据中获取尺度恢复因子
         pose_scale_factor = nerf_metadata['coordinates']['pose_scale_factor']
 
         # 将有效的深度值乘以尺度因子
-        valid_mask = depth < 1e9 # 我们的"无效"值是 1e10
+        # HardDepthShader 对于无效像素返回 -1
+        valid_mask = depth > -1 
         depth[valid_mask] *= pose_scale_factor
         
         # 将无效值设置为 1e6 以便保存
         depth[~valid_mask] = 1e6
 
         if args.simplify == 1:
-            # Save to the non-split directory
             np.save(os.path.join(save_dir, 'depth_mesh', f'{filename}.npy'), depth[:,:,None].astype(np.float32))
         
-        # --- Visualization Logic ---
+        # --- Visualization Logic (保持不变) ---
         if args.visualize:
-            # Set invalid depth back to -1 for visualization processing
-            depth[depth == 1e6] = -1
-
-            # --- 修复后的原始可视化 ---
-            # 我们现在使用最终的 'depth' 来生成两个 colormap
+            depth[depth == 1e6] = -1 # 设置回 -1 以便可视化
+            
             depth_color, _ = np_depth_to_colormap(depth, normalize=False)
-            lidar_depth_color, _ = np_depth_to_colormap(depth, normalize=False)
             
             ori_image = nerf_metadata['rgb']
             ori_image = cv2.resize(ori_image, (depth_color.shape[1], depth_color.shape[0]))
             
-            # `rgb_np_color` (来自'images') 在分批逻辑下是无效的，
-            # 所以我们只连接原始图像和最终深度图。
             cat_results = np.concatenate([ori_image, depth_color], 1)
             cv2.imwrite(os.path.join(save_dir, 'cat_results', f'{filename}_cat_results.jpg'), cat_results.astype(np.uint8))
             
-            # ==========================================================================================
-            # ======================== NEW VISUALIZATION LOGIC (不变) ===============================
-            # ==========================================================================================
-            
+            # --- 新的可视化 (保持不变) ---
             valid_depth = depth[depth > -0.9]
             if valid_depth.size > 0:
-                # 1. Get altitude from metadata and annotate the original image
                 c2w = nerf_metadata['metadata']['c2w']
-                altitude = c2w[2, 3].item()  # Camera's Z position in world coordinates
+                altitude = c2w[2, 3].item()
                 image_with_text = ori_image.copy()
                 altitude_text = f"Altitude: {altitude:.2f}m"
                 
-                # Add a black background for better text readability
                 (text_width, text_height), baseline = cv2.getTextSize(altitude_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 2)
                 cv2.rectangle(image_with_text, (10, 10), (20 + text_width, 20 + text_height + baseline), (0,0,0), -1)
                 cv2.putText(image_with_text, altitude_text, (15, 20 + text_height), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2, cv2.LINE_AA)
 
-                # 2. Prepare the depth map and its color bar
                 min_d, max_d = np.percentile(valid_depth, [5, 95])
-                
-                # Handle case where depth is constant
                 if max_d <= min_d: max_d = min_d + 1.0
-
                 colorbar = create_depth_colorbar(height=depth_color.shape[0], width=120, min_val=min_d, max_val=max_d)
                 
-                # 3. Combine the images into the new visualization format
                 new_visualization = np.concatenate([image_with_text, depth_color, colorbar], axis=1)
 
-                # 4. Save the new visualization
                 new_vis_dir = os.path.join(save_dir, 'altitude_depth_vis')
                 save_path = os.path.join(new_vis_dir, f'{filename}_comparison.jpg')
                 cv2.imwrite(save_path, new_visualization)
-            # ==========================================================================================
-            # ========================== NEW VISUALIZATION LOGIC ENDS HERE =============================
-            # ==========================================================================================
-
-    # 循环后清理 debug_mesh (如果存在)
-    if debug_mesh is not None:
-        del debug_mesh
+        
+        # 清理循环内的变量，但保留 persistent_mesh
+        del images, fragments, current_depth, depth, nerf_metadata, render_setup, renderer
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
+
+    # 循环全部结束后，再清理 persistent_mesh
+    del persistent_mesh
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 if __name__ == '__main__':
     main(_get_opts())

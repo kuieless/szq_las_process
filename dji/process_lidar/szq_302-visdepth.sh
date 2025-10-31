@@ -18,55 +18,139 @@ PYTHON_SCRIPT_NAME="szq_302-visdepth.py"
 # ==============================================================================
 # 任务 1: hav 数据集 (来自您的示例)
 # ==============================================================================
-run_task_SMBU() {
+# run_task_test() {
+#     echo ""
+#     echo "================================================="
+#     echo "=== 正在开始可视化任务: hav ==="
+#     echo "================================================="
+
+#     # --- 任务参数 ---
+#     # (这是包含 depth_dji/, rgbs/, coordinates.pt 的路径)
+#     DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/SMBU"
+
+#     # --- 执行任务 ---
+#     python $PYTHON_SCRIPT_NAME \
+#         --dataset_path "$DATASET_PATH"
+
+#     echo "=== 任务 hav 完成 ==="
+# }
+# run_task_SMBU() {
+#     echo ""
+#     echo "================================================="
+#     echo "=== 正在开始可视化任务: hav ==="
+#     echo "================================================="
+
+#     # --- 任务参数 ---
+#     # (这是包含 depth_dji/, rgbs/, coordinates.pt 的路径)
+#     DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/SMBU"
+
+#     # --- 执行任务 ---
+#     python $PYTHON_SCRIPT_NAME \
+#         --dataset_path "$DATASET_PATH"
+
+#     echo "=== 任务 hav 完成 ==="
+# }
+
+# run_task_lfls() {
+#     echo ""
+#     echo "================================================="
+#     echo "=== 正在开始可视化任务: hav ==="
+#     echo "================================================="
+
+#     # --- 任务参数 ---
+#     # (这是包含 depth_dji/, rgbs/, coordinates.pt 的路径)
+#     DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/lfls"
+
+#     # --- 执行任务 ---
+#     python $PYTHON_SCRIPT_NAME \
+#         --dataset_path "$DATASET_PATH"
+
+#     echo "=== 任务 hav 完成 ==="
+# }
+# run_task_lfls2() {
+#     echo ""
+#     echo "================================================="
+#     echo "=== 正在开始可视化任务: hav ==="
+#     echo "================================================="
+
+#     # --- 任务参数 ---
+#     # (这是包含 depth_dji/, rgbs/, coordinates.pt 的路径)
+#     DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/lfls2"
+
+#     # --- 执行任务 ---
+#     python $PYTHON_SCRIPT_NAME \
+#         --dataset_path "$DATASET_PATH"
+
+#     echo "=== 任务 hav 完成 ==="
+# }
+run_task_lower() {
     echo ""
     echo "================================================="
-    echo "=== 正在开始可视化任务: hav ==="
+    echo "=== 正在开始可视化任务: lower ==="
     echo "================================================="
 
     # --- 任务参数 ---
     # (这是包含 depth_dji/, rgbs/, coordinates.pt 的路径)
-    DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/SMBU"
+    DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/lower"
 
     # --- 执行任务 ---
     python $PYTHON_SCRIPT_NAME \
         --dataset_path "$DATASET_PATH"
 
-    echo "=== 任务 hav 完成 ==="
+    echo "=== 任务 lower 完成 ==="
 }
 
-run_task_lfls() {
+run_task_sziit() {
     echo ""
     echo "================================================="
-    echo "=== 正在开始可视化任务: hav ==="
+    echo "=== 正在开始可视化任务: sziit ==="
     echo "================================================="
 
     # --- 任务参数 ---
     # (这是包含 depth_dji/, rgbs/, coordinates.pt 的路径)
-    DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/lfls"
+    DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sziit"
 
     # --- 执行任务 ---
     python $PYTHON_SCRIPT_NAME \
         --dataset_path "$DATASET_PATH"
 
-    echo "=== 任务 hav 完成 ==="
+    echo "=== 任务 sziit 完成 ==="
 }
-run_task_lfls2() {
+
+run_task_sztu() {
     echo ""
     echo "================================================="
-    echo "=== 正在开始可视化任务: hav ==="
+    echo "=== 正在开始可视化任务: sztu ==="
     echo "================================================="
 
     # --- 任务参数 ---
     # (这是包含 depth_dji/, rgbs/, coordinates.pt 的路径)
-    DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/lfls2"
+    DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sztu"
 
     # --- 执行任务 ---
     python $PYTHON_SCRIPT_NAME \
         --dataset_path "$DATASET_PATH"
 
-    echo "=== 任务 hav 完成 ==="
+    echo "=== 任务 sztu 完成 ==="
 }
+
+run_task_upper() {
+    echo ""
+    echo "================================================="
+    echo "=== 正在开始可视化任务: upper ==="
+    echo "================================================="
+
+    # --- 任务参数 ---
+    # (这是包含 depth_dji/, rgbs/, coordinates.pt 的路径)
+    DATASET_PATH="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/upper"
+
+    # --- 执行任务 ---
+    python $PYTHON_SCRIPT_NAME \
+        --dataset_path "$DATASET_PATH"
+
+    echo "=== 任务 upper 完成 ==="
+}
+
 # # ==============================================================================
 # # 任务 2: 另一个数据集 (模板)
 # # ==============================================================================
@@ -94,10 +178,16 @@ run_task_lfls2() {
 echo "======= 批量深度图可视化与尺度恢复任务启动 ======="
 
 # 1. 运行 hav (来自您的示例)
-run_task_SMBU  
-run_task_lfls
-run_task_lfls2
-    
+# run_task_SMBU  
+# run_task_lfls
+# run_task_lfls2
+# run_task_lower
+# run_task_sziit
+
+
+
+run_task_sztu
+run_task_upper
 # 2. 运行下一个
 # (!!!) 
 # (!!!) 要运行更多任务，请复制 run_task_ANOTHER_DATASET 函数，

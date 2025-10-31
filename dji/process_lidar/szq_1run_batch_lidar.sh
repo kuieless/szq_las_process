@@ -363,11 +363,11 @@ echo "======= 批量 LiDAR 处理任务启动 ======="
 # 2. 运行 SZTTI 
 # (!!!) (注意: 请确保在上方 run_task_SZTTI 函数中填写了正确的路径) (!!!)
 # (!!!) (如果您暂时不想运行此任务，请在行首添加 # 将其注释掉)
-run_task_lfls
+# run_task_lfls
 # run_task_upper
 # run_task_lower
-# run_task_sziit
-# run_task_sztu
+run_task_sziit
+run_task_sztu
 
 echo ""
 echo "======= 所有批量处理任务已成功完成 ======="

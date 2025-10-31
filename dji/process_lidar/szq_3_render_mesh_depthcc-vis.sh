@@ -23,19 +23,19 @@ echo "将使用 Python 脚本: $PYTHON_SCRIPT_PATH"
 # ==============================================================================
 # 任务 1: Xiayuan (示例任务 1)
 # ==============================================================================
-run_task_hav() {
+run_task_stzu() {
   echo ""
   echo "================================================="
-  echo "🚀 开始执行任务: Xiayuan (output7)"
+  echo "🚀 开始执行任务: stzu)"
   echo "================================================="
 
   # --- 此任务的特定参数 ---
   # 使用 'local' 关键字确保变量只在函数内部有效
-  local base_dir="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/hav"
-  local obj_dir="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_obj/hav"
-  local data_dir="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/hav"
-  local xml_path="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/phav-all/AT/BlocksExchangeUndistortAT.xml"
-  local save_dir="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/hav" # 结果保存在数据目录中
+  local base_dir="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sztu"
+  local obj_dir="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_obj/sztu"
+  local data_dir="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sztu"
+  local xml_path="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/pSZTU/AT/BlocksExchangeUndistortAT.xml"
+  local save_dir="/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sztu" # 结果保存在数据目录中
   local down_factor=4.0
 
   # 执行 Python 脚本
@@ -48,7 +48,7 @@ run_task_hav() {
     --visualize \
     --save_mesh # 比如这个任务我们想保存组合网格
 
-  echo "✅ 任务 'Xiayuan (output7)' 执行完毕。"
+  echo "✅ 任务 'stzu行完毕。"
 }
 
 # # ==============================================================================
@@ -121,7 +121,7 @@ main() {
   echo "🔥 开始批量处理任务..."
   
   # 逐次运行
-  run_task_hav
+  run_task_stzu
   # run_task_another_area # 如果想暂时跳过这个任务，只需在行首添加'#'注释掉
   
   echo ""
