@@ -32,3 +32,13 @@
 
 # 5compare-lidar-mesh-depth.py
 把点云的深度图和mesh的深度图进行对比，设置一个阈值（1米或者3m），从而过滤掉遮挡的点。
+
+# a_reverse_index:
+因为第0个脚本重命名了，需要把原始图片的索引牵连起来
+
+# b_split_dataset:
+读取原始的图片的元数据，根据lat 和lot用kmeans分训练集验证集
+
+# c_merge_split:
+得到最终的映射txt
+
