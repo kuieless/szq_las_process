@@ -347,10 +347,10 @@ run_scene() {
 
 # --- 场景 1: "DJI 验证集" (这是您的示例) ---
 run_scene \
-    "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sztu" \
-    "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sztu/depth_metric" \
-    "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sztu/depth_mesh" \
-    "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/sztu/depth_gt_sztu" \
+    "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/upper" \
+    "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/upper/depth_metric" \
+    "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/upper/depth_mesh" \
+    "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/upper/depth_gt_upper" \
     1.0 \
     1000.0 \
     ""   \

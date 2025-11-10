@@ -300,6 +300,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     main(args)
 
-    #python szq_b_split_dataset.py --image_dir /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/pSZTU/images/survey --k 10
- #python szq_split_dataset.py --image_dir /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/phav-all/images/survey --k 10
+    #python szq_b_split_dataset.py --image_dir /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/pupper/images/survey --k 10
+
     

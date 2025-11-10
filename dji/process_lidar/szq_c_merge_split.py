@@ -141,8 +141,8 @@ if __name__ == "__main__":
 
 '''
 python szq_c_merge_split.py \
-    --mapping_file /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/finished/sztu/original_to_renamed_mapping.txt \
+    --mapping_file /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/finished/upper/original_to_renamed_mapping.txt \
     --split_csv /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar/geospatial_split.csv \
-    --output_file /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/GT/splits_sztu.txt
+    --output_file /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/GT/splits_upper.txt
 
 '''

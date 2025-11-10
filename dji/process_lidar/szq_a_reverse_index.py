@@ -101,7 +101,7 @@ if __name__ == "__main__":
 '''
     # 示例命令
 python szq_a_reverse_index.py \
-    --dataset_path /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/finished/sztu \
-    --original_images_path /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/pSZTU/images/survey
+    --dataset_path /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/output/finished/upper \
+    --original_images_path /home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/pupper/images/survey
 
     '''

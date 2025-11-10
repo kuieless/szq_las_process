@@ -178,7 +178,7 @@ echo "======================================================"
 
 # run_task "项目 pSMBU-all" "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/pSMBU-all/images/survey" "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/jsons/pSMBU-all.json"
 
-run_task "项目lfls" "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/ed/plfls45-47,65-67,70-72/images/survey" "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/jsons/plfls45-47,65-67,70-72.json"
+run_task "项目lfls" "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/GES/rgbsed" "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/GES/rgbsed.json"
 
 # run_task "项目pSZTU" "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/pSZTU/images/survey" "/home/data1/szq/Megadepth/Aerial_lifting_early/dji/process_lidar_mesh_szq/raw_pics/jsons/pSZTU.json"
 
